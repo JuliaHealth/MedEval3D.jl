@@ -1,6 +1,11 @@
 name = "Medical segmentation evaluation"
 authors = ["JAkub Mitura"]
+
+[deps]
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+CxxWrap = "1f15a43c-97ca-5a2a-ae31-89f07a497df4"
+DrWatson = "634d3b9d-ee7a-5ddf-bec9-22491ea816e1"
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
+
 [compat]
 julia = "1.6.1"
-[deps]
-DrWatson = "634d3b9d-ee7a-5ddf-bec9-22491ea816e1"
