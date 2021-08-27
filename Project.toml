@@ -1,4 +1,4 @@
-name = "Medical segmentation evaluation"
+name = "NuclearMedEval"
 authors = ["JAkub Mitura"]
 
 [deps]
