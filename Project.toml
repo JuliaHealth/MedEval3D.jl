@@ -2,14 +2,8 @@ name = "NuclearMedEval"
 authors = ["JAkub Mitura"]
 
 [deps]
-Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
-CUDAKernels = "72cfdca4-0801-4ab0-bf6a-d52aa10adc57"
 Cthulhu = "f68482b8-f384-11e8-15f7-abe071a5a75f"
-CxxWrap = "1f15a43c-97ca-5a2a-ae31-89f07a497df4"
-DrWatson = "634d3b9d-ee7a-5ddf-bec9-22491ea816e1"
-KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
-OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 
 [compat]
 julia = "1.6.1"
