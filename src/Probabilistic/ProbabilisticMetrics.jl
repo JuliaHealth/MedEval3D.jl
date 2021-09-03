@@ -5,7 +5,7 @@ using DrWatson
 module ProbabilisticMetrics
 using Main.BasicStructs, Parameters, Setfield
 
-calculateProbabilisticMetricStr = """
+"""
 calculate  probabilistic metrics - Intercalss Correlation and Cohen cappa  based on precalulated constants
 G,T - ground truth and evaluated masks - 3 dimensional arrays of supplied type-  maskNumb
 isVariedSlice - true if slices are of variable thickness
@@ -13,7 +13,7 @@ TnTpFpFns - list of basic metrics - in the order [tn,tp,fp,fn ]
 res - ResultMetrics struct holding result of all metrics calculated for given run
 return modified ResultMetrics with added  Intercalss Correlation and Cohen cappa
 """
-@doc calculateProbabilisticMetricStr
+calculateProbabilisticMetricStr
 function calculateProbabilisticMetric(::Type{maskNumb} 
     ,G::Array{maskNumb, 3}
     ,T::Array{maskNumb, 3}
@@ -27,14 +27,14 @@ return setproperties(res, ( Kc=calculateCohenCappa(TnTpFpFns), )  )
 end #calculateProbabilisticMetric
 
 
-calculateInterClassCorrStr = """
+"""
 calculate  Interclass correlaion
 G,T - ground truth and evaluated masks - 3 dimensional arrays of supplied type-  maskNumb
 isVariedSlice - true if slices are of variable thickness
 res - ResultMetrics struct holding result of all metrics calculated for given run
 return Interclass correlaion between G and T
 """
-@doc calculateInterClassCorrStr
+calculateInterClassCorrStr
 function calculateInterClassCorr(::Type{maskNumb} 
     ,G::Array{maskNumb, 3}
     ,T::Array{maskNumb, 3}
@@ -65,12 +65,12 @@ end #calculateInterClassCorr
 
 
 
-calculateCohenCappaStr = """
+"""
 calculate Cohen Cappa  based on precalulated constants
 TnTpFpFns - list of basic metrics - in the order [tn,tp,fp,fn ] 
 return Cohen Cappa
 """
-@doc calculateCohenCappaStr
+calculateCohenCappaStr
 function calculateCohenCappa(TnTpFpFns::Vector{Float64} ) ::Float64
     tn = TnTpFpFns[1]
     tp = TnTpFpFns[2]
