@@ -5,12 +5,12 @@ module based on https://github.com/Visceral-Project/EvaluateSegmentation/blob/ma
 """
 module ContTable
 using Main.BasicStructs, Parameters, Setfield
-getImageConstantsStr = """
+
+"""
 giving set of constant associated with  the image that will be usefull for calculating 
     I - image the we are trying to segment - 3 dimensional array of supplied type imageNumb
     return ImageConstants - some constants related to image iself (nor masks)
     """
-@doc getImageConstantsStr
 function getImageConstants(::Type{imageNumb} 
                       I::Array{imageNumb, 3})
                       ::ImageConstants
@@ -29,7 +29,7 @@ function getImageConstants(::Type{imageNumb}
 end #getImageConstants
 
 
-TnTpFpFnStr = """
+"""
 calculating tn, fn, fp and tp WITHOUT voxel volume correction
 Type{maskNumb}  - type of the numbers hold in mask
 G - 3 dimensional array holding ground truth segmentation
@@ -38,8 +38,7 @@ isVariedSlice- true if slices can have varying thickness
 imageConst - image dependent constants
 return array of doubles with entry 1)TN- true negative 2)  TP - true positive 3) FN - false negative  4) FP - false positive
 """
-@doc TnTpFnFpStr
-function TnTpFpFn(::Type{maskNumb} 
+function getTnTpFpFn(::Type{maskNumb} 
                 ,G::Array{maskNumb, 3}
                  ,T::Array{maskNumb, 3}
                   ,isVariedSlice::Bool
@@ -55,6 +54,8 @@ function TnTpFpFn(::Type{maskNumb}
     fn += x1>x2 ? x1-x2 : 0
     fp += x2>x1 ? x2-x1 : 0
     
+	look inot https://github.com/JuliaArrays/StructArrays.jl
+	
 return [tn,tp,fp,fn ] 
 end   #TnTpFpFn
 
@@ -62,15 +63,15 @@ end   #TnTpFpFn
 
 
 
-TnTpFpFnStr = """
+"""
 calculating  a,b,c,d constants - needed for some particulary pairwise comparison metrics WITHOUT voxel volume correction
 isVariedSlice- true if slices can have varying thickness
 imageConst - image dependent constants
 TnTpFpFns - calculated Tn Tp Fp and Fn in that order 
 return array of doubles with entry 1) a  2)  b 3) c  4) FP d 
 """
-@doc TnTpFpFnStr
-function TnTpFpFn(isVariedSlice::Bool
+
+function getAbcdConsts(isVariedSlice::Bool
                   ,imageConst::ImageConstants
                   ,TnTpFnFps::Vector{Bool}
     )::Vector{Float64}
@@ -91,13 +92,12 @@ function TnTpFpFn(isVariedSlice::Bool
 
 return [a,b,c,d]
 
-end   #TnTpFpFn
+end   #getAbcdConsts
 
 
-binomialStr = """
+"""
 helper function calculating binomial
 """
-@doc binomialStr
 function binomial(val::Float64)::Float64
     return  val*(val-1)
 end #binomial
