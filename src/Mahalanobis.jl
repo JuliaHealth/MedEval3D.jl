@@ -18,8 +18,30 @@ I) slice wise
 """
 module MahalanobisDist
 
+look into https://math.stackexchange.com/questions/4240707/mahalanobis-distance-between-two-3-dimensional-boolean-arrays
 
+"""
+calculating means 
+  - for 2 dimensional case we need just 2 numbers
+  - for 3 dimensional case we need 3
+"""
 function calcMean()
+  
+mat #static vector with 3 entries 
+	while ( xxx ){
+			double val =it.Get(); # given value of a voxel
+			if(val>thd){ # accepting voxel as "true" only if it bigger than treshold (applied for fuzzy case)
+				ImageType::IndexType index = it.GetIndex(); # getting index 
+				mat[0] += index[0];
+				mat[1] += index[1];
+				mat[2] += index[2];
+				count++; # to know how many had been above treshold !!
+			}
+			++it;
+		}
+		mat = mat/count;
+  
+  
   
   
 end#function
