@@ -1,39 +1,138 @@
- 
+
+
+using Revise, Parameters, Logging
+
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\gpuUtils.jl")
-using Main.BasicPreds, Main.GPUutils,CUDA,Cthulhu,BenchmarkTools,Revise 
+using Main.BasicPreds, Main.GPUutils,Cthulhu,BenchmarkTools , CUDA
 
-goldBoolGPU,segmBoolGPU,tp,tn,fp, fn,blockNum, nx,ny,nz,xthreads, ythreads,zthreads  = getSmallTestBools()
+goldBoolGPU,segmBoolGPU,tp,tn,fp, fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz,xthreads, ythreads,zthreads ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU = getSmallTestBools();
 
-function kernelFunction(goldBoolGPU::CuDeviceArray{Bool, 3, 1}, segmBoolGPU::CuDeviceArray{Bool, 3, 1},tp,tn,fp, fn,nx,ny,nz,xthreads, ythreads,zthreads)
-    # getting all required indexes
-    i= (blockIdx().x-1) * blockDim().x + threadIdx().x
-    j = (blockIdx().y-1) * blockDim().y + threadIdx().y
-    z = (blockIdx().z-1) * blockDim().z + threadIdx().z  
-    #if(i< (nx*ny*nz)/ythreads ) #i<nx*ny && j<ny && z<nz
-   # CUDA.@cuprint "goldBoolGPU[i,j,z] $(goldBoolGPU[i,j,z]) segmBoolGPU[i,j,z] $(segmBoolGPU[i,j,z]) i $(i) j $(j) z $(z) "
-        if(goldBoolGPU[i,j,z] & segmBoolGPU[i,j,z] )
-            @atomic tp[]+=1
-        elseif (!goldBoolGPU[i,j,z] & !segmBoolGPU[i,j,z] )
-            @atomic tn[]+=1
-        elseif (!goldBoolGPU[i,j,z] & segmBoolGPU[i,j,z] )
-            @atomic fp[]+=1    
-        elseif (goldBoolGPU[i,j,z] & !segmBoolGPU[i,j,z] )
-            @atomic fn[]+=1    
+FlattGoldGPU,FlattSegGPU ;
+
+# Reduce a value across a warp
+@inline function reduce_warp(op, val,arr1,arr2,index)
+    offset = UInt32(1)
+    while offset < warpsize()
+        shuffled= shfl_down_sync(FULL_MASK, arr1[i], offset)
+        if shuffled!=false
+        CUDA.@cuprint "shuffled $(shuffled) "
         end
-    #else
-     #   CUDA.@cuprint "i $(i) j $(j) z $(z)  \n"
-
-
-    return  
-
+        val = op(val,shfl_down_sync(FULL_MASK, arr1[i], offset))
+        offset <<= 1
     end
 
+    return val
+end
+
+"""
+adapted from https://github.com/JuliaGPU/CUDA.jl/blob/afe81794038dddbda49639c8c26469496543d831/src/mapreduce.jl
+"""
+function kernelFunction(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGPU::CuDeviceArray{Bool, 1, 1},tp,tn,fp, fn,warpsInBlock::Int64)
+    i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+    wid, lane = fldmod1(threadIdx().x, warpsize())
+    
+    
+    CUDA.@cuprint "wid  $(wid) lane $(lane)  " 
+    #shared memory
+    shmem = @cuStaticSharedMem(Float32, (8))     #warpsInBlock !! make it dynamic - makro?
+
+   maskTp = vote_ballot_sync(FULL_MASK,goldBoolGPU[i] & segmBoolGPU[i])  
+   maskFp = vote_ballot_sync(FULL_MASK,~goldBoolGPU[i] & segmBoolGPU[i])  
+   maskFn = vote_ballot_sync(FULL_MASK,goldBoolGPU[i] & ~segmBoolGPU[i])  
+  
+#    if(lane ==1 && maskTp>0)
+#         CUDA.@cuprint "maskTp  $(maskTp) \n"    
+#     end
+
+#    if(lane ==1 && maskFp>0) 
+#     CUDA.@cuprint "maskFp  $(maskFp) \n"    
+# end
+
+
+# if(lane ==1 && maskFn>0)
+
+#     CUDA.@cuprint "maskFn  $(maskFn) "    
+# end
+
+   
+    # val = 0
+
+    # offset = UInt32(1)
+    # while offset < warpsize()
+    #     shuffled= shfl_down_sync(FULL_MASK, val, 0)
+    #     if val!=0
+    #    # CUDA.@cuprint "shuffled $(shuffled) "
+    #     end
+    #     val += shfl_down_sync(FULL_MASK, val, offset)
+    #     offset <<= 1
+    # end
+    #CUDA.@cuprint "val $(val) "
+
+    #@atomic tp[]+=val
+
+    # while offset < warpsize()
+    #shuffled = shfl_down_sync(FULL_MASK, goldBoolGPU[i], 0)
+        # if(shuffled>0)
+        #     CUDA.@cuprint "shuffled $(shuffled)  "
+        # end
+    #     offset <<= 1
+    # end
+    #val =reduce_warp(+,val,goldBoolGPU,segmBoolGPU,i)
+    
+    
+   # sync_warp()
+    
+    
+    # CUDA.@cuprint "val  $(val) "       
+    # sync_threads()
+
+  #  write reduced value to shared memory
+    if lane == 1
+       # CUDA.@cuprint "vall " val
+        #@inbounds shmem[wid] = val
+        #@atomic tp[]+=val
+        # CUDA.@cuprint "in shared  $(shmem[wid]) \n"
+
+    end
+    #sync_threads()
+
+    # if lane == 1
+    #     @atomic tp[]+=shared[wid]
+    # end
+
+   return  
+
+    end
+    warpsInBlock = Int64((xthreads*ythreads*zthreads )/32)
+
+    @cuda threads=xthreads*ythreads*zthreads blocks=blockNum kernelFunction(FlattGoldGPU,FlattSegGPU,tp,tn,fp, fn, warpsInBlock) #shmem= 10*10*10*2  threads=(8,8,8)   blocks=ceil(Int,n/8*8*8)
+
+tp[1]
+
+  @device_code_warntype interactive=true @cuda kernelFunction(FlattGoldGPU,FlattSegGPU,tp,tn,fp, fn, warpsInBlock)
+
+
+for i in 1:32 
+    xx = 224>>(i-1) & 1
+    if(xx==1) @info 1   end  
+end
+
+
+    
 # @benchmark CUDA.@sync  blockNum
-@cuda threads=(xthreads, ythreads,zthreads) blocks=9 kernelFunction(goldBoolGPU,segmBoolGPU,tp,tn,fp, fn, nx,ny,nz,xthreads, ythreads,zthreads) #shmem= 10*10*10*2  threads=(8,8,8)   blocks=ceil(Int,n/8*8*8)
+@cuda threads=xthreads*ythreads*zthreads blocks=blockNum kernelFunction(FlattGoldGPU,FlattSegGPU,tp,tn,fp, fn, warpsInBlock) #shmem= 10*10*10*2  threads=(8,8,8)   blocks=ceil(Int,n/8*8*8)
+#testing correctness
 
-tn[1]
+tp[1] ==tpTotalTrue
 
+tn[1] == tnTotalTrue && tp[1] ==tpTotalTrue && fp[1] ==fpTotalTrue && fn[1] ==fnTotalTrue
+
+
+
+
+
+nx*ny*nz - tpTotalTrue - fpTotalTrue -  fnTotalTrue
 
 2100/256
 
@@ -56,11 +155,14 @@ function kernelFunct(goldBoolGPU::CuDeviceArray{Bool, 3, 1}, segmBoolGPU::CuDevi
     j = (blockIdx().y) * blockDim().y + threadIdx().y
     z = (blockIdx().z) * blockDim().z + threadIdx().z 
 
-    if (goldBoolGPU[i,j,z] & !segmBoolGPU[i,j,z] )
+    if (goldBoolGPU[i] & !segmBoolGPU[i] )
         @atomic fn[]+=1    
         end
     return  
     end
+
+    @device_code_warntype kernelFunct(goldBoolGPU,segmBoolGPU,fn) 
+
 @cuda threads=(4, 4,1) blocks=32  kernelFunct(goldBoolGPU,segmBoolGPU,fn) 
 #I get error ERROR: Out-of-bounds array access.
 

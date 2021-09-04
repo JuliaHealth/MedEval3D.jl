@@ -39,8 +39,12 @@ function getSmallTestBools()
     fnArr = CuArray(ones(Int16,nz));
 ### calculating correct results (unoptimazied way) just for unit testing
 
-# FlattG = vec(goldBool);
-# FlattB = vec(segmBool);
+FlattG = vec(goldBool);
+FlattSeg = vec(segmBool);
+
+FlattGoldGPU= CuArray( FlattG)
+FlattSegGPU= CuArray( FlattSeg )
+FlattGoldGPU,FlattSegGPU
 # total for all slices
 # tpTotalTrue = filter(pair->pair[2]== FlattB[pair[1]] ==true ,collect(enumerate(FlattG)))|>length
 # tnTotalTrue = filter(pair->pair[2]== FlattB[pair[1]] ==false ,collect(enumerate(FlattG)))|>length
@@ -59,11 +63,15 @@ tnTotalTrue= tnPerSliceTrue|>sum
 fpTotalTrue= fpPerSliceTrue|>sum 
 fnTotalTrue= fnPerSliceTrue|>sum 
 
-    blockNum =Int64(ceil((nx*ny*nz)/(xthreads*ythreads*zthreads)));
+goldBoolGPU= CuArray( goldBool)
+segmBoolGPU= CuArray( segmBool )
+
+blockNum =Int64(ceil((nx*ny*nz)/(xthreads*ythreads*zthreads)));
+
     ## so there should be 9  true positives, 
 
 # returning bunch of values so writing all will be simpler
-    return (goldBoolGPU,segmBoolGPU,tp,tn,fp, fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz,xthreads, ythreads,zthreads ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue  )
+    return (goldBoolGPU,segmBoolGPU,tp,tn,fp, fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz,xthreads, ythreads,zthreads ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,FlattG, FlattSeg ,FlattGoldGPU,FlattSegGPU)
     
     end
     
@@ -75,44 +83,28 @@ fnTotalTrue= fnPerSliceTrue|>sum
 """
 most primitive working example
 """
-function primitiveAtomicKernel(goldBoolGPU::CuDeviceArray{Bool, 3, 1}, segmBoolGPU::CuDeviceArray{Bool, 3, 1},tp,tn,fp, fn)
-    i,j,z = defineIndicies()
-     
-    if(goldBoolGPU[i,j,z] && segmBoolGPU[i,j,z] )
-        @atomic tp[]+=1
-        elseif (!goldBoolGPU[i,j,z] && !segmBoolGPU[i,j,z] )
-        @atomic tn[]+=1
-        elseif (!goldBoolGPU[i,j,z] && segmBoolGPU[i,j,z] )
-        @atomic fp[]+=1    
-        elseif (goldBoolGPU[i,j,z] && !segmBoolGPU[i,j,z] )
-        @atomic fn[]+=1    
+function primitiveAtomicKernel(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGPU::CuDeviceArray{Bool, 1, 1},tp,tn,fp, fn,nx,ny,nz,xthreads, ythreads,zthreads)
+        # getting all required indexes
+        i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+        #if(i< (nx*ny*nz)/ythreads ) #i<nx*ny && j<ny && z<nz
+       # CUDA.@cuprint "goldBoolGPU[i,j,z] $(goldBoolGPU[i,j,z]) segmBoolGPU[i,j,z] $(segmBoolGPU[i,j,z]) i $(i) j $(j) z $(z) "
+            if(goldBoolGPU[i] & segmBoolGPU[i] )
+                @atomic tp[]+=1
+            elseif (!goldBoolGPU[i] & !segmBoolGPU[i] )
+                @atomic tn[]+=1
+            elseif (!goldBoolGPU[i] & segmBoolGPU[i] )
+                @atomic fp[]+=1    
+            elseif (goldBoolGPU[i] & !segmBoolGPU[i] )
+                @atomic fn[]+=1    
+            end
+        #else
+         #   CUDA.@cuprint "i $(i) j $(j) z $(z)  \n"
+    
+    
+        return  
+    
         end
-      return  
-    end
-
-
-"""
-changed to bitwise operators
-"""
-function primitiveAtomicKernelBitwise(goldBoolGPU::CuDeviceArray{Bool, 3, 1}, segmBoolGPU::CuDeviceArray{Bool, 3, 1},tp,tn,fp, fn)
-    # getting all required indexes
-    i,j,z = defineIndicies()
-        if(goldBoolGPU[i,j,z] & segmBoolGPU[i,j,z] )
-        @atomic tp[]+=1
-        elseif (!goldBoolGPU[i,j,z] & !segmBoolGPU[i,j,z] )
-        @atomic tn[]+=1
-        elseif (!goldBoolGPU[i,j,z] & segmBoolGPU[i,j,z] )
-        @atomic fp[]+=1    
-        elseif (goldBoolGPU[i,j,z] & !segmBoolGPU[i,j,z] )
-        @atomic fn[]+=1    
-        end
-      return  
-    end
-
-
-
-end
-
+ end   
 
 # using CUDA
 
