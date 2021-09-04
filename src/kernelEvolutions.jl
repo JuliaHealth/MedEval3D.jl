@@ -27,11 +27,9 @@ function getSmallTestBools()
 
 
 
-    #for storing output total
-    tp = CuArray([0]);
-    tn = CuArray([0]);
-    fp = CuArray([0]);
-    fn = CuArray([0]);
+    #for storing output total first tp than TN than Fp and Fn
+    tpTnFpFn = CuArray([0,0,0,0]);
+
     #for storing metrics for slice
     tpArr = CuArray(ones(Int16,nz));
     tnArr = CuArray(ones(Int16,nz));
@@ -71,7 +69,7 @@ blockNum =Int64(ceil((nx*ny*nz)/(xthreads*ythreads*zthreads)));
     ## so there should be 9  true positives, 
 
 # returning bunch of values so writing all will be simpler
-    return (goldBoolGPU,segmBoolGPU,tp,tn,fp, fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz,xthreads, ythreads,zthreads ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,FlattG, FlattSeg ,FlattGoldGPU,FlattSegGPU)
+    return (goldBoolGPU,segmBoolGPU,tpTnFpFn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz,xthreads, ythreads,zthreads ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,FlattG, FlattSeg ,FlattGoldGPU,FlattSegGPU)
     
     end
     

@@ -6,7 +6,7 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\gpuUtils.jl")
 using Main.BasicPreds, Main.GPUutils,Cthulhu,BenchmarkTools , CUDA
 
-goldBoolGPU,segmBoolGPU,tp,tn,fp, fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz,xthreads, ythreads,zthreads ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU = getSmallTestBools();
+goldBoolGPU,segmBoolGPU,tpTnFpFn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz,xthreads, ythreads,zthreads ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU = getSmallTestBools();
 
 FlattGoldGPU,FlattSegGPU ;
 
@@ -28,89 +28,73 @@ end
 """
 adapted from https://github.com/JuliaGPU/CUDA.jl/blob/afe81794038dddbda49639c8c26469496543d831/src/mapreduce.jl
 """
-function kernelFunction(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGPU::CuDeviceArray{Bool, 1, 1},tp,tn,fp, fn,warpsInBlock::Int64)
+function kernelFunction(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGPU::CuDeviceArray{Bool, 1, 1},tpTnFpFn,warpsInBlock::Int64)
     i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    wid, lane = fldmod1(threadIdx().x, warpsize())
-    
-    
-    CUDA.@cuprint "wid  $(wid) lane $(lane)  " 
+   wid, lane = fldmod1(threadIdx().x, warpsize()) 
+   
     #shared memory
-    shmem = @cuStaticSharedMem(Float32, (8))     #warpsInBlock !! make it dynamic - makro?
-
+   shmem = @cuStaticSharedMem(Float32, (256))     #warpsInBlock !! make it dynamic - makro?
+   #using native function we calculate how many threads pass our criteria 
    maskTp = vote_ballot_sync(FULL_MASK,goldBoolGPU[i] & segmBoolGPU[i])  
    maskFp = vote_ballot_sync(FULL_MASK,~goldBoolGPU[i] & segmBoolGPU[i])  
    maskFn = vote_ballot_sync(FULL_MASK,goldBoolGPU[i] & ~segmBoolGPU[i])  
-  
-#    if(lane ==1 && maskTp>0)
-#         CUDA.@cuprint "maskTp  $(maskTp) \n"    
-#     end
-
-#    if(lane ==1 && maskFp>0) 
-#     CUDA.@cuprint "maskFp  $(maskFp) \n"    
-# end
-
-
-# if(lane ==1 && maskFn>0)
-
-#     CUDA.@cuprint "maskFn  $(maskFn) "    
-# end
-
+   # generally values for  maskTp, maskFp, maskFn are constant across the warp  so in order to prevent adding the same number couple times we need modulo operator
+   #modul = threadIdx().x % 32
    
-    # val = 0
+   if(lane==1)
+    @atomic tpTnFpFn[1]+= CUDA.popc(maskTp)[1] *1
+#    CUDA.@cuprint "maskTp  $(maskTp) \n"  
+   val = 0  
+#    offset = UInt32(1) 
 
-    # offset = UInt32(1)
-    # while offset < warpsize()
-    #     shuffled= shfl_down_sync(FULL_MASK, val, 0)
-    #     if val!=0
-    #    # CUDA.@cuprint "shuffled $(shuffled) "
-    #     end
-    #     val += shfl_down_sync(FULL_MASK, val, offset)
-    #     offset <<= 1
-    # end
-    #CUDA.@cuprint "val $(val) "
+#    while offset < warpsize()
+#     val+= shfl_down_sync(maskTp,1,offset)  
+#     offset <<= 1
+#     end#while
+#  @atomic tp[]+=CUDA.popc(maskTp)[1]
 
-    #@atomic tp[]+=val
 
-    # while offset < warpsize()
-    #shuffled = shfl_down_sync(FULL_MASK, goldBoolGPU[i], 0)
-        # if(shuffled>0)
-        #     CUDA.@cuprint "shuffled $(shuffled)  "
-        # end
-    #     offset <<= 1
-    # end
-    #val =reduce_warp(+,val,goldBoolGPU,segmBoolGPU,i)
-    
-    
-   # sync_warp()
-    
-    
-    # CUDA.@cuprint "val  $(val) "       
-    # sync_threads()
+    CUDA.@cuprint "maskTp  $(maskTp)  val  $(CUDA.popc(maskTp)[1]) \n"  
 
-  #  write reduced value to shared memory
-    if lane == 1
-       # CUDA.@cuprint "vall " val
-        #@inbounds shmem[wid] = val
-        #@atomic tp[]+=val
-        # CUDA.@cuprint "in shared  $(shmem[wid]) \n"
-
-    end
-    #sync_threads()
-
-    # if lane == 1
-    #     @atomic tp[]+=shared[wid]
-    # end
+end#if  
 
    return  
 
     end
     warpsInBlock = Int64((xthreads*ythreads*zthreads )/32)
 
-    @cuda threads=xthreads*ythreads*zthreads blocks=blockNum kernelFunction(FlattGoldGPU,FlattSegGPU,tp,tn,fp, fn, warpsInBlock) #shmem= 10*10*10*2  threads=(8,8,8)   blocks=ceil(Int,n/8*8*8)
+    @cuda threads=xthreads*ythreads*zthreads blocks=blockNum kernelFunction(FlattGoldGPU,FlattSegGPU,tpTnFpFn, warpsInBlock) #shmem= 10*10*10*2  threads=(8,8,8)   blocks=ceil(Int,n/8*8*8)
 
-tp[1]
+tpTnFpFn[:]
 
-  @device_code_warntype interactive=true @cuda kernelFunction(FlattGoldGPU,FlattSegGPU,tp,tn,fp, fn, warpsInBlock)
+valc = 96
+
+
+  @device_code_warntype interactive=true @cuda kernelFunction(FlattGoldGPU,FlattSegGPU,tpTnFpFn, warpsInBlock)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 for i in 1:32 
