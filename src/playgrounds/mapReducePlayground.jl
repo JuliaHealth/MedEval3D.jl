@@ -2,80 +2,117 @@
 
 using Revise, Parameters, Logging
 
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\gpuUtils.jl")
+include("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
+include("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\gpuUtils.jl")
 using Main.BasicPreds, Main.GPUutils,Cthulhu,BenchmarkTools , CUDA
 
-goldBoolGPU,segmBoolGPU,tpTnFpFn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz,xthreads, ythreads,zthreads ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU = getSmallTestBools();
+goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools();
 
-FlattGoldGPU,FlattSegGPU ;
 
 # Reduce a value across a warp
-@inline function reduce_warp(op, val,arr1,arr2,index)
+@inline function reduce_warp( vall)
+
     offset = UInt32(1)
-    while offset < warpsize()
-        shuffled= shfl_down_sync(FULL_MASK, arr1[i], offset)
-        if shuffled!=false
-        CUDA.@cuprint "shuffled $(shuffled) "
-        end
-        val = op(val,shfl_down_sync(FULL_MASK, arr1[i], offset))
-        offset <<= 1
+    while(offset <32) 
+        vall+=shfl_down_sync(FULL_MASK, vall, offset)  
+        offset<<= 1
     end
 
-    return val
+    #CUDA.@cuprint "blockId+wid $(blockId+wid) maskTp  $(maskTp)  val  $(CUDA.popc(maskTp)[1]) \n"  
+
+    return vall
 end
 
 """
 adapted from https://github.com/JuliaGPU/CUDA.jl/blob/afe81794038dddbda49639c8c26469496543d831/src/mapreduce.jl
 """
-function kernelFunction(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGPU::CuDeviceArray{Bool, 1, 1},tpTnFpFn,warpsInBlock::Int64)
+function kernelFunction(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGPU::CuDeviceArray{Bool, 1, 1},tp,tn,fp,fn,intermediateResTp::CuDeviceArray{Int32, 1, 1},intermediateResFp::CuDeviceArray{Int32, 1, 1},intermediateResFn::CuDeviceArray{Int32, 1, 1} )
     i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-   wid, lane = fldmod1(threadIdx().x, warpsize()) 
+    blockId = blockIdx().x
+   wid, lane = fldmod1(threadIdx().x, warpsize())
+
+   #shared memory for storing results from warp reductions
+   shmemTp = @cuStaticSharedMem(Int32, (33))
+   shmemFp = @cuStaticSharedMem(Int32, (33))
+   shmemFn = @cuStaticSharedMem(Int32, (33))
+
    
-    #shared memory
-   shmem = @cuStaticSharedMem(Float32, (256))     #warpsInBlock !! make it dynamic - makro?
+   @inbounds goldb::Bool =goldBoolGPU[i]
+   @inbounds segmb::Bool =segmBoolGPU[i] 
    #using native function we calculate how many threads pass our criteria 
-   maskTp = vote_ballot_sync(FULL_MASK,goldBoolGPU[i] & segmBoolGPU[i])  
-   maskFp = vote_ballot_sync(FULL_MASK,~goldBoolGPU[i] & segmBoolGPU[i])  
-   maskFn = vote_ballot_sync(FULL_MASK,goldBoolGPU[i] & ~segmBoolGPU[i])  
-   # generally values for  maskTp, maskFp, maskFn are constant across the warp  so in order to prevent adding the same number couple times we need modulo operator
-   #modul = threadIdx().x % 32
+   maskTp = vote_ballot_sync(FULL_MASK,goldb & segmb)  
+   maskFp = vote_ballot_sync(FULL_MASK,~goldb & segmb)  
+   maskFn = vote_ballot_sync(FULL_MASK,goldb & ~segmb)  
    
-   if(lane==1)
-    @atomic tpTnFpFn[1]+= CUDA.popc(maskTp)[1] *1
-#    CUDA.@cuprint "maskTp  $(maskTp) \n"  
-   val = 0  
-#    offset = UInt32(1) 
+   #we are adding on separate threads results from warps to shared memory
+    if(lane==1)
+        @inbounds  shmemTp[wid]= CUDA.popc(maskTp)[1]*1
+    elseif(lane==2) 
+        @inbounds shmemFp[wid]+= CUDA.popc(maskFp)[1]*1
+    elseif(lane==3)
+         @inbounds shmemFn[wid]+= CUDA.popc(maskFn)[1]*1
+    end#if  
 
-#    while offset < warpsize()
-#     val+= shfl_down_sync(maskTp,1,offset)  
-#     offset <<= 1
-#     end#while
-#  @atomic tp[]+=CUDA.popc(maskTp)[1]
+#now all data about of intrest should be in  shared memory so we will get all rsults from warp reduction in the shared memory
+sync_threads()
+    # in case we have only 32 warps as we set we will not go out of bounds
+      if(wid==1 )
+        vallTp = reduce_warp(shmemTp[lane])
+        #probably we do not need to sync warp as shfl dow do it for us        
+        if(lane==1)
+            @inbounds intermediateResTp[blockId]=vallTp
+        end    
+       elseif(wid==3 )   
+        vallFp = reduce_warp(shmemFp[lane])
+        if(lane==1)
+            @inbounds intermediateResFp[blockId]=vallFp
+        end    
+       elseif(wid==5)  
+        vallFn = reduce_warp(shmemFn[lane])
+        if(lane==1)
+            @inbounds intermediateResFn[blockId]=vallFn
+        end  
+        end
+
+    #     # CUDA.@cuprint " blockId  $( blockId)  \n" 
+    #     sync_threads()
+    #     intermediateResults[blockId+1,1]=shmemA[1]
+    # elseif(blockDim().x == threadIdx().x+2)
+    #     sync_threads()
+    #     intermediateResults[blockId+1,2]=shmemA[2]
+    # elseif(blockDim().x == threadIdx().x+1) 
+    #     sync_threads()        
+    #     intermediateResults[blockId+1,3]=shmemA[3]
 
 
-    CUDA.@cuprint "maskTp  $(maskTp)  val  $(CUDA.popc(maskTp)[1]) \n"  
-
-end#if  
+    #   CUDA.@cuprint "maskTp  $(maskTp)  val  $(CUDA.popc(maskTp)[1]) \n"  
+    #   end  
 
    return  
 
     end
-    warpsInBlock = Int64((xthreads*ythreads*zthreads )/32)
-
-    @cuda threads=xthreads*ythreads*zthreads blocks=blockNum kernelFunction(FlattGoldGPU,FlattSegGPU,tpTnFpFn, warpsInBlock) #shmem= 10*10*10*2  threads=(8,8,8)   blocks=ceil(Int,n/8*8*8)
-
-tpTnFpFn[:]
-
-valc = 96
 
 
-  @device_code_warntype interactive=true @cuda kernelFunction(FlattGoldGPU,FlattSegGPU,tpTnFpFn, warpsInBlock)
+#@benchmark CUDA.@sync 
+      @cuda threads=1024 blocks=blockNum kernelFunction(FlattGoldGPU,FlattSegGPU,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn) 
+      
+      intermediateResTp,intermediateResFp,intermediateResFn
+      sum(intermediateResFn)
+
+maximum(intermediateResFn)
+
+      tp[]
+   
+
+tp[1] ==tpTotalTrue && fp[1] ==fpTotalTrue && fn[1] ==fnTotalTrue #tn[1] == tnTotalTrue && 
+
+
+  @device_code_warntype interactive=true @cuda kernelFunction(FlattGoldGPU,FlattSegGPU,tp,tn,fp,fn, warpsInBlock,intermediateResults)
 
 
 
 
-
+x,y = fldmod1(68,32)
 
 
 

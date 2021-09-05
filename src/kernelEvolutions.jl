@@ -12,10 +12,7 @@ function getSmallTestBools()
     nx=32
     ny=32
     nz=16
-    #sets nuber of threads in thread blocks
-    xthreads = 16
-    ythreads = 16
-    zthreads = 1
+
     #first we initialize the metrics on CPU so we will modify them easier
     goldBool= falses(nx,ny,nz); #mimicks gold standard mask
     segmBool= falses(nx,ny,nz); #mimicks mask     
@@ -28,8 +25,11 @@ function getSmallTestBools()
 
 
     #for storing output total first tp than TN than Fp and Fn
-    tpTnFpFn = CuArray([0,0,0,0]);
-
+    tp= CuArray([0]);
+    tn= CuArray([0]);
+    fp= CuArray([0]);
+    fn = CuArray([0]);
+    
     #for storing metrics for slice
     tpArr = CuArray(ones(Int16,nz));
     tnArr = CuArray(ones(Int16,nz));
@@ -64,12 +64,19 @@ fnTotalTrue= fnPerSliceTrue|>sum
 goldBoolGPU= CuArray( goldBool)
 segmBoolGPU= CuArray( segmBool )
 
-blockNum =Int64(ceil((nx*ny*nz)/(xthreads*ythreads*zthreads)));
+blockNum =Int64(ceil((nx*ny*nz)/(1024)));
+# array needs to hold 3 values tp, fp and false negatives from each block
+
+intermediateResTp = CUDA.zeros(Int32, blockNum+2)
+intermediateResFp = CUDA.zeros(Int32, blockNum+2)
+intermediateResFn = CUDA.zeros(Int32, blockNum+2)
+
+#intermediateResults = CUDA.zeros(Int32, Int64(((nx*ny*nz)/32)+100)  , 3)
 
     ## so there should be 9  true positives, 
 
 # returning bunch of values so writing all will be simpler
-    return (goldBoolGPU,segmBoolGPU,tpTnFpFn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz,xthreads, ythreads,zthreads ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,FlattG, FlattSeg ,FlattGoldGPU,FlattSegGPU)
+    return (goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,FlattG, FlattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn)
     
     end
     
@@ -102,7 +109,120 @@ function primitiveAtomicKernel(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGP
         return  
     
         end
+
+
+
  end   
+
+
+ 
+
+
+
+ """
+ adapted from https://github.com/JuliaGPU/CUDA.jl/blob/afe81794038dddbda49639c8c26469496543d831/src/mapreduce.jl
+ starting to using warp primitives 
+ 
+ """
+#  function kernelFunction(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGPU::CuDeviceArray{Bool, 1, 1},tp,tn,fp,fn,warpsInBlock::Int64)
+#     i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+#    wid, lane = fldmod1(threadIdx().x, warpsize())
+
+#    grid_handle = this_grid() # handle forsynchronizing cooperative groups 
+#    shmemA = @cuStaticSharedMem(Int32, (26))           
+#    #shmemB = @cuStaticSharedMem(Float32, (8, 8,8,2))           
+
+#    #shared memory probably do not make sense as we are not intrested in the values more than once
+#    @inbounds goldb::Bool =goldBoolGPU[i]
+#    @inbounds segmb::Bool =segmBoolGPU[i] 
+#    #using native function we calculate how many threads pass our criteria 
+#    maskTp = vote_ballot_sync(FULL_MASK,goldb & segmb)  
+#    maskFp = vote_ballot_sync(FULL_MASK,~goldb & segmb)  
+#    maskFn = vote_ballot_sync(FULL_MASK,goldb & ~segmb)  
+   
+#    # generally values for  maskTp, maskFp, maskFn are constant across the warp  so in order to prevent adding the same number couple times we need modulo operator
+#    #modul = threadIdx().x % 32
+   
+#    if(lane==1)
+
+# #   CUDA.@cuprint "maskTp  $(maskTp)  val  $(CUDA.popc(maskTp)[1]) \n"  
+# #   end  
+#     @atomic tp[]+= CUDA.popc(maskTp)[1]*1
+#     @atomic fp[]+= CUDA.popc(maskFp)[1]*1
+#     @atomic fn[]+= CUDA.popc(maskFn)[1]*1
+
+# end#if  
+
+#    return  
+
+#     end
+
+
+
+"""
+using warp reduce in a block
+
+"""
+
+# function kernelFunction(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGPU::CuDeviceArray{Bool, 1, 1},tp,tn,fp,fn,intermediateResults::CuDeviceMatrix{Int32, 1} )
+#     i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+#     blockId = blockIdx().x
+#    wid, lane = fldmod1(threadIdx().x, warpsize())
+
+#    #shared memory for storing results from warp reductions
+#    shmemTp = @cuStaticSharedMem(Int32, (33))
+#    shmemFp = @cuStaticSharedMem(Int32, (33))
+#    shmemFn = @cuStaticSharedMem(Int32, (33))
+
+   
+#    @inbounds goldb::Bool =goldBoolGPU[i]
+#    @inbounds segmb::Bool =segmBoolGPU[i] 
+#    #using native function we calculate how many threads pass our criteria 
+#    maskTp = vote_ballot_sync(FULL_MASK,goldb & segmb)  
+#    maskFp = vote_ballot_sync(FULL_MASK,~goldb & segmb)  
+#    maskFn = vote_ballot_sync(FULL_MASK,goldb & ~segmb)  
+   
+#    #we are adding on separate threads results from warps to shared memory
+#     if(lane==1)
+#         @inbounds  shmemTp[wid]= CUDA.popc(maskTp)[1]*1
+#     elseif(lane==2) 
+#         @inbounds shmemFp[wid]+= CUDA.popc(maskFp)[1]*1
+#     elseif(lane==3)
+#         if(CUDA.popc(maskFn)[1]>0)        
+#         end    
+
+#         @inbounds shmemFn[wid]+= CUDA.popc(maskFn)[1]*1
+#     end#if  
+
+# #now all data about of intrest should be in  shared memory so we will get all rsults from warp reduction in the shared memory
+# sync_threads()
+#     # in case we have only 32 warps as we set we will not go out of bounds
+#       if(wid==1 )
+#         vallTp = reduce_warp(shmemTp[lane])
+#         #probably we do not need to sync warp as shfl dow do it for us        
+#         if(lane==1)
+#             @atomic tp[]+=vallTp
+#             end    
+#        elseif(wid==2 )   
+#         vallFp = reduce_warp(shmemFp[lane])
+#         if(lane==1)
+#             @atomic fp[]+=vallFp
+#         end    
+#        elseif(wid==3)  
+#         vallFn = reduce_warp(shmemFn[lane])
+#         if(lane==1)
+#             @atomic fn[]+=vallFn
+#         end  
+#         end
+
+
+#    return  
+
+
+
+
+
+
 
 # using CUDA
 
