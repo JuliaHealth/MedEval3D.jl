@@ -10,7 +10,7 @@ goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,
 
 
 # Reduce a value across a warp
-@inline function reduce_warp( vall, lanesNumb,i)
+@inline function reduce_warp( vall, lanesNumb)
     offset = UInt32(1)
     while(offset <lanesNumb) 
         vall+=shfl_down_sync(FULL_MASK, vall, offset)  
@@ -61,60 +61,64 @@ function getBlockTpFpFn(goldBoolGPU::CuDeviceArray{Bool,1, 1}
    wid, lane = fldmod1(threadIdx().x,32)
 
    #shared memory for  stroing intermidiate data per lane  
-   shmem = @cuStaticSharedMem(Int32, (513,3))
+   shmem = @cuStaticSharedMem(UInt8, (513,3))
    #for storing results from warp reductions
-   shmemSumFn = @cuStaticSharedMem(Int32, (33))
-   shmemSumFp = @cuStaticSharedMem(Int32, (33))
-   shmemSumTp = @cuStaticSharedMem(Int32, (33))
+   shmemSum = @cuStaticSharedMem(UInt16, (33,3))
+
   
     #incrementing - taking multiple datapoints per lane  
     incr_shmem(threadIdx().x,goldBoolGPU[i],segmBoolGPU[i],shmem)
     incr_shmem(threadIdx().x,goldBoolGPU[i+1],segmBoolGPU[i+1],shmem)
    #reducing across the warp
-   sumFn = reduce_warp(shmem[threadIdx().x,1],32,i)
-   sumFp = reduce_warp(shmem[threadIdx().x,2],32,i)
-   sumTp = reduce_warp(shmem[threadIdx().x,3],32,i)
-
-
+   @inbounds sumFn = reduce_warp(shmem[threadIdx().x,1],32)
+   @inbounds sumFp = reduce_warp(shmem[threadIdx().x,2],32)
+   @inbounds sumTp = reduce_warp(shmem[threadIdx().x,3],32)
 
    #we are adding on separate threads results from warps to shared memory
     if(lane==1)
-    #here we are reusing the shared memory
-    if(sumFn>0)
-       CUDA.@cuprint "sumFn   $(sumFn) wid $(wid) \n"
-    end
-        @inbounds shmemSumTp[wid]= sumTp
-   # elseif(lane==3) 
-        @inbounds shmemSumFp[wid]= sumFp
-   # elseif(lane==4)
-        @inbounds shmemSumFn[wid]= sumFn
+        if(sumFn>0)
+        # 100*500/9018230183092381*62387462384623846/9342903840923840*982734982734
+
+        CUDA.@cuprint "sumFn   wid $(wid) \n"
+        end
+    @inbounds shmemSum[wid,1]= sumFn
+    end  
+   if(lane==2) 
+        @inbounds shmemSum[wid,2]= sumFp
+   end     
+   if(lane==3)
+        @inbounds shmemSum[wid,3]= sumTp
     end#if  
 sync_threads()
 #now all data about of intrest should be in  shared memory so we will get all rsults from warp reduction in the shared memory
     # in case we have only 32 warps as we set we will not go out of bounds
-      if(wid==2 )
-        vallTp = reduce_warp(shmemSumTp[lane],32,i)
+    if(wid==2 )
+        vallTp = reduce_warp(shmemSum[lane,3],32 )
         #probably we do not need to sync warp as shfl dow do it for us        
 
         if(lane==1)
             @inbounds @atomic tp[]+=vallTp
             #@inbounds intermediateResTp[blockId]=vallTp
-        end    
-       elseif(wid==3 )   
-        sync_warp()
-        vallFp = reduce_warp(shmemSumFp[lane],32,i)
+        end
+    end  
+    
+    if(wid==3 )   
+        vallFp = reduce_warp(shmemSum[lane,2],32 )
+         
+
         if(lane==1)
             @inbounds @atomic fp[]+=vallFp
             #@inbounds intermediateResFp[blockId]=vallFp
-        end    
-       elseif(wid==5)  
-        sync_warp()
-        vallFn = reduce_warp(shmemSumFn[lane],32,i)
+        end 
+    end 
+
+    if(wid==5)  
+            vallFn = reduce_warp(shmemSum[lane,1],32 )
         if(lane==1)
             @inbounds @atomic fn[]+=vallFn
             #@inbounds intermediateResFn[blockId]=vallFn
         end  
-        end
+    end
 
    return  
    end
@@ -127,6 +131,8 @@ sync_threads()
 blockss = Int64(round((length(FlattGoldGPU)/512)/2))
 @cuda threads=512 blocks=blockss getBlockTpFpFn(FlattGoldGPU,FlattSegGPU,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn) 
 tp[1]
+fp[1]
+
 tp[1] ==tpTotalTrue && fp[1] ==fpTotalTrue && fn[1] ==fnTotalTrue #tn[1] == tnTotalTrue && 
 
 tp[1]
@@ -253,6 +259,43 @@ fn
     # kernel = @cuda launch=false kernelFunction(arr1, arr2, res)
     #config = launch_configuration(kernel.fun, shmem=threads-> 2 * sum(threads) * sizeof(Float32))
     
+
+
+
+
+
+    using CUDA
+
+    goldBoolGPU= CuArray(falses(16,16,2));
+    
+    segmBoolGPU= CuArray(falses(16,16,2));
+    
+    fn = CuArray([0])
+    
+    function kernelFunct(goldBoolGPU::CuDeviceArray{Bool, 3, 1}, segmBoolGPU::CuDeviceArray{Bool, 3, 1},fn)
+    
+        i= (blockIdx().x-1) * blockDim().x + threadIdx().x
+    
+        j = (blockIdx().y-1) * blockDim().y + threadIdx().y
+    
+        z = (blockIdx().z-1) * blockDim().z + threadIdx().z 
+    
+        if (goldBoolGPU[i,j,z] & !segmBoolGPU[i,j,z] )
+    
+            @atomic fn[]+=1    
+    
+            end
+    
+        return  
+    
+        end
+    
+    @cuda threads=(4, 4,1) blocks=32  kernelFunct(goldBoolGPU,segmBoolGPU,fn)
+
+fn[]
+
+
+
 
 
 
