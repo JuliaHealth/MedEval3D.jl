@@ -9,8 +9,8 @@ export getBigTestBools,getSmallTestBools
 
 function getSmallTestBools()
 
-    nx=32
-    ny=32
+    nx=256
+    ny=256
     nz=16
 
     #first we initialize the metrics on CPU so we will modify them easier
@@ -37,12 +37,14 @@ function getSmallTestBools()
     fnArr = CuArray(ones(Int16,nz));
 ### calculating correct results (unoptimazied way) just for unit testing
 
-FlattG = vec(goldBool);
-FlattSeg = vec(segmBool);
+# FlattG = vec(goldBool);
+# FlattSeg = vec(segmBool);
+FlattG = push!(vec(goldBool),false);
+FlattSeg = push!(vec(segmBool),false);
+
 
 FlattGoldGPU= CuArray( FlattG)
 FlattSegGPU= CuArray( FlattSeg )
-FlattGoldGPU,FlattSegGPU
 # total for all slices
 # tpTotalTrue = filter(pair->pair[2]== FlattB[pair[1]] ==true ,collect(enumerate(FlattG)))|>length
 # tnTotalTrue = filter(pair->pair[2]== FlattB[pair[1]] ==false ,collect(enumerate(FlattG)))|>length
@@ -64,7 +66,11 @@ fnTotalTrue= fnPerSliceTrue|>sum
 goldBoolGPU= CuArray( goldBool)
 segmBoolGPU= CuArray( segmBool )
 
-blockNum =Int64(ceil((nx*ny*nz)/(1024)));
+
+
+
+blockNum = Int64(round(length(FlattG)/1024))
+
 # array needs to hold 3 values tp, fp and false negatives from each block
 
 intermediateResTp = CUDA.zeros(Int32, blockNum+2)
@@ -217,6 +223,60 @@ using warp reduce in a block
 
 
 #    return  
+"""
+using warp and get output to intermediate array
+"""
+# function getBlockTpFpFn(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGPU::CuDeviceArray{Bool, 1, 1},tp,tn,fp,fn,intermediateResTp::CuDeviceArray{Int32, 1, 1},intermediateResFp::CuDeviceArray{Int32, 1, 1},intermediateResFn::CuDeviceArray{Int32, 1, 1} )
+#     i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+#     blockId = blockIdx().x
+#    wid, lane = fldmod1(threadIdx().x, warpsize())
+
+#    #shared memory for storing results from warp reductions
+#    shmemTp = @cuStaticSharedMem(Int32, (33))
+#    shmemFp = @cuStaticSharedMem(Int32, (33))
+#    shmemFn = @cuStaticSharedMem(Int32, (33))
+
+   
+#    @inbounds goldb::Bool =goldBoolGPU[i]
+#    @inbounds segmb::Bool =segmBoolGPU[i] 
+#    #using native function we calculate how many threads pass our criteria 
+#    maskTp = vote_ballot_sync(FULL_MASK,goldb & segmb)  
+#    maskFp = vote_ballot_sync(FULL_MASK,~goldb & segmb)  
+#    maskFn = vote_ballot_sync(FULL_MASK,goldb & ~segmb)  
+   
+#    #we are adding on separate threads results from warps to shared memory
+#     if(lane==1)
+#         @inbounds  shmemTp[wid]= CUDA.popc(maskTp)[1]*1
+#     elseif(lane==2) 
+#         @inbounds shmemFp[wid]+= CUDA.popc(maskFp)[1]*1
+#     elseif(lane==3)
+#          @inbounds shmemFn[wid]+= CUDA.popc(maskFn)[1]*1
+#     end#if  
+
+# #now all data about of intrest should be in  shared memory so we will get all rsults from warp reduction in the shared memory
+# sync_threads()
+#     # in case we have only 32 warps as we set we will not go out of bounds
+#       if(wid==1 )
+#         vallTp = reduce_warp(shmemTp[lane])
+#         #probably we do not need to sync warp as shfl dow do it for us        
+#         if(lane==1)
+#             @inbounds intermediateResTp[blockId]=vallTp
+#         end    
+#        elseif(wid==3 )   
+#         vallFp = reduce_warp(shmemFp[lane])
+#         if(lane==1)
+#             @inbounds intermediateResFp[blockId]=vallFp
+#         end    
+#        elseif(wid==5)  
+#         vallFn = reduce_warp(shmemFn[lane])
+#         if(lane==1)
+#             @inbounds intermediateResFn[blockId]=vallFn
+#         end  
+#         end
+#    return  
+#    end
+
+
 
 
 

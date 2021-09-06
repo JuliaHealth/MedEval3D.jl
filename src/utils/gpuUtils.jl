@@ -1,7 +1,7 @@
 module GPUutils
 using CUDA
 
-export defineIndicies
+export defineIndicies,computeBlocksFromOccupancy
 """
 Type{maskNumb}  - type of the numbers hold in mask
 G - 3 dimensional array holding ground truth segmentation
@@ -29,5 +29,30 @@ function defineIndicies()
 
 end#defineIndicies
 
+"""
+calculates for getBlockTpFpFn optimal number of blocks and thread blocks
+    also it poins out to maximum number of blocks that we can squeeze on device ..
+args - tupple with arguments for kernel
+int32Shemm per warp - we are assuming we get some shared memory and some number of it per warp
+    """
+function computeBlocksFromOccupancy(args, int32Shemm)
+    wanted_threads =1000000
+    function compute_threads(max_threads)
+        if wanted_threads > max_threads
+            true ? prevwarp(device(), max_threads) : max_threads
+        else
+            wanted_threads
+        end
+    end
+    compute_shmem(threads) = Int64((threads/32)*int32Shemm*sizeof(Int32) )
+    
+       kernel = @cuda launch=false getBlockTpFpFn(args...) 
+       kernel_config = launch_configuration(kernel.fun; shmem=compute_shmem∘compute_threads)
+       blocks =  kernel_config.blocks
+       threads =  kernel_config.threads
+       maxBlocks = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT)
+    
+return blocks,threads,maxBlocks
+end
 
 end #GPUutils
