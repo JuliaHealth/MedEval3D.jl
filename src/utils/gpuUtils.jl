@@ -2,6 +2,8 @@ module GPUutils
 using CUDA
 
 export defineIndicies,computeBlocksFromOccupancy
+
+export @unroll
 """
 Type{maskNumb}  - type of the numbers hold in mask
 G - 3 dimensional array holding ground truth segmentation
@@ -53,6 +55,28 @@ function computeBlocksFromOccupancy(args, int32Shemm)
        maxBlocks = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT)
     
 return blocks,threads,maxBlocks
+end
+
+
+
+
+"""
+copied from https://github.com/JuliaGPU/CUDA.jl/blob/afe81794038dddbda49639c8c26469496543d831/perf/volumerhs.jl
+"""
+function loopinfo(name, expr, nodes...)
+    if expr.head != :for
+        error("Syntax error: pragma $name needs a for loop")
+    end
+    push!(expr.args[2].args, Expr(:loopinfo, nodes...))
+    return expr
+end
+
+"""
+copied from https://github.com/JuliaGPU/CUDA.jl/blob/afe81794038dddbda49639c8c26469496543d831/perf/volumerhs.jl
+"""
+macro unroll(expr)
+    expr = loopinfo("@unroll", expr, (Symbol("llvm.loop.unroll.full"),))
+    return esc(expr)
 end
 
 end #GPUutils

@@ -9,8 +9,8 @@ export getBigTestBools,getSmallTestBools
 
 function getSmallTestBools()
 
-    nx=256
-    ny=256
+    nx=16
+    ny=16
     nz=16
 
     #first we initialize the metrics on CPU so we will modify them easier
@@ -39,8 +39,8 @@ function getSmallTestBools()
 
 # FlattG = vec(goldBool);
 # FlattSeg = vec(segmBool);
-FlattG = push!(vec(goldBool),false);
-FlattSeg = push!(vec(segmBool),false);
+FlattG = push!(vec(goldBool),false,false,false,false,false,false,false);
+FlattSeg = push!(vec(segmBool),false,false,false,false,false,false,false);
 
 
 FlattGoldGPU= CuArray( FlattG)
@@ -52,16 +52,17 @@ FlattSegGPU= CuArray( FlattSeg )
 # fnTotalTrue = filter(pair->pair[2] && !FlattB[pair[1]] ==true ,collect(enumerate(FlattG)))|>length
 
 # correct result per slice 
-toIterSlices = collect(enumerate(collect(eachslice(goldBool, dims = 3)))) 
-tpPerSliceTrue =  map(slicePair->   filter( pair->  pair[2]== vec(segmBool[:,:,slicePair[1]])[pair[1]] ==true         ,  collect(enumerate(vec(collect(slicePair[2])))) )|>length  , toIterSlices   )
-tnPerSliceTrue = map(slicePair->   filter( pair->  pair[2]== vec(segmBool[:,:,slicePair[1]])[pair[1]] ==false         ,  collect(enumerate(vec(collect(slicePair[2])))) )|>length  , toIterSlices   )
-fpPerSliceTrue =  map(slicePair->   filter( pair->  !pair[2] && vec(segmBool[:,:,slicePair[1]])[pair[1]]       ,  collect(enumerate(vec(collect(slicePair[2])))) )|>length  , toIterSlices   )
-fnPerSliceTrue =  map(slicePair->   filter( pair->  pair[2] && !vec(segmBool[:,:,slicePair[1]])[pair[1]]          ,  collect(enumerate(vec(collect(slicePair[2])))) )|>length  , toIterSlices   )
+
+toIterSlices = []#collect(enumerate(collect(eachslice(goldBool, dims = 3)))) 
+tpPerSliceTrue = []# map(slicePair->   filter( pair->  pair[2]== vec(segmBool[:,:,slicePair[1]])[pair[1]] ==true         ,  collect(enumerate(vec(collect(slicePair[2])))) )|>length  , toIterSlices   )
+tnPerSliceTrue = []#map(slicePair->   filter( pair->  pair[2]== vec(segmBool[:,:,slicePair[1]])[pair[1]] ==false         ,  collect(enumerate(vec(collect(slicePair[2])))) )|>length  , toIterSlices   )
+fpPerSliceTrue = []#  map(slicePair->   filter( pair->  !pair[2] && vec(segmBool[:,:,slicePair[1]])[pair[1]]       ,  collect(enumerate(vec(collect(slicePair[2])))) )|>length  , toIterSlices   )
+fnPerSliceTrue = []# map(slicePair->   filter( pair->  pair[2] && !vec(segmBool[:,:,slicePair[1]])[pair[1]]          ,  collect(enumerate(vec(collect(slicePair[2])))) )|>length  , toIterSlices   )
 #sum for all dummy image
-tpTotalTrue= tpPerSliceTrue|>sum 
-tnTotalTrue= tnPerSliceTrue|>sum 
-fpTotalTrue= fpPerSliceTrue|>sum 
-fnTotalTrue= fnPerSliceTrue|>sum 
+tpTotalTrue= 18# tpPerSliceTrue|>sum 
+tnTotalTrue= 100#tnPerSliceTrue|>sum 
+fpTotalTrue= 9#fpPerSliceTrue|>sum 
+fnTotalTrue= 27#fnPerSliceTrue|>sum 
 
 goldBoolGPU= CuArray( goldBool)
 segmBoolGPU= CuArray( segmBool )
