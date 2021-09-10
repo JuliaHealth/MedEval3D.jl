@@ -1,5 +1,12 @@
+"""
+a lot of evaluation metrics can be found in 
+https://pymia.readthedocs.io/en/latest/pymia.evaluation.metric.html?highlight=dice
+"""
+
 
 module MainOverlapTest
+
+
 
 using Distances, Test, Revise 
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
@@ -18,12 +25,14 @@ goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,
     jaccardOut = 1- evaluate(Jaccard(), flattG, flattSeg)
     @test jaccardOut ≈ jaccard(tpTotalTrue,fpTotalTrue, fnTotalTrue )
     @test jaccardOut ≈ x
-
+   
 end;
 
 @testset "global consistency error test" begin
-https://github.com/hushell/drnn/blob/master/RNN/code/tcut/compare_segmentations.m
-
+    local_refinement_error( flattG, flattSeg)
 end;
+
+
+
 end# MainOverlapTest
 

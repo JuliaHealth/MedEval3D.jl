@@ -30,7 +30,6 @@ end #calculateProbabilisticMetric
 """
 calculate  Interclass correlaion
 G,T - ground truth and evaluated masks - 3 dimensional arrays of supplied type-  maskNumb
-isVariedSlice - true if slices are of variable thickness
 res - ResultMetrics struct holding result of all metrics calculated for given run
 return Interclass correlaion between G and T
 """
@@ -38,12 +37,10 @@ calculateInterClassCorrStr
 function calculateInterClassCorr(::Type{maskNumb} 
     ,G::Array{maskNumb, 3}
     ,T::Array{maskNumb, 3}
-    ,isVariedSlice::Bool) ::Float64
+    ,numberElements::Bool) ::Float64
 
      mean_f = voxelprocesser->mean_f 
      mean_m = voxelprocesser->mean_m 
-    int numberElements = std::min(voxelprocesser->numberElements_f, voxelprocesser->numberElements_m) 
-
      ssw = 0 
      ssb = 0 
      grandmean = (mean_f + mean_m)/2 

@@ -6,18 +6,18 @@ module RandIndex
 using Main.BasicStructs, Parameters, Setfield
 
 
-calculateAdjustedRandIndexStr = """
+"""
 calculate adjusted rand index based on precalulated constants
 abcds - list of basic metrics - in the order [a,b,c,d ] 
 res - ResultMetrics struct holding result of all metrics calculated for given run
 return modified ResultMetrics with added adjusted rand index
 """
-@doc calculateAdjustedRandIndexStr
+
 function calculateAdjustedRandIndex(abcds::Vector{Float64} , res::ResultMetrics) ::ResultMetrics
-    a = TnTpFpFns[1]
-    b = TnTpFpFns[2]
-    c = TnTpFpFns[3]
-    d = TnTpFpFns[4]
+    a = abcds[1]
+    b = abcds[2]
+    c = abcds[3]
+    d = abcds[4]
 
     x1 = a - ((a+c)*(a+b)/(a+b+c+d));
     x2 = ( (a+c) + (a+b))/2.0;
