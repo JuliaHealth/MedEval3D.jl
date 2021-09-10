@@ -7,6 +7,7 @@ https://github.com/Visceral-Project/EvaluateSegmentation/blob/master/source/Glob
 """
 module MainOverlap
 using Main.BasicStructs, Parameters, Setfield
+
 export calculateBAsicOverlap, dice, jaccard, gce
 
 """
@@ -28,7 +29,7 @@ end #calculateDice
 ```@doc
 Calculates Dice Coefficient  on the basis of true negative, true positive, false positive and false negatives 
  ```
-function dice(tp::Int,fp::Int, fn::Int)::Float64 
+function dice(tp,fp, fn)::Float64 
  return  2*tp/(2*tp + fp + fn)
 end#dice
 
@@ -36,7 +37,7 @@ end#dice
 ```@doc
 Calculates Jaccard Coefficient  on the basis of true negative, true positive, false positive and false negatives 
 ```
-function jaccard(tp::Int,fp::Int, fn::Int)::Float64 
+function jaccard(tp,fp, fn)::Float64 
  return  tp/(tp + fp + fn)
 end#jaccard
 
@@ -44,7 +45,7 @@ end#jaccard
 ```@doc
 Calculates Global Consistency error on the basis of true negative, true positive, false positive and false negatives 
 ```
-function gce(tn::Int,tp::Int,fp::Int, fn::Int)::Float64 
+function gce(tn,tp,fp, fn)::Float64 
     n = tn+fp+fn+tp;
     e1 = ( fn*(fn+ 2*tp)/(tp+fn) + fp*(fp + 2*tn)/(tn+fp) )/n;
     e2 = ( fp*(fp+2*tp)/(tp+fp) + fn*(fn + 2*tn)/(tn+fn) )/n;

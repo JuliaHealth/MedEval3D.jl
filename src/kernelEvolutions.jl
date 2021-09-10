@@ -46,8 +46,9 @@ function getSmallTestBools()
 
 # FlattG = vec(goldBool);
 # FlattSeg = vec(segmBool);
-FlattG = push!(vec(goldBool),false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false);
-FlattSeg = push!(vec(segmBool),false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false);
+ff = falses(1000)
+FlattG = vcat(vec(goldBool),ff)
+FlattSeg = vcat(vec(segmBool),ff)
 
 
 FlattGoldGPU= CuArray( FlattG)

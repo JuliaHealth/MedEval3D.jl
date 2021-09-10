@@ -1,7 +1,7 @@
 module GPUutils
 using CUDA
 
-export defineIndicies,computeBlocksFromOccupancy
+export defineIndicies,computeBlocksFromOccupancy,reduce_warp
 
 export @unroll
 """
@@ -77,6 +77,19 @@ copied from https://github.com/JuliaGPU/CUDA.jl/blob/afe81794038dddbda49639c8c26
 macro unroll(expr)
     expr = loopinfo("@unroll", expr, (Symbol("llvm.loop.unroll.full"),))
     return esc(expr)
+end
+
+
+"""
+Reduce a value across a warp
+"""
+@inline function reduce_warp( vall, lanesNumb)
+    offset = UInt32(1)
+    while(offset <lanesNumb) 
+        vall+=shfl_down_sync(FULL_MASK, vall, offset)  
+        offset<<= 1
+    end
+    return vall
 end
 
 end #GPUutils
