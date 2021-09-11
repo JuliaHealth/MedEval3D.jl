@@ -1,7 +1,7 @@
 module GPUutils
 using CUDA
 
-export defineIndicies,computeBlocksFromOccupancy,reduce_warp
+export defineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants
 
 export @unroll
 """
@@ -91,5 +91,27 @@ Reduce a value across a warp
     end
     return vall
 end
+
+
+"""
+generally  we want to get one block per slice as dimensions of slices in the medical images are friendly - so 256x256 ; 512x512 and 1024x1024 - it should all be possible
+In order to avoid edge cases we will keep number of threads to some even multiply of 32 for ecxample 512
+    arguments
+        threadnum - number of threads per block
+        slicesNumber - number of slices of our data
+        sliceEdgeLength - slices are squares of 256, 512 or 1024 length
+    output
+        blockNum - number of blocks we need  - generally will return number of slices
+        loopNumb - number of  iteration of each single line it need to do so a single block will cover whole slice
+        indexCorr - as one lane will get access to multiple data elements we need to take correction for it 
+"""
+function getKernelContants(threadnum::Int,sliceEdgeLength::Int  )
+
+indexCorr =  Int64(round(sliceEdgeLength*sliceEdgeLength/threadnum))
+loopNumb= Int64(indexCorr-1)
+
+return ( loopNumb, indexCorr )
+end#getKernelContants
+
 
 end #GPUutils

@@ -30,9 +30,9 @@ function getTpfpfnData!(goldBoolGPU
     ,numberOfSlices::Int64
     ,threadNumPerBlock::Int64 = 512)
 
-blockNum, loopNumb, indexCorr = getKernelContants(threadNumPerBlock,numberOfSlices,sliceEdgeLength)
+loopNumb, indexCorr = getKernelContants(threadNumPerBlock,sliceEdgeLength)
 args = (goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn, loopNumb, indexCorr,sliceEdgeLength,Int64(round(threadNumPerBlock/32)))
-@cuda threads=threadNumPerBlock blocks=blockNum getBlockTpFpFn(args...) 
+@cuda threads=threadNumPerBlock blocks=numberOfSlices getBlockTpFpFn(args...) 
 
 end#getTpfpfnData
 
@@ -75,13 +75,8 @@ function getBlockTpFpFn(goldBoolGPU::CuDeviceArray{Bool,1, 1}
     getSecondBlockReduce( 1,3,wid,intermediateResTp,tp,shmemSum,blockIdx().x,lane)
     getSecondBlockReduce( 2,2,wid,intermediateResFp,fp,shmemSum,blockIdx().x,lane)
     getSecondBlockReduce( 3,1,wid,intermediateResFn,fn,shmemSum,blockIdx().x,lane)
-    sync_threads()
 
-    # if(wid==4 && lane==1)   shmemSum[1,2]= sliceEdgeLength*sliceEdgeLength-                                end
-
-
-
-    return  
+   return  
    end
 
 
@@ -162,9 +157,7 @@ function getSecondBlockReduce(chosenWid,numb,wid, intermediateRes,singleREs,shme
           @inbounds @atomic singleREs[]+=shmemSum[33,numb]
       end    
       if(lane==2)
-        if(numb==2 && shmemSum[33,numb]>0)
-            @cuprint " blockId  $(blockId) vall $(shmemSum[33,numb]) \n"
-        end
+
         @inbounds intermediateRes[blockId]=shmemSum[33,numb]
       end    
     #   if(lane==3)
@@ -177,26 +170,6 @@ function getSecondBlockReduce(chosenWid,numb,wid, intermediateRes,singleREs,shme
 end#getSecondBlockReduce
 
 
-"""
-generally  we want to get one block per slice as dimensions of slices in the medical images are friendly - so 256x256 ; 512x512 and 1024x1024 - it should all be possible
-In order to avoid edge cases we will keep number of threads to some even multiply of 32 for ecxample 512
-    arguments
-        threadnum - number of threads per block
-        slicesNumber - number of slices of our data
-        sliceEdgeLength - slices are squares of 256, 512 or 1024 length
-    output
-        blockNum - number of blocks we need  - generally will return number of slices
-        loopNumb - number of  iteration of each single line it need to do so a single block will cover whole slice
-        indexCorr - as one lane will get access to multiple data elements we need to take correction for it 
-"""
-function getKernelContants(threadnum::Int,slicesNumber::Int,sliceEdgeLength::Int  )
-
-blockNum= slicesNumber
-indexCorr =  Int64(round(sliceEdgeLength*sliceEdgeLength/threadnum))
-loopNumb= Int64(indexCorr-1)
-
-return (blockNum, loopNumb, indexCorr )
-end#getKernelContants
 
 
 
