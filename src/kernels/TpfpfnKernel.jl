@@ -17,6 +17,7 @@ segmBoolGPU - boolean array with the data we want to compare with gold standard
 tp,tn,fp,fn - holding single values for true positive, true negative, false positive and false negative
 intermediateResTp, intermediateResFp, intermediateResFn - arrays holding slice wise results for true positive ...
 threadNumPerBlock = threadNumber per block defoult is 512
+numberToLooFor - num
 IMPORTANT - in the ned of the goldBoolGPU and segmBoolGPU one need  to add some  additional number of 0=falses - number needs to be the same as indexCorr
 IMPORTANT - currently block sizes of 512 are supported only
 """
@@ -28,10 +29,11 @@ function getTpfpfnData!(goldBoolGPU
     ,intermediateResFn
     ,sliceEdgeLength::Int64
     ,numberOfSlices::Int64
-    ,threadNumPerBlock::Int64 = 512)
+    ,numberToLooFor::T
+    ,threadNumPerBlock::Int64 = 512) where T
 
 loopNumb, indexCorr = getKernelContants(threadNumPerBlock,sliceEdgeLength)
-args = (goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn, loopNumb, indexCorr,sliceEdgeLength,Int64(round(threadNumPerBlock/32)))
+args = (goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn, loopNumb, indexCorr,sliceEdgeLength,Int64(round(threadNumPerBlock/32)),numberToLooFor)
 @cuda threads=threadNumPerBlock blocks=numberOfSlices getBlockTpFpFn(args...) 
 
 end#getTpfpfnData
@@ -55,7 +57,8 @@ function getBlockTpFpFn(goldBoolGPU
         ,loopNumb::Int64
         ,indexCorr::Int64
         ,sliceEdgeLength::Int64
-        ,amountOfWarps::Int64)
+        ,amountOfWarps::Int64
+        ,numberToLooFor::T) where T
     # we multiply thread id as we are covering now 2 places using one lane - hence after all lanes gone through we will cover 2 blocks - hence second multiply    
     i = (threadIdx().x* indexCorr) + ((blockIdx().x - 1) *indexCorr) * (blockDim().x)# used as a basis to get data we want from global memory
    wid, lane = fldmod1(threadIdx().x,32)
@@ -65,7 +68,7 @@ function getBlockTpFpFn(goldBoolGPU
 # incrementing appropriate number of times 
 
     @unroll for k in 0:loopNumb
-    incr_shmem(threadIdx().x,goldBoolGPU[i+k],segmBoolGPU[i+k],shmem,blockIdx().x )
+    incr_shmem(threadIdx().x,goldBoolGPU[i+k]==numberToLooFor,segmBoolGPU[i+k]==numberToLooFor,shmem)
    end#for 
 
     #reducing across the warp
@@ -90,7 +93,7 @@ boolGold & boolSegm + boolGold +1 will evaluate to
     2 in case of false positive
     1 in case of false negative
 """
-@inline function incr_shmem( primi::Int64,boolGold::Bool,boolSegm::Bool,shmem,blockId )
+@inline function incr_shmem( primi::Int64,boolGold::Bool,boolSegm::Bool,shmem )
     @inbounds shmem[ primi, (boolGold & boolSegm + boolSegm +1) ]+=(boolGold | boolSegm)
     return true
 end

@@ -14,21 +14,21 @@ function getSmallTestBools()
     nz=317
 
     #first we initialize the metrics on CPU so we will modify them easier
-    goldBool= falses(nx,ny,nz); #mimicks gold standard mask
-    segmBool= falses(nx,ny,nz); #mimicks mask     
+    goldBool= zeros(Float32,nx,ny,nz); #mimicks gold standard mask
+    segmBool= zeros(Float32,nx,ny,nz); #mimicks mask     
 # so we  have 2 cubes that are overlapped in their two thirds
     cartTrueGold =  CartesianIndices(zeros(3,3,5) ).+CartesianIndex(5,5,5);
     cartTrueSegm =  CartesianIndices(zeros(3,3,3) ).+CartesianIndex(4,5,5); 
-    goldBool[cartTrueGold].=true
-    segmBool[cartTrueSegm].=true
+    goldBool[cartTrueGold].=1.0
+    segmBool[cartTrueSegm].=1.0
 
 
 
     cartTrue =  CartesianIndices(zeros(9,9,9) ).+CartesianIndex(80,80,80);
     cartTrueB =  CartesianIndices(zeros(9,9,9) ).+CartesianIndex(200,200,200);
 
-    goldBool[cartTrue].=true
-    segmBool[cartTrue].=true
+    goldBool[cartTrue].=1.0
+    segmBool[cartTrue].=1.0
 
 
     #for storing output total first tp than TN than Fp and Fn
@@ -46,7 +46,7 @@ function getSmallTestBools()
 
 # FlattG = vec(goldBool);
 # FlattSeg = vec(segmBool);
-ff = falses(1000)
+ff = zeros(Float32,1000)
 FlattG = vcat(vec(goldBool),ff)
 FlattSeg = vcat(vec(segmBool),ff)
 
