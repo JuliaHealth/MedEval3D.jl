@@ -99,15 +99,15 @@ In order to avoid edge cases we will keep number of threads to some even multipl
     arguments
         threadnum - number of threads per block
         slicesNumber - number of slices of our data
-        sliceEdgeLength - slices are squares of 256, 512 or 1024 length
+        pixelNumberPerSlice - number of pixels in a slice
     output
         blockNum - number of blocks we need  - generally will return number of slices
         loopNumb - number of  iteration of each single line it need to do so a single block will cover whole slice
         indexCorr - as one lane will get access to multiple data elements we need to take correction for it 
 """
-function getKernelContants(threadnum::Int,sliceEdgeLength::Int  )
+function getKernelContants(threadnum::Int,pixelNumberPerSlice::Int  )
 
-indexCorr =  Int64(round(sliceEdgeLength*sliceEdgeLength/threadnum))
+indexCorr =  Int64(ceil(pixelNumberPerSlice/threadnum))
 loopNumb= Int64(indexCorr-1)
 
 return ( loopNumb, indexCorr )

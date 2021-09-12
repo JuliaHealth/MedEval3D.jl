@@ -6,7 +6,7 @@ using synergism described by Taha et al. this will enable later fast calculation
 module TpfpfnKernel
 export getTpfpfnData
 
-using CUDA, Main.GPUutils
+using CUDA, Main.GPUutils, Logging
 
 
 """
@@ -27,13 +27,19 @@ function getTpfpfnData!(goldBoolGPU
     ,intermediateResTp
     ,intermediateResFp
     ,intermediateResFn
-    ,sliceEdgeLength::Int64
+    ,pixelNumberPerSlice::Int64
     ,numberOfSlices::Int64
     ,numberToLooFor::T
+    ,IndexesArray
     ,threadNumPerBlock::Int64 = 512) where T
 
-loopNumb, indexCorr = getKernelContants(threadNumPerBlock,sliceEdgeLength)
-args = (goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn, loopNumb, indexCorr,sliceEdgeLength,Int64(round(threadNumPerBlock/32)),numberToLooFor)
+loopNumb, indexCorr = getKernelContants(threadNumPerBlock,pixelNumberPerSlice)
+args = (goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn, loopNumb, indexCorr,Int64(round(threadNumPerBlock/32)),pixelNumberPerSlice,numberToLooFor,IndexesArray)
+
+@info "numberOfSlices" numberOfSlices
+@info "loopNumb" loopNumb
+@info "indexCorr" indexCorr
+
 @cuda threads=threadNumPerBlock blocks=numberOfSlices getBlockTpFpFn(args...) 
 
 end#getTpfpfnData
@@ -56,23 +62,46 @@ function getBlockTpFpFn(goldBoolGPU
         ,intermediateResFn
         ,loopNumb::Int64
         ,indexCorr::Int64
-        ,sliceEdgeLength::Int64
         ,amountOfWarps::Int64
-        ,numberToLooFor::T) where T
+        ,pixelNumberPerSlice::Int64
+        ,numberToLooFor::T
+        ,IndexesArray) where T
     # we multiply thread id as we are covering now 2 places using one lane - hence after all lanes gone through we will cover 2 blocks - hence second multiply    
-    i = (threadIdx().x* indexCorr) + ((blockIdx().x - 1) *indexCorr) * (blockDim().x)# used as a basis to get data we want from global memory
+    correctedIdx = (threadIdx().x-1)* indexCorr+1
+    i = correctedIdx + (pixelNumberPerSlice*(blockIdx().x-1))
+    #i = correctedIdx + ((blockIdx().x - 1) *indexCorr) * (blockDim().x)# used as a basis to get data we want from global memory
    wid, lane = fldmod1(threadIdx().x,32)
 #creates shared memory and initializes it to 0
-   shmem,shmemSum = createAndInitializeShmem(wid,threadIdx().x,sliceEdgeLength,amountOfWarps)
-
+   shmem,shmemSum = createAndInitializeShmem(wid,threadIdx().x,amountOfWarps,lane)
+   shmem[513,1]= numberToLooFor
 # incrementing appropriate number of times 
 
     @unroll for k in 0:loopNumb
-    incr_shmem(threadIdx().x,goldBoolGPU[i+k]==numberToLooFor,segmBoolGPU[i+k]==numberToLooFor,shmem)
-   end#for 
+    if(correctedIdx+k<=pixelNumberPerSlice)
+        incr_shmem(threadIdx().x,goldBoolGPU[i+k]==shmem[513,1],segmBoolGPU[i+k]==shmem[513,1],shmem)
+        #incr_shmem(threadIdx().x+1,goldBoolGPU[i+k]==shmem[513,1],segmBoolGPU[i+k]==shmem[513,1],shmem,IndexesArray)
+    end    
+    end#for
+    #IndexesArray[i]= shmem[threadIdx().x,3]
+            # if(goldBoolGPU[i+k]==shmem[513,1] && segmBoolGPU[i+k]==shmem[513,1])
+        #     IndexesArray[i+k]=1
+        # end
+        #atomic tp[]+=1
+        # IndexesArray[i+k]=i+k
+        # #if(blockIdx().x>178 && threadIdx().x==1) @cuprint "blockIdx().x $(blockIdx().x)"    end
+    
+    # @unroll for k in 0:loopNumb-1
+    #     if(correctedIdx+k<=pixelNumberPerSlice)    
+    #         incr_shmem(threadIdx().x,goldBoolGPU[i+k]==numberToLooFor,segmBoolGPU[i+k]==numberToLooFor,shmem)
+    #     end    
+    # end#for 
+    
+    ### can loop first with loop numnber -1 ; and later loop over  las elemnts - so pixel number minus what we get in the end of last loop  - this way we avoid ifs
+
 
     #reducing across the warp
-    firstReduce(shmem,shmemSum,wid,threadIdx().x,lane)
+    firstReduce(shmem,shmemSum,wid,threadIdx().x,lane,IndexesArray,i)
+
     sync_threads()
     #now all data about of intrest should be in  shared memory so we will get all rsults from warp reduction in the shared memory 
     getSecondBlockReduce( 1,3,wid,intermediateResTp,tp,shmemSum,blockIdx().x,lane)
@@ -82,10 +111,6 @@ function getBlockTpFpFn(goldBoolGPU
    return  
    end
 
-
-
-
-
 """
 add value to the shared memory in the position i, x where x is 1 ,2 or 3 and is calculated as described below
 boolGold & boolSegm + boolGold +1 will evaluate to 
@@ -94,7 +119,7 @@ boolGold & boolSegm + boolGold +1 will evaluate to
     1 in case of false negative
 """
 @inline function incr_shmem( primi::Int64,boolGold::Bool,boolSegm::Bool,shmem )
-    @inbounds shmem[ primi, (boolGold & boolSegm + boolSegm +1) ]+=(boolGold | boolSegm)
+    @inbounds shmem[ primi, (boolGold & boolSegm + boolSegm +1) ]+=(boolGold | boolSegm) 
     return true
 end
 
@@ -103,18 +128,26 @@ end
 creates shared memory and initializes it to 0
 wid - the number of the warp in the block
 """
-function createAndInitializeShmem(wid, threadId,sliceEdgeLength,amountOfWarps)
+function createAndInitializeShmem(wid, threadId,amountOfWarps,lane)
    #shared memory for  stroing intermidiate data per lane  
-   shmem = @cuStaticSharedMem(UInt8, (513,3))
+   shmem = @cuStaticSharedMem(UInt16, (513,3))
    #for storing results from warp reductions
    shmemSum = @cuStaticSharedMem(UInt16, (33,3))
     #setting shared memory to 0 
     shmem[threadId, 3]=0
     shmem[threadId, 2]=0
     shmem[threadId, 1]=0
-    shmemSum[wid,1]=0
-    shmemSum[wid,2]=0
-    shmemSum[wid,3]=0
+    
+    if(wid==1)
+    shmemSum[lane,1]=0
+    end
+    if(wid==2)
+        shmemSum[lane,2]=0
+    end
+    if(wid==3)
+    shmemSum[lane,3]=0
+    end            
+
 return (shmem,shmemSum )
 
 end#createAndInitializeShmem
@@ -123,20 +156,12 @@ end#createAndInitializeShmem
 """
 reduction across the warp and adding to appropriate spots in the  shared memory
 """
-function firstReduce(shmem,shmemSum,wid,threadIdx,lane   )
-    @inbounds sumFn = reduce_warp(shmem[threadIdx,1],32)
-    @inbounds sumFp = reduce_warp(shmem[threadIdx,2],32)
-    @inbounds sumTp = reduce_warp(shmem[threadIdx,3],32)
- 
-    if(lane==1)
-   @inbounds shmemSum[wid,1]= sumFn
-     end  
-    if(lane==2) 
-       @inbounds shmemSum[wid,2]= sumFp
-    end     
-    if(lane==3)
-         @inbounds shmemSum[wid,3]= sumTp
-     end#if  
+function firstReduce(shmem,shmemSum,wid,threadIdx,lane,IndexesArray,i   )
+  
+
+    @inbounds shmemSum[wid,1] = reduce_warp(shmem[threadIdx,1],32)
+    @inbounds shmemSum[wid,2] = reduce_warp(shmem[threadIdx,2],32)
+    @inbounds shmemSum[wid,3] = reduce_warp(shmem[threadIdx,3],32)
 end#firstReduce
 
 """
