@@ -46,12 +46,12 @@ loopNumb - number of times the single lane needs to loop in order to get all nee
 sliceEdgeLength - length of edge of the slice we need to square this number to get number of pixels in a slice
 amountOfWarps - how many warps we can stick in the vlock
 """
-function getBlockTpFpFn(goldBoolGPU::CuDeviceArray{Bool,1, 1}
-        , segmBoolGPU::CuDeviceArray{Bool, 1, 1}
+function getBlockTpFpFn(goldBoolGPU
+        , segmBoolGPU
         ,tp,tn,fp,fn
-        ,intermediateResTp::CuDeviceArray{Int32, 1, 1}
-        ,intermediateResFp::CuDeviceArray{Int32, 1, 1}
-        ,intermediateResFn::CuDeviceArray{Int32, 1, 1}
+        ,intermediateResTp
+        ,intermediateResFp
+        ,intermediateResFn
         ,loopNumb::Int64
         ,indexCorr::Int64
         ,sliceEdgeLength::Int64

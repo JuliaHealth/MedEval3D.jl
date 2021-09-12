@@ -28,12 +28,11 @@ sumOfGoldPartials = CuArray(zeros(Float32,nz));
 sumOfSegmPartials = CuArray(zeros(Float32,nz));
 sswPartials = CuArray(zeros(Float32,nz));
 ssbPartialsperSlice = CuArray(zeros(Float32,nz));
-dummySchedulingMatrix = CuArray(zeros(Float32,30,3));
+maxSlicesPerBlock,slicesPerBlockMatrix,numberOfBlocks = InterClassCorrKernel.assignWorkToCooperativeBlocks( sizz[3])
 
+loopNumb, indexCorr = getKernelContants(256,sizz[1])
 
-loopNumb, indexCorr = getKernelContants(512,sizz[1])
-
-argsPrim =  (FlattGoldGPU
+args =  (FlattGoldGPU
         ,FlattSegGPU
         ,loopNumb
         ,indexCorr
@@ -47,18 +46,20 @@ argsPrim =  (FlattGoldGPU
         ,sswTotal
         ,ssbPartialsperSlice
         ,SsbTotalGlobal
-        ,dummySchedulingMatrix
-        ,3)
-
-        kernel = @cuda launch=false InterClassCorrKernel.kernel_InterClassCorr(argsPrim...) 
-typeof(kernel.fun)
- slicesPerBlockMatrix,maxSlicesPerBlock = assignWorkToCooperativeBlocks(argsPrim,InterClassCorrKernel.kernel_InterClassCorr )
-
- InterClassCorrKernel.assignWorkToCooperativeBlocks(argsPrim,InterClassCorrKernel.kernel_InterClassCorr )
+        ,slicesPerBlockMatrix
+        ,maxSlicesPerBlock)
 
 
 
-@cuda cooperative=true threads=maxThreads blocks=maxBlocks kernelFun(d_a, d_b, d_c)
+
+@cuda cooperative=true threads=256 blocks=numberOfBlocks InterClassCorrKernel.kernel_InterClassCorr(args...)
+
+
+
+sumOfGold[1] ==sum(FlattGoldGPU)==sum(sumOfGoldPartials)
+sumOfSegm[1] ==sum(FlattSegGPU)==sum(sumOfSegmPartials)
+
+
 
 using Test
 z = mean(FlattGoldGPU)
@@ -66,15 +67,20 @@ typeof(z)
 sizz= size(goldBoolGPU)
 
 flattG, flattSeg
+512*512
 
 
+pixelsNum = sizz[1]*sizz[1]
+ll = length(goldBoolGPU)
+slicePixelNumb=pixelsNum 
+threadId=256
+sliceNumb= sizz[3] #350# sizz[3]
 
+ress = ((threadId-1)* indexCorr) + (slicePixelNumb*(sliceNumb-1))+1# used as a basis to get data we want from global memory
 
-
-
-
-
-
+ress/slicePixelNumb
+ll/slicePixelNumb
+diff = ll - ress
 
 
    """
