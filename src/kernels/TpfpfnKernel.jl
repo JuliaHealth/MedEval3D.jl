@@ -31,12 +31,31 @@ function getTpfpfnData!(goldBoolGPU
     ,numberOfSlices::Int64
     ,numberToLooFor::T
     ,IndexesArray
+    ,maxSlicesPerBlock::Int64
+    ,slicesPerBlockMatrix
+    ,numberOfBlocks::Int64
     ,threadNumPerBlock::Int64 = 512) where T
 
+
+ 
+
 loopNumb, indexCorr = getKernelContants(threadNumPerBlock,pixelNumberPerSlice)
-args = (goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn, loopNumb, indexCorr,Int64(round(threadNumPerBlock/32)),pixelNumberPerSlice,numberToLooFor,IndexesArray)
-
-
+args = (goldBoolGPU
+        ,segmBoolGPU
+        ,tp,tn,fp,fn
+        ,intermediateResTp
+        ,intermediateResFp
+        ,intermediateResFn
+        ,loopNumb
+        ,indexCorr
+        ,Int64(round(threadNumPerBlock/32))
+        ,pixelNumberPerSlice
+        ,numberToLooFor
+        ,IndexesArray
+        ,maxSlicesPerBlock
+        ,slicesPerBlockMatrix
+        ,numberOfBlocks)
+#getMaxBlocksPerMultiproc(args, getBlockTpFpFn) -- evaluates to 3
 
 @cuda threads=threadNumPerBlock blocks=numberOfSlices getBlockTpFpFn(args...) 
 
@@ -63,7 +82,10 @@ function getBlockTpFpFn(goldBoolGPU
         ,amountOfWarps::Int64
         ,pixelNumberPerSlice::Int64
         ,numberToLooFor::T
-        ,IndexesArray) where T
+        ,IndexesArray
+        ,maxSlicesPerBlock::Int64
+        ,slicesPerBlockMatrix
+        ,numberOfBlocks::Int64) where T
     # we multiply thread id as we are covering now 2 places using one lane - hence after all lanes gone through we will cover 2 blocks - hence second multiply    
     correctedIdx = (threadIdx().x-1)* indexCorr+1
     i = correctedIdx + (pixelNumberPerSlice*(blockIdx().x-1))

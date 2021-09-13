@@ -1,7 +1,10 @@
 module GPUutils
 using CUDA
 
-export defineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants
+export defineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc
+
+
+
 
 export @unroll
 """
@@ -112,6 +115,64 @@ loopNumb= Int64(indexCorr-1)
 
 return ( loopNumb, indexCorr )
 end#getKernelContants
+
+
+
+"""
+Calculates  maximum number of 
+args - tuple with arguments needed to execute a kernel (it will not be executed it is only needed for occupancy API)
+kernelFun - the function describing kernel
+
+"""
+function getMaxBlocksPerMultiproc(args,kernelFun )
+ kernel = @cuda launch=false kernelFun(args...) 
+return CUDA.active_blocks(kernel.fun, 512)  
+end#getMaxBlocksPerMultiproc
+
+
+"""
+now plan is to create a matrix on the CPU that will be pushed onto the GPU
+matrix will tell each block which slices it should manage in order to cover all slices
+number of blocks will be calclulated in a way to fit them all in a single grid and enable full utilization of cooperative groups 
+matrix will be n x m  where 
+    n is number of blocks we can fit in the grid
+    m is maximum number of slices managed per block - of course in most cases some blocks will not be needed in final round - in this case this will evaluate to 0 ...
+  code adapted from 
+    https://stackoverflow.com/questions/63929929/processing-shared-work-queue-using-cuda-atomic-operations-and-grid-synchronizati/63930239#63930239
+    https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#grid-synchronization-cg
+    https://github.com/JuliaGPU/CUDA.jl/blob/afe81794038dddbda49639c8c26469496543d831/test/execution.jl
+
+    generally the number of threads to avoid corner cases  needs to be 256 or 512 or 1024
+
+    slicesNumb - number of slices to manage, generally it is assumed that each block controls one slice
+    numberOfBlocksPerMultprocessor- how many block can be run in a single SM
+    """
+function assignWorkToCooperativeBlocks(slicesNumb, numberOfBlocksPerMultprocessor=1 )
+   numberOfBlocks = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT)*1
+   maxSlicesPerBlock = Int64(ceil(slicesNumb/numberOfBlocks))
+   sliceAssignMatrix = ones(Int8,numberOfBlocks, maxSlicesPerBlock ).-2
+   # first filling first 4 columns
+   for i in 0:numberOfBlocks-1
+    for j in 1:maxSlicesPerBlock-1
+        z = i*(maxSlicesPerBlock-1) +j
+        if(z<=slicesNumb) 
+          sliceAssignMatrix[i+1,j]=z           
+        end#if    
+    end#for 
+   end#for 
+   index =0
+   #filling last column with what is left
+   for i in (maximum(sliceAssignMatrix)+1):slicesNumb
+    index+=1
+    sliceAssignMatrix[index,maxSlicesPerBlock]= i
+   end#for 
+
+
+    zz = CuArray(sliceAssignMatrix)
+   return (maxSlicesPerBlock, zz,numberOfBlocks)
+end #assignWorkToCooperativeBlocks
+
+
 
 
 end #GPUutils

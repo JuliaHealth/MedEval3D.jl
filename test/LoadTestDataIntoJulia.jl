@@ -74,7 +74,15 @@ sizz= size(goldS)
 goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools();
 IndexesArray= CUDA.zeros(Int32,10000000)
 #TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn,sizz[1],sizz[1]*sizz[2],1,UInt8(1),IndexesArray)
-TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn,sizz[1]*sizz[2],sizz[3],UInt8(1),IndexesArray)
+
+
+maxSlicesPerBlock,slicesPerBlockMatrix,numberOfBlocks = assignWorkToCooperativeBlocks(sizz[3], 3)
+
+TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn
+                            , intermediateResTp,intermediateResFp
+                            ,intermediateResFn,sizz[1]*sizz[2],sizz[3]
+                            ,UInt8(1)
+                            ,IndexesArray,maxSlicesPerBlock,slicesPerBlockMatrix,numberOfBlocks)
 tp[1]
 
 ## stored indexes  and now we are inspecting it 
