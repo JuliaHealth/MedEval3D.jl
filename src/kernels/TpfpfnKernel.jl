@@ -36,9 +36,7 @@ function getTpfpfnData!(goldBoolGPU
 loopNumb, indexCorr = getKernelContants(threadNumPerBlock,pixelNumberPerSlice)
 args = (goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn, loopNumb, indexCorr,Int64(round(threadNumPerBlock/32)),pixelNumberPerSlice,numberToLooFor,IndexesArray)
 
-@info "numberOfSlices" numberOfSlices
-@info "loopNumb" loopNumb
-@info "indexCorr" indexCorr
+
 
 @cuda threads=threadNumPerBlock blocks=numberOfSlices getBlockTpFpFn(args...) 
 
@@ -82,22 +80,6 @@ function getBlockTpFpFn(goldBoolGPU
         #incr_shmem(threadIdx().x+1,goldBoolGPU[i+k]==shmem[513,1],segmBoolGPU[i+k]==shmem[513,1],shmem,IndexesArray)
     end    
     end#for
-    #IndexesArray[i]= shmem[threadIdx().x,3]
-            # if(goldBoolGPU[i+k]==shmem[513,1] && segmBoolGPU[i+k]==shmem[513,1])
-        #     IndexesArray[i+k]=1
-        # end
-        #atomic tp[]+=1
-        # IndexesArray[i+k]=i+k
-        # #if(blockIdx().x>178 && threadIdx().x==1) @cuprint "blockIdx().x $(blockIdx().x)"    end
-    
-    # @unroll for k in 0:loopNumb-1
-    #     if(correctedIdx+k<=pixelNumberPerSlice)    
-    #         incr_shmem(threadIdx().x,goldBoolGPU[i+k]==numberToLooFor,segmBoolGPU[i+k]==numberToLooFor,shmem)
-    #     end    
-    # end#for 
-    
-    ### can loop first with loop numnber -1 ; and later loop over  las elemnts - so pixel number minus what we get in the end of last loop  - this way we avoid ifs
-
 
     #reducing across the warp
     firstReduce(shmem,shmemSum,wid,threadIdx().x,lane,IndexesArray,i)
@@ -157,8 +139,6 @@ end#createAndInitializeShmem
 reduction across the warp and adding to appropriate spots in the  shared memory
 """
 function firstReduce(shmem,shmemSum,wid,threadIdx,lane,IndexesArray,i   )
-  
-
     @inbounds shmemSum[wid,1] = reduce_warp(shmem[threadIdx,1],32)
     @inbounds shmemSum[wid,2] = reduce_warp(shmem[threadIdx,2],32)
     @inbounds shmemSum[wid,3] = reduce_warp(shmem[threadIdx,3],32)
