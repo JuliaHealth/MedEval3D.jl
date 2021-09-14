@@ -1,5 +1,14 @@
 
-module LoadTestDataIntoJulia
+#module LoadTestDataIntoJulia
+using Revise, Parameters, Logging
+using CUDA
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\gpuUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernels\\TpfpfnKernel.jl")
+using Main.BasicPreds, Main.GPUutils,Cthulhu 
+using Main.MainOverlap, Main.TpfpfnKernel
+using BenchmarkTools
+
 using Conda
 using PyCall
 using Pkg
@@ -20,7 +29,6 @@ data_dir = "C:\\GitHub\\GitHub\\NuclearMedEval\\test\\data\\exampleForTestsData"
 result_file = "C:\\GitHub\\GitHub\\NuclearMedEval\\test\\data\\pymiaOutput\\results.csv"
 result_summary_file = "C:\\GitHub\\GitHub\\NuclearMedEval\\test\\data\\pymiaOutput\\results_summary.csv"
 
-subject_dirs = [subject for subject in glob.glob(os.path.join(data_dir, "*")) if os.path.isdir(subject) and os.path.basename(subject).startswith("Subject")]
 
 #given directory it gives all mhd file names concateneted with path - to get full file path and second in subarray will be file name
 function getListOfExampleDatasFromFolder(folderPath::String) ::Vector{Vector{AbstractString}}
@@ -76,14 +84,34 @@ IndexesArray= CUDA.zeros(Int32,10000000)
 #TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn,sizz[1],sizz[1]*sizz[2],1,UInt8(1),IndexesArray)
 
 
-maxSlicesPerBlock,slicesPerBlockMatrix,numberOfBlocks = assignWorkToCooperativeBlocks(sizz[3], 3)
 
-TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn
+argsB = TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn
                             , intermediateResTp,intermediateResFp
                             ,intermediateResFn,sizz[1]*sizz[2],sizz[3]
                             ,UInt8(1)
-                            ,IndexesArray,maxSlicesPerBlock,slicesPerBlockMatrix,numberOfBlocks)
+                            ,IndexesArray)
 tp[1]
+
+BenchmarkTools.DEFAULT_PARAMETERS.samples = 100
+BenchmarkTools.DEFAULT_PARAMETERS.seconds =3000
+BenchmarkTools.DEFAULT_PARAMETERS.gcsample = true
+
+
+function toBench(goldBoolGPU,segmBoolGPU,tp,tn,fp,fn)
+    CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn , intermediateResTp,intermediateResFp ,intermediateResFn,sizz[1]*sizz[2],sizz[3],UInt8(1),IndexesArray)
+end
+
+bb = @benchmark toBench(goldBoolGPU,segmBoolGPU,tp,tn,fp,fn)  setup=(goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools())
+
+
+CUDA.@profile begin
+    TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn
+    , intermediateResTp,intermediateResFp
+    ,intermediateResFn,sizz[1]*sizz[2],sizz[3]
+    ,UInt8(1)
+    ,IndexesArray)
+end
+
 
 ## stored indexes  and now we are inspecting it 
 diff = Int64(round(length(goldS)- maximum(IndexesArray)))

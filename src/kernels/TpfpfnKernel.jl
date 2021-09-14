@@ -31,9 +31,7 @@ function getTpfpfnData!(goldBoolGPU
     ,numberOfSlices::Int64
     ,numberToLooFor::T
     ,IndexesArray
-    ,maxSlicesPerBlock::Int64
-    ,slicesPerBlockMatrix
-    ,numberOfBlocks::Int64
+
     ,threadNumPerBlock::Int64 = 512) where T
 
 
@@ -52,13 +50,11 @@ args = (goldBoolGPU
         ,pixelNumberPerSlice
         ,numberToLooFor
         ,IndexesArray
-        ,maxSlicesPerBlock
-        ,slicesPerBlockMatrix
-        ,numberOfBlocks)
+)
 #getMaxBlocksPerMultiproc(args, getBlockTpFpFn) -- evaluates to 3
 
 @cuda threads=threadNumPerBlock blocks=numberOfSlices getBlockTpFpFn(args...) 
-
+return args
 end#getTpfpfnData
 
 """
@@ -83,9 +79,7 @@ function getBlockTpFpFn(goldBoolGPU
         ,pixelNumberPerSlice::Int64
         ,numberToLooFor::T
         ,IndexesArray
-        ,maxSlicesPerBlock::Int64
-        ,slicesPerBlockMatrix
-        ,numberOfBlocks::Int64) where T
+) where T
     # we multiply thread id as we are covering now 2 places using one lane - hence after all lanes gone through we will cover 2 blocks - hence second multiply    
     correctedIdx = (threadIdx().x-1)* indexCorr+1
     i = correctedIdx + (pixelNumberPerSlice*(blockIdx().x-1))
@@ -206,3 +200,58 @@ end#getSecondBlockReduce
 
 
 end#TpfpfnKernel
+
+
+
+########### version with cooperative groups
+
+# function getBlockTpFpFn(goldBoolGPU
+#     , segmBoolGPU
+#     ,tp,tn,fp,fn
+#     ,intermediateResTp
+#     ,intermediateResFp
+#     ,intermediateResFn
+#     ,loopNumb::Int64
+#     ,indexCorr::Int64
+#     ,amountOfWarps::Int64
+#     ,pixelNumberPerSlice::Int64
+#     ,numberToLooFor::T
+#     ,IndexesArray
+#     ,maxSlicesPerBlock::Int64
+#     ,slicesPerBlockMatrix
+#     ,numberOfBlocks::Int64) where T
+# # we multiply thread id as we are covering now 2 places using one lane - hence after all lanes gone through we will cover 2 blocks - hence second multiply    
+# correctedIdx = (threadIdx().x-1)* indexCorr+1
+# i= correctedIdx
+# #i = correctedIdx + ((blockIdx().x - 1) *indexCorr) * (blockDim().x)# used as a basis to get data we want from global memory
+# wid, lane = fldmod1(threadIdx().x,32)
+# #creates shared memory and initializes it to 0
+# shmem,shmemSum = createAndInitializeShmem()
+# shmem[513,1]= numberToLooFor
+# ##### in this outer loop we are iterating over all slices that this block is responsible for
+# @unroll for blockRef in 1:maxSlicesPerBlock    
+#     sliceNumb= slicesPerBlockMatrix[blockIdx().x,blockRef]
+#         if(sliceNumb>0)
+#             i = correctedIdx + (pixelNumberPerSlice*(sliceNumb-1))# used as a basis to get data we want from global memory
+#             setShmemTo0(wid,threadIdx().x,lane,shmem,shmemSum)           
+#             # incrementing appropriate number of times 
+        
+#         @unroll for k in 0:loopNumb
+#                 if(correctedIdx+k<=pixelNumberPerSlice)
+#                     incr_shmem(threadIdx().x,goldBoolGPU[i+k]==shmem[513,1],segmBoolGPU[i+k]==shmem[513,1],shmem)
+#                 end#if
+#             end#for   
+#         #reducing across the warp
+#         firstReduce(shmem,shmemSum,wid,threadIdx().x,lane,IndexesArray,i)
+        
+        
+#         sync_threads()
+#         #now all data about of intrest should be in  shared memory so we will get all rsults from warp reduction in the shared memory 
+#         getSecondBlockReduce( 1,3,wid,intermediateResTp,tp,shmemSum,blockIdx().x,lane)
+#         getSecondBlockReduce( 2,2,wid,intermediateResFp,fp,shmemSum,blockIdx().x,lane)
+#         getSecondBlockReduce( 3,1,wid,intermediateResFn,fn,shmemSum,blockIdx().x,lane)
+#     end#if     
+# end#for
+
+# return  
+# end
