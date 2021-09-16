@@ -7,7 +7,7 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\gpuUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernels\\TpfpfnKernel.jl")
 using Main.BasicPreds, Main.GPUutils,Cthulhu 
 using Main.MainOverlap, Main.TpfpfnKernel
-using BenchmarkTools
+using BenchmarkTools,StaticArrays
 
 using Conda
 using PyCall
@@ -93,15 +93,15 @@ argsB = TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn
 tp[1]
 
 BenchmarkTools.DEFAULT_PARAMETERS.samples = 100
-BenchmarkTools.DEFAULT_PARAMETERS.seconds =3000
+BenchmarkTools.DEFAULT_PARAMETERS.seconds =60
 BenchmarkTools.DEFAULT_PARAMETERS.gcsample = true
 
 
-function toBench(goldBoolGPU,segmBoolGPU,tp,tn,fp,fn)
-    CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn , intermediateResTp,intermediateResFp ,intermediateResFn,sizz[1]*sizz[2],sizz[3],UInt8(1),IndexesArray)
+function toBench(FlattGoldGPU,FlattSegGPU,tp,tn,fp,fn)
+    CUDA.@sync TpfpfnKernel.getTpfpfnData!(FlattGoldGPU,FlattSegGPU,tp,tn,fp,fn , intermediateResTp,intermediateResFp ,intermediateResFn,sizz[1]*sizz[2],sizz[3],UInt8(1),IndexesArray,1024)
 end
 
-bb = @benchmark toBench(goldBoolGPU,segmBoolGPU,tp,tn,fp,fn)  setup=(goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools())
+bb2 = @benchmark toBench(FlattGoldGPU,FlattSegGPU,tp,tn,fp,fn)  setup=(goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools())
 
 
 CUDA.@profile begin
@@ -143,26 +143,30 @@ arrOnesB = CUDA.ones(sizz);
 goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools();
 IndexesArray= CUDA.zeros(Int32,10000000)
 
-TpfpfnKernel.getTpfpfnData!(arrOnesA,arrOnesB,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn,sizz[1]*sizz[2],sizz[3],Float32(1),IndexesArray)
-tp[1]
-
+TpfpfnKernel.getTpfpfnData!(arrOnesA,arrOnesB,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn,sizz[1]*sizz[2],sizz[3],Float32(1),IndexesArray,1024)
 length(arrOnesA) -sum(IndexesArray)
-
-
 length(arrOnesA) - tp[1]
+length(arrOnesA) - (fn[1]+tp[1])
 
 
-pixelNumberPerSlice = sizz[1]*sizz[2]
-length(goldS)/pixelNumberPerSlice
-loopNumb, indexCorr = getKernelContants(512,pixelNumberPerSlice)
+shmemSum= zeros(UInt16,32,3)
 
-blockIdx=1
-threadIdx=512
-correctedIdx = ((threadIdx-1)* indexCorr) +1
-i =  (pixelNumberPerSlice*(blockIdx-1))+correctedIdx
+locArr= zeros(MVector{3,UInt8})
+locArr[1]= 255
+locArr[2]= 255
+locArr[3]= 255
+locArr
+wid = 5
 
-pixelNumberPerSlice-correctedIdx
+boolGold= true
+boolSegm= true
 
-i/indexCorr
+if((@inbounds locArr[ (boolGold & boolSegm + boolSegm ) ]+=(boolGold | boolSegm)) == UInt8(0) )
+    @inbounds shmemSum[wid,(boolGold & boolSegm + boolSegm )]+=255  ## krowa
+end
+
+
+Int64(sum(shmemSum))
+
 
 end #module
