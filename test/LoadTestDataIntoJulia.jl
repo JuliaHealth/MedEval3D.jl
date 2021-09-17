@@ -5,6 +5,14 @@ using CUDA
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\gpuUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernels\\TpfpfnKernel.jl")
+
+
+
+src\overLap\MainOverlap.jl
+src\PairCounting\RandIndex.jl
+src\Probabilistic\ProbabilisticMetrics.jl
+src\InformationTheorhetic\InformationTheorhetic.jl
+
 using Main.BasicPreds, Main.GPUutils,Cthulhu 
 using Main.MainOverlap, Main.TpfpfnKernel
 using BenchmarkTools,StaticArrays

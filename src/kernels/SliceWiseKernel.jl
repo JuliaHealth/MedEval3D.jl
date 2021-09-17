@@ -17,6 +17,8 @@ end
 MainOverlap.dice(tp,fp, fn)
 MainOverlap.jaccard(tp,fp, fn)
 MainOverlap.gce(tp,fp, fn)
-
-
-src\overLap\MainOverlap.jl
+RandIndex.calculateAdjustedRandIndex(tn,tp,fp, fn)
+ProbabilisticMetrics.calculateCohenCappa(tp,fp, fn )
+VolumeMetric.getVolumMetric(tp,fp, fn )
+InformationTheorhetic.mutualInformationMetr(tn,tp,fp, fn)
+InformationTheorhetic.variationOfInformation(tn,tp,fp, fn)
