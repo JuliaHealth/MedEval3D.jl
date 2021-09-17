@@ -22,7 +22,7 @@ function calculateBAsicOverlap(TnTpFpFns::Vector{Float64} , res::ResultMetrics) 
     fp = TnTpFpFns[3]
     fn = TnTpFpFns[4]
 
-    return setproperties(res, (dice=  dice(tn,tp,fp,fn) ,jaccard=  jaccard(tn,tp,fp,fn) ,gce =  gce(tn,tp,fp,fn)  )) 
+    return setproperties(res, (dice=  dice(tn,tp,fp) ,jaccard=  jaccard(tn,tp,fp) ,gce =  gce(tn,tp,fp,fn)  )) 
 
 end #calculateDice
 

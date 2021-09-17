@@ -14,21 +14,21 @@ function getSmallTestBools()
     nz=317
 
     #first we initialize the metrics on CPU so we will modify them easier
-    goldBool= falses(nx,ny,nz); #mimicks gold standard mask
-    segmBool= falses(nx,ny,nz); #mimicks mask     
+    goldBool= zeros(Float32,nx,ny,nz); #mimicks gold standard mask
+    segmBool= zeros(Float32,nx,ny,nz); #mimicks mask     
 # so we  have 2 cubes that are overlapped in their two thirds
     cartTrueGold =  CartesianIndices(zeros(3,3,5) ).+CartesianIndex(5,5,5);
     cartTrueSegm =  CartesianIndices(zeros(3,3,3) ).+CartesianIndex(4,5,5); 
-    goldBool[cartTrueGold].=true
-    segmBool[cartTrueSegm].=true
+    goldBool[cartTrueGold].=1.0
+    segmBool[cartTrueSegm].=1.0
 
 
 
     cartTrue =  CartesianIndices(zeros(9,9,9) ).+CartesianIndex(80,80,80);
     cartTrueB =  CartesianIndices(zeros(9,9,9) ).+CartesianIndex(200,200,200);
 
-    goldBool[cartTrue].=true
-    segmBool[cartTrue].=true
+    goldBool[cartTrue].=1.0
+    segmBool[cartTrue].=1.0
 
 
     #for storing output total first tp than TN than Fp and Fn
@@ -46,7 +46,7 @@ function getSmallTestBools()
 
 # FlattG = vec(goldBool);
 # FlattSeg = vec(segmBool);
-ff = falses(1000)
+ff = zeros(Float32,1000)
 FlattG = vcat(vec(goldBool),ff)
 FlattSeg = vcat(vec(segmBool),ff)
 
@@ -148,159 +148,191 @@ function primitiveAtomicKernel(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGP
 
 
  """
- adapted from https://github.com/JuliaGPU/CUDA.jl/blob/afe81794038dddbda49639c8c26469496543d831/src/mapreduce.jl
- starting to using warp primitives 
+
  
+ julia> BenchmarkTools.DEFAULT_PARAMETERS.gcsample = true
+ true
+ 
+ julia> function toBench(goldBoolGPU,segmBoolGPU,tp,tn,fp,fn)
+            CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn , intermediateResTp,intermediateResFp ,intermediateResFn,sizz[1]*sizz[2],sizz[3],UInt8(1),IndexesArray)
+        end
+ toBench (generic function with 1 method)
+ julia> bb = @benchmark toBench(goldBoolGPU,segmBoolGPU,tp,tn,fp,fn)  setup=(goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools())
+ BenchmarkTools.Trial: 100 samples with 1 evaluation.
+  Range (min … max):  823.000 μs …   1.546 ms  ┊ GC (min … max): 0.00% … 0.00%
+  Time  (median):     831.800 μs               ┊ GC (median):    0.00%
+  Time  (mean ± σ):   860.136 μs ± 123.951 μs  ┊ GC (mean ± σ):  0.00% ± 0.00%
  """
-#  function kernelFunction(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGPU::CuDeviceArray{Bool, 1, 1},tp,tn,fp,fn,warpsInBlock::Int64)
-#     i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-#    wid, lane = fldmod1(threadIdx().x, warpsize())
 
-#    grid_handle = this_grid() # handle forsynchronizing cooperative groups 
-#    shmemA = @cuStaticSharedMem(Int32, (26))           
-#    #shmemB = @cuStaticSharedMem(Float32, (8, 8,8,2))           
+#  function getTpfpfnData!(goldBoolGPU
+#     , segmBoolGPU
+#     ,tp,tn,fp,fn
+#     ,intermediateResTp
+#     ,intermediateResFp
+#     ,intermediateResFn
+#     ,pixelNumberPerSlice::Int64
+#     ,numberOfSlices::Int64
+#     ,numberToLooFor::T
+#     ,IndexesArray
 
-#    #shared memory probably do not make sense as we are not intrested in the values more than once
-#    @inbounds goldb::Bool =goldBoolGPU[i]
-#    @inbounds segmb::Bool =segmBoolGPU[i] 
-#    #using native function we calculate how many threads pass our criteria 
-#    maskTp = vote_ballot_sync(FULL_MASK,goldb & segmb)  
-#    maskFp = vote_ballot_sync(FULL_MASK,~goldb & segmb)  
-#    maskFn = vote_ballot_sync(FULL_MASK,goldb & ~segmb)  
-   
-#    # generally values for  maskTp, maskFp, maskFn are constant across the warp  so in order to prevent adding the same number couple times we need modulo operator
-#    #modul = threadIdx().x % 32
-   
-#    if(lane==1)
-
-# #   CUDA.@cuprint "maskTp  $(maskTp)  val  $(CUDA.popc(maskTp)[1]) \n"  
-# #   end  
-#     @atomic tp[]+= CUDA.popc(maskTp)[1]*1
-#     @atomic fp[]+= CUDA.popc(maskFp)[1]*1
-#     @atomic fn[]+= CUDA.popc(maskFn)[1]*1
-
-# end#if  
-
-#    return  
-
-#     end
+#     ,threadNumPerBlock::Int64 = 512) where T
 
 
+ 
 
-"""
-using warp reduce in a block
+# loopNumb, indexCorr = getKernelContants(threadNumPerBlock,pixelNumberPerSlice)
+# args = (goldBoolGPU
+#         ,segmBoolGPU
+#         ,tp,tn,fp,fn
+#         ,intermediateResTp
+#         ,intermediateResFp
+#         ,intermediateResFn
+#         ,loopNumb
+#         ,indexCorr
+#         ,Int64(round(threadNumPerBlock/32))
+#         ,pixelNumberPerSlice
+#         ,numberToLooFor
+#         ,IndexesArray
+# )
+# #getMaxBlocksPerMultiproc(args, getBlockTpFpFn) -- evaluates to 3
 
-"""
+# @cuda threads=threadNumPerBlock blocks=numberOfSlices getBlockTpFpFn(args...) 
+# return args
+# end#getTpfpfnData
 
-# function kernelFunction(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGPU::CuDeviceArray{Bool, 1, 1},tp,tn,fp,fn,intermediateResults::CuDeviceMatrix{Int32, 1} )
-#     i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-#     blockId = blockIdx().x
-#    wid, lane = fldmod1(threadIdx().x, warpsize())
+# """
+# adapted from https://github.com/JuliaGPU/CUDA.jl/blob/afe81794038dddbda49639c8c26469496543d831/src/mapreduce.jl
+# goldBoolGPU - array holding data of gold standard bollean array
+# segmBoolGPU - boolean array with the data we want to compare with gold standard
+# tp,tn,fp,fn - holding single values for true positive, true negative, false positive and false negative
+# intermediateResTp, intermediateResFp, intermediateResFn - arrays holding slice wie results for true positive ...
+# loopNumb - number of times the single lane needs to loop in order to get all needed data
+# sliceEdgeLength - length of edge of the slice we need to square this number to get number of pixels in a slice
+# amountOfWarps - how many warps we can stick in the vlock
+# """
+# function getBlockTpFpFn(goldBoolGPU
+#         , segmBoolGPU
+#         ,tp,tn,fp,fn
+#         ,intermediateResTp
+#         ,intermediateResFp
+#         ,intermediateResFn
+#         ,loopNumb::Int64
+#         ,indexCorr::Int64
+#         ,amountOfWarps::Int64
+#         ,pixelNumberPerSlice::Int64
+#         ,numberToLooFor::T
+#         ,IndexesArray
+# ) where T
+#     # we multiply thread id as we are covering now 2 places using one lane - hence after all lanes gone through we will cover 2 blocks - hence second multiply    
+#     correctedIdx = (threadIdx().x-1)* indexCorr+1
+#     i = correctedIdx + (pixelNumberPerSlice*(blockIdx().x-1))
+#     #i = correctedIdx + ((blockIdx().x - 1) *indexCorr) * (blockDim().x)# used as a basis to get data we want from global memory
+#    wid, lane = fldmod1(threadIdx().x,32)
+# #creates shared memory and initializes it to 0
+#    shmem,shmemSum = createAndInitializeShmem(wid,threadIdx().x,amountOfWarps,lane)
+#    shmem[513,1]= numberToLooFor
+# # incrementing appropriate number of times 
 
-#    #shared memory for storing results from warp reductions
-#    shmemTp = @cuStaticSharedMem(Int32, (33))
-#    shmemFp = @cuStaticSharedMem(Int32, (33))
-#    shmemFn = @cuStaticSharedMem(Int32, (33))
+#     @unroll for k in 0:loopNumb
+#     if(correctedIdx+k<=pixelNumberPerSlice)
+#         incr_shmem(threadIdx().x,goldBoolGPU[i+k]==shmem[513,1],segmBoolGPU[i+k]==shmem[513,1],shmem)
+#         #incr_shmem(threadIdx().x+1,goldBoolGPU[i+k]==shmem[513,1],segmBoolGPU[i+k]==shmem[513,1],shmem,IndexesArray)
+#     end    
+#     end#for
 
-   
-#    @inbounds goldb::Bool =goldBoolGPU[i]
-#    @inbounds segmb::Bool =segmBoolGPU[i] 
-#    #using native function we calculate how many threads pass our criteria 
-#    maskTp = vote_ballot_sync(FULL_MASK,goldb & segmb)  
-#    maskFp = vote_ballot_sync(FULL_MASK,~goldb & segmb)  
-#    maskFn = vote_ballot_sync(FULL_MASK,goldb & ~segmb)  
-   
-#    #we are adding on separate threads results from warps to shared memory
-#     if(lane==1)
-#         @inbounds  shmemTp[wid]= CUDA.popc(maskTp)[1]*1
-#     elseif(lane==2) 
-#         @inbounds shmemFp[wid]+= CUDA.popc(maskFp)[1]*1
-#     elseif(lane==3)
-#         if(CUDA.popc(maskFn)[1]>0)        
-#         end    
+#     #reducing across the warp
+#     firstReduce(shmem,shmemSum,wid,threadIdx().x,lane,IndexesArray,i)
 
-#         @inbounds shmemFn[wid]+= CUDA.popc(maskFn)[1]*1
-#     end#if  
+#     sync_threads()
+#     #now all data about of intrest should be in  shared memory so we will get all rsults from warp reduction in the shared memory 
+#     getSecondBlockReduce( 1,3,wid,intermediateResTp,tp,shmemSum,blockIdx().x,lane)
+#     getSecondBlockReduce( 2,2,wid,intermediateResFp,fp,shmemSum,blockIdx().x,lane)
+#     getSecondBlockReduce( 3,1,wid,intermediateResFn,fn,shmemSum,blockIdx().x,lane)
 
-# #now all data about of intrest should be in  shared memory so we will get all rsults from warp reduction in the shared memory
-# sync_threads()
-#     # in case we have only 32 warps as we set we will not go out of bounds
-#       if(wid==1 )
-#         vallTp = reduce_warp(shmemTp[lane])
-#         #probably we do not need to sync warp as shfl dow do it for us        
-#         if(lane==1)
-#             @atomic tp[]+=vallTp
-#             end    
-#        elseif(wid==2 )   
-#         vallFp = reduce_warp(shmemFp[lane])
-#         if(lane==1)
-#             @atomic fp[]+=vallFp
-#         end    
-#        elseif(wid==3)  
-#         vallFn = reduce_warp(shmemFn[lane])
-#         if(lane==1)
-#             @atomic fn[]+=vallFn
-#         end  
-#         end
-
-
-#    return  
-"""
-using warp and get output to intermediate array
-"""
-# function getBlockTpFpFn(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGPU::CuDeviceArray{Bool, 1, 1},tp,tn,fp,fn,intermediateResTp::CuDeviceArray{Int32, 1, 1},intermediateResFp::CuDeviceArray{Int32, 1, 1},intermediateResFn::CuDeviceArray{Int32, 1, 1} )
-#     i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-#     blockId = blockIdx().x
-#    wid, lane = fldmod1(threadIdx().x, warpsize())
-
-#    #shared memory for storing results from warp reductions
-#    shmemTp = @cuStaticSharedMem(Int32, (33))
-#    shmemFp = @cuStaticSharedMem(Int32, (33))
-#    shmemFn = @cuStaticSharedMem(Int32, (33))
-
-   
-#    @inbounds goldb::Bool =goldBoolGPU[i]
-#    @inbounds segmb::Bool =segmBoolGPU[i] 
-#    #using native function we calculate how many threads pass our criteria 
-#    maskTp = vote_ballot_sync(FULL_MASK,goldb & segmb)  
-#    maskFp = vote_ballot_sync(FULL_MASK,~goldb & segmb)  
-#    maskFn = vote_ballot_sync(FULL_MASK,goldb & ~segmb)  
-   
-#    #we are adding on separate threads results from warps to shared memory
-#     if(lane==1)
-#         @inbounds  shmemTp[wid]= CUDA.popc(maskTp)[1]*1
-#     elseif(lane==2) 
-#         @inbounds shmemFp[wid]+= CUDA.popc(maskFp)[1]*1
-#     elseif(lane==3)
-#          @inbounds shmemFn[wid]+= CUDA.popc(maskFn)[1]*1
-#     end#if  
-
-# #now all data about of intrest should be in  shared memory so we will get all rsults from warp reduction in the shared memory
-# sync_threads()
-#     # in case we have only 32 warps as we set we will not go out of bounds
-#       if(wid==1 )
-#         vallTp = reduce_warp(shmemTp[lane])
-#         #probably we do not need to sync warp as shfl dow do it for us        
-#         if(lane==1)
-#             @inbounds intermediateResTp[blockId]=vallTp
-#         end    
-#        elseif(wid==3 )   
-#         vallFp = reduce_warp(shmemFp[lane])
-#         if(lane==1)
-#             @inbounds intermediateResFp[blockId]=vallFp
-#         end    
-#        elseif(wid==5)  
-#         vallFn = reduce_warp(shmemFn[lane])
-#         if(lane==1)
-#             @inbounds intermediateResFn[blockId]=vallFn
-#         end  
-#         end
 #    return  
 #    end
 
+# """
+# add value to the shared memory in the position i, x where x is 1 ,2 or 3 and is calculated as described below
+# boolGold & boolSegm + boolGold +1 will evaluate to 
+#     3 in case  of true positive
+#     2 in case of false positive
+#     1 in case of false negative
+# """
+# @inline function incr_shmem( primi::Int64,boolGold::Bool,boolSegm::Bool,shmem )
+#     @inbounds shmem[ primi, (boolGold & boolSegm + boolSegm +1) ]+=(boolGold | boolSegm) 
+#     return true
+# end
 
 
+# """
+# creates shared memory and initializes it to 0
+# wid - the number of the warp in the block
+# """
+# function createAndInitializeShmem(wid, threadId,amountOfWarps,lane)
+#    #shared memory for  stroing intermidiate data per lane  
+#    shmem = @cuStaticSharedMem(UInt16, (513,3))
+#    #for storing results from warp reductions
+#    shmemSum = @cuStaticSharedMem(UInt16, (33,3))
+#     #setting shared memory to 0 
+#     shmem[threadId, 3]=0
+#     shmem[threadId, 2]=0
+#     shmem[threadId, 1]=0
+    
+#     if(wid==1)
+#     shmemSum[lane,1]=0
+#     end
+#     if(wid==2)
+#         shmemSum[lane,2]=0
+#     end
+#     if(wid==3)
+#     shmemSum[lane,3]=0
+#     end            
 
+# return (shmem,shmemSum )
+
+# end#createAndInitializeShmem
+
+
+# """
+# reduction across the warp and adding to appropriate spots in the  shared memory
+# """
+# function firstReduce(shmem,shmemSum,wid,threadIdx,lane,IndexesArray,i   )
+#     @inbounds shmemSum[wid,1] = reduce_warp(shmem[threadIdx,1],32)
+#     @inbounds shmemSum[wid,2] = reduce_warp(shmem[threadIdx,2],32)
+#     @inbounds shmemSum[wid,3] = reduce_warp(shmem[threadIdx,3],32)
+# end#firstReduce
+
+# """
+# sets the final block amount of true positives, false positives and false negatives and saves it
+# to the  array representing each slice, 
+# wid - the warp in a block we want to use
+# numb - number associated with constant - used to access shared memory for example
+# chosenWid - on which block we want to make a reduction to happen
+# intermediateRes - array with intermediate -  slice wise results
+# singleREs - the final  constant holding image witde values (usefull for example for debugging)
+# shmemSum - shared memory where we get the  results to be reduced now and to which we will also save the output
+# blockId - number related to block we are currently in 
+# lane - the lane in the warp
+# """
+# function getSecondBlockReduce(chosenWid,numb,wid, intermediateRes,singleREs,shmemSum,blockId,lane)
+#     if(wid==chosenWid )
+#         shmemSum[33,numb] = reduce_warp(shmemSum[lane,numb],32 )
+        
+#       #probably we do not need to sync warp as shfl dow do it for us         
+#       if(lane==1)
+#           @inbounds @atomic singleREs[]+=shmemSum[33,numb]
+#       end    
+#       if(lane==2)
+
+#         @inbounds intermediateRes[blockId]=shmemSum[33,numb]
+#       end    
+#     #   if(lane==3)
+#     #     #ovewriting the value 
+#     #     @inbounds shmemSum[1,numb]=vall
+#     #   end     
+
+#   end  
 
 
 
