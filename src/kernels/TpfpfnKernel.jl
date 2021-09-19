@@ -82,8 +82,7 @@ function getBlockTpFpFn(goldBoolGPU
         ,IndexesArray
 ) where T
     # we multiply thread id as we are covering now 2 places using one lane - hence after all lanes gone through we will cover 2 blocks - hence second multiply    
-    corrIndex = (threadIdx().x-1)* indexCorr+1
-    i = corrIndex + (pixelNumberPerSlice*(blockIdx().x-1))
+    i = threadIdx().x+(pixelNumberPerSlice*(blockIdx().x-1))
     
     #i = correctedIdx + ((blockIdx().x - 1) *indexCorr) * (blockDim().x)# used as a basis to get data we want from global memory
    wid, lane = getWidAndLane(threadIdx().x)
@@ -96,9 +95,12 @@ function getBlockTpFpFn(goldBoolGPU
     locArr= zeros(MVector{3,UInt16})
     
     @unroll for k in 0:loopNumb
-        if(corrIndex+k<=pixelNumberPerSlice)           
-             incr_locArr(goldBoolGPU[i+k]==numberToLooFor,segmBoolGPU[i+k]==numberToLooFor,locArr,shmemSum,wid )
+        if(threadIdx().x+k*indexCorr <=pixelNumberPerSlice)           
+            incr_locArr(goldBoolGPU[i+k*32]==numberToLooFor,segmBoolGPU[i+k*32]==numberToLooFor,locArr,shmemSum,wid )
+             #IndexesArray[i+k*indexCorr]=1
+            #@inbounds @atomic tp[]+=1
             end#if 
+
         end#for
 
     @inbounds shmemSum[wid,1] = reduce_warp(locArr[0],32)
@@ -166,6 +168,10 @@ function firstReduce(shmem,shmemSum,wid,threadIdx,lane,IndexesArray,i   )
     @inbounds shmemSum[wid,1] = reduce_warp(shmem[threadIdx,1],32)
     @inbounds shmemSum[wid,2] = reduce_warp(shmem[threadIdx,2],32)
     @inbounds shmemSum[wid,3] = reduce_warp(shmem[threadIdx,3],32)
+
+
+
+
 end#firstReduce
 
 """
@@ -186,7 +192,7 @@ function getSecondBlockReduce(chosenWid,numb,wid, intermediateRes,singleREs,shme
         
       #probably we do not need to sync warp as shfl dow do it for us         
       if(lane==1)
-          @inbounds @atomic singleREs[]+=shmemSum[33,numb]
+        @inbounds @atomic singleREs[]+=shmemSum[33,numb]
       end    
       if(lane==2)
 

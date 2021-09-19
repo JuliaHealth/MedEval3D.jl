@@ -1,7 +1,8 @@
 module GPUutils
 using CUDA
 
-export defineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc
+export defineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc,reduce_warp_max,reduce_warp_min
+
 
 
 
@@ -84,7 +85,7 @@ end
 
 
 """
-Reduce a value across a warp
+Reduce a value across a warp and sum
 """
 @inline function reduce_warp( vall, lanesNumb)
     offset = UInt32(1)
@@ -94,6 +95,32 @@ Reduce a value across a warp
     end
     return vall
 end
+
+"""
+Reduce a value across a warp and return max
+"""
+@inline function reduce_warp_max( vall, lanesNumb)
+    offset = UInt32(1)
+    while(offset <lanesNumb) 
+        vall=max(vall, shfl_down_sync(FULL_MASK, vall, offset))
+        offset<<= 1
+    end
+    return vall
+end
+
+
+"""
+Reduce a value across a warp and return min 
+"""
+@inline function reduce_warp_min( vall, lanesNumb)
+    offset = UInt32(1)
+    while(offset <lanesNumb) 
+        vall=min(vall, shfl_down_sync(FULL_MASK, vall, offset))
+        offset<<= 1
+    end
+    return vall
+end
+
 
 
 """

@@ -1,20 +1,40 @@
 """
+Work will have 3 parts - 3 kernels 
+    1) will prepare data - will return source array in boolean format and will give benchmark
+    max and min x,y,z of either mask - to describe smallest possible cube holding all necessary data 
+    2)first pass through the data  that will mark which data blocks are acteve or full ...  - it will also prepare  the rudamentary worplan for first iteration in phase 3
+    3)the actual working part - there will be shceduling block that will pass what work should be done by other blocks - copying da, deciding to terminate etc.
+        - rest of the block will iteratively analyze data blocks scheduled by scheduling block
+
+
 So we will need the block of data representing each wall of the bit cube bit cuve will have edge length of 32 - apart from corner cases
 
 Simplification
 Get reduced array of bits from Tpfp..fn modified kernel
 Assign blocks of size 32x32x32 for each we will have data structure holding data as pointed below all will be in UInt16
-    Min x max x; miny max y; min z max z - first 6 numbers
-    All adjacent blocks indices next 26 numbers
     Is activeOrFullForFirsPassgold - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
     Is activeOrFullForFirsPasssegm - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
     Is activeOrFullForSecondPassgold - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
     Is activeOrFullForSecondPassSegm - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
    activeIterNumbMaskA - The number of iteration when block was last active - needed to coordinate which block will be working now
     activeIterNumbMaskB - The number of iteration when block was last active - needed to coordinate which block will be working now
-    In total 6+26+1+1=34 numbers in array for a block
-    Data will be stored in n times 34 UInt16 matrix in global memory
-ResArray storing all coordinates that were covered and in which iteration it occured
+    Data will be stored in UInt16 4 dimensional array in such a way that data blocks block id x,y,z will point to metadata position
+
+ResArray storing all coordinates that were covered and in which iteration it occured  and in pass from which mask it occured
+
+work scheduling structures
+
+workSchedule- matrix that will have  number of rows that is equal to number of thread blocks that will work on a task
+    and in each column we will put metadata needed to localize on what data block we are working currently 
+    - so x,y,z indexes and 1 if we do it from perspective of gold sandard mask and 2 if from second mask
+LocalRes -  matrix that will have  number of rows that is equal to number of thread blocks that will work on a task - so blocks will write results to this array
+        and then scheduling block will collect those results from all matrix in the ResArray
+LocalResLastEntryList - list with length equal to the number of thread blocks - will store the last number of occuppied  spot in Local Res (so block will know where to put next results)        
+isWorking - bollean list of length equal the number of thread blocks that will point out wheather given thread block is working or not 
+            - data needed for scheduling block 
+fp, fn - number of false positive and false negatives - we will get it from algorithm responsible for preparing data 
+    - and it will be needed  to know how much data needs to be allocated andfor the scheduling block to be able to decide whether we finished
+
 
 Algo
 Check blocks to assign weather they become inactive or full
@@ -39,11 +59,10 @@ To maximize occupancy the blocks will concurrently work on both passes at once -
 
 """
 module SimplerHousdorff
-
+using CUDA, Main.GPUutils, Logging
 """
+Metadata
 divide array into blocks and assigns the metadata for each 
-    Min x max x; miny max y; min z max z - first 6 numbers
-    All adjacent blocks indices next 26 numbers
     Is activeOrFullForFirsPassgold - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
     Is activeOrFullForFirsPasssegm - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
     Is activeOrFullForSecondPassgold - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
@@ -53,24 +72,227 @@ divide array into blocks and assigns the metadata for each
     Data will be stored in n times 34 UInt16 matrix in global memory
 
 So in order to achieve it we need first to get the dimensions of the array we got - as it is reduced array it do not have to have the dimensions that would be simmilar
-to the medical image dimensions 
+to the medical image dimensions - yet by construction all dimensions need to be multiple by 32!!! 
 As we start from place where x,y,z is 0 and we will proceed (concurrently from here )
         we know by construction that min x, min y, and min z will be always some multiply of 32 away from begining 
         now we can lounch multiple small blocks where each will calculate the the required metadata - amount of those blocks will be just equal to the number of blocks tha we want to describe 
         and will be calculated by ceildiv of given dimension so sth like sizz = size[arrGold]-> will be mapped
-        to blocks as sizz-> (celdiv(sizz[1]) ...) by all dimensions - let's make those blocks the size of the warp so 32
+        to blocks as sizz-> (celdiv(sizz[1]) ...) by all dimensions ; blocks will be elongated in one dimension and constructed in a way that single warp will be responsible to set metadata for single block
 
-        Now (blockIdx-1) *32 will be min x of a block and blockIdx*32 max x ; the same for other dimensions 
-        we calculate linear index to have position of the given block; we do the same  calculation for blocks that are -1 and +1 in each dimension ... so 26 blocks to analyze 
-        futher numbers are already correctly initialized to 0 
-
-
- arrGold - boollean 3 dim Cu array with gold standard
- arrSegm - segmentation 3 dim boolean Cu array we want to compare   
+ arrGold - boollean 3 dim Cu array with gold standard (reduced to the smallest block with all true entries of both masks)
+ arrSegm - segmentation 3 dim boolean Cu array we want to compare  
+ 
 """
-function getBlockMetaData(arrGold, arrSegm)
+function getBlockMetaData(arrGold, arrSegm,maxThrPerB::Int64=1024)
+    arrGoldDims= size(arrGold)
+    metadata = allocateMomory(arrGoldDims)
+    metaDataDims = size(metadata)
+    blocks,threadNumPerBlock = getBlockNumb(metaDataDims)# for metadata kernel 
+    @info "blocks " blocks
+    @info "threadNumPerBlock " threadNumPerBlock
 
-
+    @cuda threads=1024 blocks=metaDataDims[1]*metaDataDims[2]*metaDataDims[3] housedorffMetadataKernel(metadata,metaDataDims,arrGoldDims ) 
+    return metadata
 end#getBlockMetaData
 
+
+   
+"""
+kernel that output metadata for Housedorff
+first all blocks are active - we intend to have all blocks o be active at first pass - and then prograssively  work only on this data that we are intrested in 
+matadata - 4 dimensional data with block metadata
+
+dataArrs - array of 2 arrays where first is arrGold and second arrSegm
+    arrGold - boollean 3 dim Cu array with gold standard (reduced to the smallest block with all true entries of both masks)
+    arrSegm - segmentation 3 dim boolean Cu array we want to compare
+
+iterationNumber - variable that we will set in order to mark on what iteration we are curently
+
+arrGoldDims - dimensions of the main array
+dimOfThreadBlock - how big is the edge of a cube describing data block - for example for 1024 threads - we will have 32x32x32 size hence dimOfThreadBlock= 32
+we will have in basic type 32x32 threads and work on 32x32x32 data block 
+"""
+function housedorffMetadataKernel(matadata
+                                ,arrGold
+                                ,arrSegm
+                                ,arrGoldDims::Tuple{Int64, Int64, Int64}
+                                ,iterationNumber::UInt16
+                                ,debugginArr
+                                ,dimOfThreadBlock::UInt16 )
+
+
+    #initializing shared array (remember this is autmatically initated to semi random numbers)
+    shemm= CuDynamicSharedArray(Bool,(dimOfThreadBlock,dimOfThreadBlock,dimOfThreadBlock) )
+    #as we constructed data dimensions o be always multiple of 32 we do not need to do bound checks
+    @unroll for k in 1:32
+        shemm[blockIdx().x,blockIdx().y,k]=  [ (blockIdx().x-1)*dimOfThreadBlock+threadIdx().x,(blockIdx().y-1)*dimOfThreadBlock+threadIdx().y,(blockIdx().z-1)*dimOfThreadBlock+k]
+    end#for
+
+                                # each lane will be responsible for one meta data  
+    # @unroll for k in 0:metadataDims[1]
+    #     matadata[threadIdx().x,k+1, blockIdx().x,1]=(threadIdx().x-1)*32   #min x
+    #     matadata[threadIdx().x,k+1, blockIdx().x,2]=min(threadIdx().x*32,arrGoldDims[1])   #max x
+    #     matadata[threadIdx().x,k+1, blockIdx().x,3]=k*32   #min y
+    #     matadata[threadIdx().x,k+1, blockIdx().x,4]=min((k+1)*32,arrGoldDims[2] )   #max y
+    #     matadata[threadIdx().x,k+1, blockIdx().x,5]=(blockIdx().x-1)*32   #min z
+    #     matadata[threadIdx().x,k+1, blockIdx().x,6]=min((blockIdx().x)*32,arrGoldDims[3])   #max z
+    # end#for
+end #housedorffMetadataKernel
+
+
+"""
+so given metadata and some helper constants we need to choose on what data our block of threads will work on
+at the begining - first iteration it is not very important as all blocks are active - hence we can schedule work by just evenly dividing all data blocks to thread blocks
+Then- some of the blocks will be marked as either inactive or full hence  we need to redistribute the work - so each thread block will have the same (+-1) number of data blocks to work on  
+    - in order to achieve this -  single block will be scheduled to redistribute work - it will run at the very end of iteration cycle  to redistribute work  for next one 
+    ; and at the begining - to redistribute blocks activated  in last round of previous iteration 
+"""
+function chooseBlockToWorkOn()
+
+end#chooseBlockToWorkOn
+
+"""
+controls allocation of GPU memory - instantiating Cu arrays
+ first we alocate the place for  metadata -  
+
+   Metadata -  Assign blocks of size 32x32x32 for each we will have data structure holding data as pointed below all will be in UInt16
+        Is activeOrFullForFirsPassgold - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
+        Is activeOrFullForFirsPasssegm - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
+        Is activeOrFullForSecondPassgold - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
+        Is activeOrFullForSecondPassSegm - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
+       activeIterNumbMaskA - The number of iteration when block was last active - needed to coordinate which block will be working now
+        activeIterNumbMaskB - The number of iteration when block was last active - needed to coordinate which block will be working now
+        Data will be stored in UInt16 4 dimensional array in such a way that data blocks block id x,y,z will point to metadata position
+    
+
+
+    resArray storing all coordinates that were covered and in which iteration it occured  and in pass from which mask it occured
+
+    work scheduling structures
+    
+    workSchedule- matrix that will have  number of rows that is equal to number of thread blocks that will work on a task
+        and in each column we will put metadata needed to localize on what data block we are working currently 
+        - so x,y,z indexes and 1 if we do it from perspective of gold sandard mask and 2 if from second mask
+    
+    worksScheduleLastStep - list with length equal to the number of thread blocks - will mark how many data blocks given thread block is working on 
+
+    localRes -  matrix that will have  number of rows that is equal to number of thread blocks that will work on a task - so blocks will write results to this array
+            and then scheduling block will collect those results from all matrix in the ResArray
+    localResLastEntryList - list with length equal to the number of thread blocks - will store the last number of occuppied  spot in Local Res (so block will know where to put next results)        
+    innerLoopStep -  list with length equal to the number of thread blocks - will mark on what iteration - on which data block from scheduled list the thread block is currently
+
+    isWorking - bollean list of length equal the number of thread blocks that will point out wheather given thread block is working or not 
+                - data needed for scheduling block 
+    fp, fn - number of false positive and false negatives - we will get it from algorithm responsible for preparing data 
+        - and it will be needed  to know how much data needs to be allocated andfor the scheduling block to be able to decide whether we finished
+
+   arguments     
+    fpNumb,fnNumb - number of false positives and false negatives
+    blocksNum - number of thread blocks that are able to run on the same grid
+    arrGoldDims - tuple with dimensions of main data array
+    dataBlocksNum- number of dataBlocks
+    dimOfThreadBlock - how big is the edge of a cube describing data block - for example for 1024 threads - we will have 32x32x32 size hence dimOfThreadBlock= 32
+"""
+function allocateMomory(arrGoldDims::Tuple{Int64, Int64, Int64}
+                        ,fpNumb::Int64
+                        ,fnNumb::Int64
+                        ,blocksNum::Int64
+                        ,dataBlocksNum::Int64
+                        ,dimOfThreadBlock::UInt16  )
+    maxresultPoints = fpNumb+fnNumb+1
+    #number of data blocks in given dimension
+    x=cld(arrGoldDims[1],dimOfThreadBlock)
+    y=cld(arrGoldDims[2],dimOfThreadBlock)
+    z=cld(arrGoldDims[3],dimOfThreadBlock)
+
+
+    #we need just some blocks to set in the schedule for the begining - the scheduling block will refine it 
+    # workNumbPerBlock = cld(x*y*z,dataBlocksNum)
+    # workScheduleCPU = zeros(UInt16,blocksNum, workNumbPerBlock  ,4)
+    # Threads.@threads for i in 1:blocksNum
+    #                         for j in 1:workNumbPerBlock
+    #                         workScheduleCPU
+    #                         end    
+    #                     end
+
+
+    workSchedule= CUDA.zeros(UInt16,blocksNum, cld(x*y*z,dataBlocksNum)  ,4) #in each entry 1) x;2)y;3)z;4)1 if gold standard pass and 2 if segm pass  ; length is set so we will have approximately equal number of blocks to work on
+
+
+    metaData= CUDA.zeros(UInt16,x,y,z,6)
+    resArray=CUDA.zeros(UInt16, blocksNum,maxresultPoints, 4)#in each entry 1) x;2)y;3)z;4)1 if gold standard pass and 2 if segm pass 
+    localRes= CUDA.zeros(UInt16,maxresultPoints/2,4  ) #maxresultPoints/2 very conservative  we may experiment with far smaller number to  decrese memory usage
+    localResLastEntryList= CUDA.zeros(UInt16, blocksNum) # 1 entry per thread block
+    innerLoopStep= CUDA.zeros(UInt16, blocksNum) # 1 entry per thread block
+    worksScheduleLastStep= CUDA.zeros(UInt16, blocksNum) # 1 entry per thread block
+    isWorking = CUDA.zeros(Bool, blocksNum) # 1 entry per thread block
+
+return (metaData)
+end#allocateMomory
+
+
 end#SimplerHousdorff
+
+
+
+
+
+    # #first we choose biggest dimension and this will be dimension of elongated block
+    # arrGoldDims= size(arrGold)
+    # maxDim = argmax(size(arrGold))
+    # localArr = [0,0,0]
+    # for i in 1:3
+    #     if(i!=maxDim)
+    #         localArr[i]= cld(arrGoldDims[i],32)
+    #     else
+    #         #we are now in max dimension
+    #         localArr[i]= cld(arrGoldDims[i],maxThrPerB)
+    #     end#if    
+    # end#for
+
+
+
+# """
+# getting dimensions  needed to run number of blocks that will cover all of data to prepare metadata  
+# metasataDims - dimensions of metasata array - 4 dims tuple
+# maxThrPerB - maximum number of threads per block defoult is 1024
+#     return the information to the kernel how to create its blocks of threads (how many); and the number of threads in a block 
+# """
+# function getBlockNumb(metasataDims::Tuple{Int64, Int64, Int64, Int64},maxThrPerB::Int64=1024)  
+
+#     return ( metasataDims[3] ,maxThrPerB)
+# end#getBlockNumb
+
+
+    
+# """
+# kernel that output metadata for Housedorff
+#     matadata - Int16 4 dimensional array where x,y,z dims identical to data blocks  and 4 dim stores 6 numbers 
+#         Is activeOrFullForFirsPassgold - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
+#         Is activeOrFullForFirsPasssegm - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
+#         Is activeOrFullForSecondPassgold - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
+#         Is activeOrFullForSecondPassSegm - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
+#         activeIterNumbMaskA - The number of iteration when block was last active - needed to coordinate which block will be working now
+#         activeIterNumbMaskB - The number of iteration when block was last active - needed to coordinate which block will be working now
+#         metadataDims - dimensions of metadata - 4 dims tuple
+#         arrGoldDims - dimensions of the main array
+#     IMPORTANT - althought this is 1 dimensional kernel we will output 3 dim data
+#         so blockIdx().x - gives info about z - dimension 
+#         threadIdx().x - tell about position in x dimension
+#         in y dimension we will iterate in a loop the number that is equal to the number of the size of the  y dimension (remember we are talking about metadata array)
+
+
+# """
+# function housedorffMetadataKernel(matadata
+#                                 ,metadataDims::Tuple{Int64, Int64, Int64, Int64}
+#                                 ,arrGoldDims::Tuple{Int64, Int64, Int64} )
+#     # each lane will be responsible for one meta data  
+#     @unroll for k in 0:metadataDims[1]
+#         matadata[threadIdx().x,k+1, blockIdx().x,1]=(threadIdx().x-1)*32   #min x
+#         matadata[threadIdx().x,k+1, blockIdx().x,2]=min(threadIdx().x*32,arrGoldDims[1])   #max x
+#         matadata[threadIdx().x,k+1, blockIdx().x,3]=k*32   #min y
+#         matadata[threadIdx().x,k+1, blockIdx().x,4]=min((k+1)*32,arrGoldDims[2] )   #max y
+#         matadata[threadIdx().x,k+1, blockIdx().x,5]=(blockIdx().x-1)*32   #min z
+#         matadata[threadIdx().x,k+1, blockIdx().x,6]=min((blockIdx().x)*32,arrGoldDims[3])   #max z
+#     end#for
+# end #housedorffMetadataKernel

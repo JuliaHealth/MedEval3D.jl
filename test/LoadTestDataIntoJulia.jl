@@ -6,16 +6,19 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\gpuUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernels\\TpfpfnKernel.jl")
 
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\overLap\\MainOverlap.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\PairCounting\\RandIndex.jl")
 
-
-src\overLap\MainOverlap.jl
-src\PairCounting\RandIndex.jl
-src\Probabilistic\ProbabilisticMetrics.jl
-src\InformationTheorhetic\InformationTheorhetic.jl
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\Probabilistic\\ProbabilisticMetrics.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\InformationTheorhetic\\InformationTheorhetic.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\volume\\VolumeMetric.jl")
 
 using Main.BasicPreds, Main.GPUutils,Cthulhu 
 using Main.MainOverlap, Main.TpfpfnKernel
 using BenchmarkTools,StaticArrays
+
+using Main.MainOverlap, Main.RandIndex , Main.ProbabilisticMetrics , Main.VolumeMetric ,Main.InformationTheorhetic
+
 
 using Conda
 using PyCall
@@ -61,9 +64,20 @@ function getDataAndEvaluationFromPymia(examplemhaDat)
     labels = Dict([(1,"WHITEMATTER"),(2,"GREYMATTER") ])
     
     metrics = [pymMetr.DiceCoefficient()
-                , pymMetr.HausdorffDistance(percentile=95, metric="HDRFDST95")
+                , pymMetr.DiceCoefficient()
+                , pymMetr.JaccardCoefficient()
+                , pymMetr.GlobalConsistencyError()
+                , pymMetr.AdjustedRandIndex()
+                , pymMetr.CohenKappaCoefficient()
+                , pymMetr.MutualInformation()
+                , pymMetr.VariationOfInformation()
                 , pymMetr.VolumeSimilarity()
-                ,pymMetr.TruePositive()                ]
+                ,pymMetr.TruePositive()   
+                ,pymMetr.TrueNegative()   
+                ,pymMetr.FalsePositive()   
+                ,pymMetr.FalsePositive()   
+                
+                ]
     evaluator = pymEval.SegmentationEvaluator(metrics, labels)
     
     evaluator.evaluate(prediction, ground_truth, examplemhaDat[1])
@@ -152,29 +166,34 @@ goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,
 IndexesArray= CUDA.zeros(Int32,10000000)
 
 TpfpfnKernel.getTpfpfnData!(arrOnesA,arrOnesB,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn,sizz[1]*sizz[2],sizz[3],Float32(1),IndexesArray,1024)
+sum(IndexesArray)
+tp[1]
 length(arrOnesA) -sum(IndexesArray)
 length(arrOnesA) - tp[1]
-length(arrOnesA) - (fn[1]+tp[1])
 
 
-shmemSum= zeros(UInt16,32,3)
-
-locArr= zeros(MVector{3,UInt8})
-locArr[1]= 255
-locArr[2]= 255
-locArr[3]= 255
-locArr
-wid = 5
-
-boolGold= true
-boolSegm= true
-
-if((@inbounds locArr[ (boolGold & boolSegm + boolSegm ) ]+=(boolGold | boolSegm)) == UInt8(0) )
-    @inbounds shmemSum[wid,(boolGold & boolSegm + boolSegm )]+=255  ## krowa
-end
+tp
+fp
+fn
+tn
 
 
-Int64(sum(shmemSum))
+
+MainOverlap.dice(tp,fp, fn)
+MainOverlap.jaccard(tp,fp, fn)
+MainOverlap.gce(tp,fp, fn)
+RandIndex.calculateAdjustedRandIndex(tn,tp,fp, fn)
+ProbabilisticMetrics.calculateCohenCappa(tp,fp, fn )
+VolumeMetric.getVolumMetric(tp,fp, fn )
+InformationTheorhetic.mutualInformationMetr(tn,tp,fp, fn)
+InformationTheorhetic.variationOfInformation(tn,tp,fp, fn)
+
+
+
+
+
+
+
 
 
 end #module
