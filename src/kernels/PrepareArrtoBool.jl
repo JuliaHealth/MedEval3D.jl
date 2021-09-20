@@ -14,43 +14,68 @@ returning the data  from a kernel that  calclulate number of true positives,
 true negatives, false positives and negatives par image and per slice in given data 
 goldBoolGPU - array holding data of gold standard bollean array
 segmBoolGPU - array with the data we want to compare with gold standard
-
-reducedGold - the smallest boolean block (3 dim array) that contains all positive entris from both masks
-reducedSegm - the smallest boolean block (3 dim array) that contains all positive entris from both masks
+we have a and b - becouse the Housdorff distance is defined as 2 pass algorithm
+reducedGold a nd b - the smallest boolean block (3 dim array) that contains all positive entris from both masks
+reducedSegm a nd b- the smallest boolean block (3 dim array) that contains all positive entris from both masks
 numberToLooFor - number we will analyze whether is the same between two sets
 threadNumPerBlock - how many threads should be associated with single block
+
+cuda arrays holding just single value wit atomically reduced result
+,fn,fp
+,minxRes,maxxRes
+,minyRes,maxyRes
+,minZres,maxZres
 """
-function getBoolCube!(goldBoolGPU
-    ,segmBoolGPU
-    ,pixelNumberPerSlice::Int64
+function getBoolCube!(goldBoolGPU3d
+    ,segmBoolGPU3d
     ,numberOfSlices::Int64
+    ,fn
+    ,fp
+    ,minxRes
+    ,maxxRes
+    ,minyRes
+    ,maxyRes
+    ,minZres
+    ,maxZres
     ,numberToLooFor::T
     ,IndexesArray
-    ,threadNumPerBlock::Int64 = 512) where T
+    ,reducedGoldA
+    ,reducedSegmA
+    ,reducedGoldB
+    ,reducedSegmB) where T
 
 # we prepare the boolean array of dimensions at the begining the same as the gold standard array - later we will work only on view of it
 
-goldDims=size(goldBoolGPU) 
-reducedGold= CUDA.zeros(Bool,goldDims)
-reducedSegm =CUDA.zeros(Bool,goldDims)
+goldDims=size(goldBoolGPU3d) 
 
-loopNumb, indexCorr = getKernelContants(threadNumPerBlock,pixelNumberPerSlice)
-args = (goldBoolGPU
-        ,segmBoolGPU
-        ,tp,tn,fp,fn
-        ,intermediateResTp
-        ,intermediateResFp
-        ,intermediateResFn
-        ,loopNumb
-        ,indexCorr
-        ,Int64(round(threadNumPerBlock/32))
-        ,pixelNumberPerSlice
+#biggest divisible by 32 number to cover the x dimension
+warpNumb = cld(goldDims[1],32)
+threadNumb = min(1024,warpNumb*32)
+
+args = (goldBoolGPU3d
+        ,segmBoolGPU3d
+        ,reducedGoldA
+        ,reducedSegmA
+        ,reducedGoldB
+        ,reducedSegmB
+        ,UInt16(goldDims[2])
+        ,UInt16(goldDims[1])
+        ,UInt16(cld(goldDims[1],threadNumb))
         ,numberToLooFor
         ,IndexesArray
-)
+        ,fn
+        ,fp
+        ,minxRes
+        ,maxxRes
+        ,minyRes
+        ,maxyRes
+        ,minZres
+        ,maxZres
+        ,warpNumb
+        )
 #getMaxBlocksPerMultiproc(args, getBlockTpFpFn) -- evaluates to 3
 
-@cuda threads=threadNumPerBlock blocks=numberOfSlices getBlockTpFpFn(args...) 
+@cuda threads=threadNumb blocks=numberOfSlices getBoolCubeKernel(args...) 
 return args
 end#getTpfpfnData
 
@@ -67,7 +92,7 @@ numberToLooFor - number we will analyze whether is the same between two sets
 loopNumbYdim - number of times the single lane needs to loop in order to get all needed data - in this kernel it will be exactly a y dimension of a slice
 xdim - length in x direction of source array 
 loopNumbXdim - in case the x dim will be bigger than number of threads we will create second inner loop
-cuda arrays holding just single value wit atomically added result
+cuda arrays holding just single value wit atomically reduced result
 ,fn,fp
 ,minxRes,maxxRes
 ,minyRes,maxyRes
@@ -76,48 +101,61 @@ cuda arrays holding just single value wit atomically added result
 """
 function getBoolCubeKernel(goldBoolGPU3d
         ,segmBoolGPU3d
-        ,reducedGold
-        ,reducedSegm
+        ,reducedGoldA
+        ,reducedSegmA
+        ,reducedGoldB
+        ,reducedSegmB
         ,loopNumbYdim::UInt16
-        ,indexCorr::UInt16
-        ,pixelNumberPerSlice::UInt16
         ,xdim::UInt16
         ,loopNumbXdim::UInt16
         ,numberToLooFor::T
         ,IndexesArray
-        ,fn,fp
-        ,minxRes,maxxRes
-        ,minyRes,maxyRes
-        ,minZres,maxZres
+        ,fn::CuDeviceVector{UInt32, 1}
+        ,fp::CuDeviceVector{UInt32, 1}
+        ,minxRes::CuDeviceVector{UInt32, 1}
+        ,maxxRes::CuDeviceVector{UInt32, 1}
+        ,minyRes::CuDeviceVector{UInt32, 1}
+        ,maxyRes::CuDeviceVector{UInt32, 1}
+        ,minZres::CuDeviceVector{UInt32, 1}
+        ,maxZres::CuDeviceVector{UInt32, 1}
+        ,warpNumber
 ) where T
     # we multiply thread id as we are covering now 2 places using one lane - hence after all lanes gone through we will cover 2 blocks - hence second multiply    
    #i = correctedIdx + ((blockIdx().x - 1) *indexCorr) * (blockDim().x)# used as a basis to get data we want from global memory
    wid, lane = getWidAndLane(threadIdx().x)
-
+   anyPositive = zeros(MVector{1,Bool}) # true If any bit will bge positive in this array - we are not afraid of data race as we can set it multiple time to true
 #creates shared memory and initializes it to 0
-   shmemSum = createAndInitializeShmem(wid,threadIdx().x,amountOfWarps,lane)
+   shmemSum = createAndInitializeShmem(wid,threadIdx().x,lane)
 # incrementing appropriate number of times 
    
     #0 - false negative; 1- false positive; 2 -minx; 3 max x; 4 miny; 5 maxy
     locArr= zeros(MVector{6,UInt16})
-    
-    @unroll for k in 0:loopNumbYdim# k is effectively y dimension
+    # in case of min we need to start high
+    locArr[3]=10000
+    locArr[5]=10000
+
+    @unroll for k in 1:loopNumbYdim# k is effectively y dimension
         for kx in 0:loopNumbXdim
-            if(threadIdx().x<=xdim)           
-                incr_locArr(goldBoolGPU[threadIdx().x+kx*xdim, k+1, blockIdx().x]==numberToLooFor
-                            ,segmBoolGPU[threadIdx().x+kx*xdim, k+1, blockIdx().x]==numberToLooFor
+            if(threadIdx().x+kx*xdim<=xdim)
+                #CUDA.@cuprint " threadIdx().x $(threadIdx().x)   kx $(kx)   xdim $(xdim)   threadIdx().x+kx*xdim  $(threadIdx().x+kx*xdim) \n"    
+                #boolTT= goldBoolGPU3d[1, k+1, blockIdx().x]==numberToLooFor
+                incr_locArr(goldBoolGPU3d[threadIdx().x+kx*xdim, k, blockIdx().x]==numberToLooFor
+                            ,segmBoolGPU3d[threadIdx().x+kx*xdim, k, blockIdx().x]==numberToLooFor
                             ,locArr
                             ,threadIdx().x+kx*xdim
-                            ,k+1
+                            ,k
                             ,blockIdx().x
-                            ,reducedGold
-                            ,reducedSegm)
+                            ,reducedGoldA
+                            ,reducedSegmA
+                            ,reducedGoldB
+                            ,reducedSegmB
+                            ,anyPositive)
             end#if 
         end#for 
         
     end#for
 
-    firstReduce(locArr,shmemSum)
+    firstReduce(locArr,shmemSum,wid)
 
     
 
@@ -129,9 +167,10 @@ function getBoolCubeKernel(goldBoolGPU3d
     getSecondBlockReduceSum( 2,2,wid,fp,shmemSum,blockIdx().x,lane)
 
     getSecondBlockReduceMin( 3,3,wid,minxRes,shmemSum,blockIdx().x,lane)
-    getSecondBlockReduceMax( 4,4,wid,maxxRes,shmemSum,blockIdx().x,lane)
+    getSecondBlockReduceMax( 4,4,wid,maxxRes,shmemSum,blockIdx().x,lane, minZres,maxZres)
     getSecondBlockReduceMin( 5,5,wid,minyRes,shmemSum,blockIdx().x,lane)
-    getSecondBlockReduceMax( 6,6,wid,maxxRes,shmemSum,blockIdx().x,lane)
+    getSecondBlockReduceMax( 6,6,wid,maxyRes,shmemSum,blockIdx().x,lane, minZres,maxZres)
+
 
    return  
    end
@@ -149,20 +188,30 @@ x,y,z - the coordinates we are currently in
                             ,boolSegm::Bool
                             ,locArr::MVector{6, UInt16}
                             ,x,y,z
-                            ,reducedGold
-                            ,reducedSegm)
+                            ,reducedGoldA
+                            ,reducedSegmA
+                            ,reducedGoldB
+                            ,reducedSegmB
+                            ,anyPositive)
     #first we need the flase positives and false negatives - this will write also true positive - but later we will 
     @inbounds locArr[boolGold+ boolSegm+ boolSegm]+=(boolGold  ⊻ boolSegm)
     #in case some is positive we can go futher with looking for max,min in dims and add to the new reduced boolean arrays waht we are intrested in  
     if(boolGold  || boolSegm)
     #locArr  0 - false negative; 1- false positive; 2 -minx; 3 max x; 4 miny; 5 maxy
-    locArr[2]= min(locArr[3],x)
-    locArr[3]= max(locArr[4],x)
-    locArr[4]= min(locArr[5],y)
-    locArr[5]= max(locArr[6],y)
-    reducedGold[x,y,z]=true    
-    reducedSegm[x,y,z]=true    
+    locArr[3]= min(locArr[3],x)
+    locArr[4]= max(locArr[4],x)
+    locArr[5]= min(locArr[5],y)
+    locArr[6]= max(locArr[6],y)
+    
+    #CUDA.@cuprint " locArr A $(locArr[1]) B $(locArr[2])  C $(locArr[3]) D $(locArr[4]) E $(locArr[5]) F $(locArr[6])  x $x y $y z $z  \n"    
 
+    #passing data to new arrays needed for running final algorithm
+    reducedGoldA[x,y,z]=boolGold    
+    reducedSegmA[x,y,z]=boolSegm    
+    reducedGoldB[x,y,z]=boolGold    
+    reducedSegmB[x,y,z]=boolSegm    
+    
+    #anyPositive[1]=true
     end    
    
     return true
@@ -178,7 +227,7 @@ end
 creates shared memory and initializes it to 0
 wid - the number of the warp in the block
 """
-function createAndInitializeShmem(wid, threadId,amountOfWarps,lane)
+function createAndInitializeShmem(wid, threadId,lane)
    #for storing results from warp reductions
    shmemSum = @cuStaticSharedMem(UInt16, (33,6))
 
@@ -187,11 +236,11 @@ function createAndInitializeShmem(wid, threadId,amountOfWarps,lane)
     elseif(wid==2)
         shmemSum[lane,2]=0
     elseif(wid==3)
-        shmemSum[lane,3]=0     
+        shmemSum[lane,3]=10000 # in case of minimum we must start high    
     elseif(wid==4)
-        shmemSum[lane,5]=0       
+        shmemSum[lane,4]=0       
     elseif(wid==5)
-        shmemSum[lane,5]=0            
+        shmemSum[lane,5]=10000 # in case of minimum we must start high            
     elseif(wid==6)
         shmemSum[lane,6]=0
     end            
@@ -204,16 +253,17 @@ end#createAndInitializeShmem
 """
 reduction across the warp and adding to appropriate spots in the  shared memory
 """
-function firstReduce(locArr,shmemSum)
+function firstReduce(locArr,shmemSum,wid)
     #locArr  0 - false negative; 1- false positive; 2 -minx; 3 max x; 4 miny; 5 maxy
-    @inbounds shmemSum[wid,1] = reduce_warp(locArr[0],32)
-    @inbounds shmemSum[wid,2] = reduce_warp(locArr[1],32)
+    @inbounds shmemSum[wid,1] = reduce_warp(locArr[1],32)
+    @inbounds shmemSum[wid,2] = reduce_warp(locArr[2],32)
 
-    @inbounds shmemSum[wid,3] = reduce_warp_min(locArr[2],32)
-    @inbounds shmemSum[wid,4] = reduce_warp_max(locArr[3],32)
-    @inbounds shmemSum[wid,5] = reduce_warp_min(locArr[4],32)
-    @inbounds shmemSum[wid,6] = reduce_warp_max(locArr[5],32)
+    @inbounds shmemSum[wid,3] = reduce_warp_min(locArr[3],32)
+    @inbounds shmemSum[wid,4] = reduce_warp_max(locArr[4],32)
+    @inbounds shmemSum[wid,5] = reduce_warp_min(locArr[5],32)
+    @inbounds shmemSum[wid,6] = reduce_warp_max(locArr[6],32)
 
+#    CUDA.@cuprint " shmemSum[wid,3] $(shmemSum[wid,3])  shmemSum[wid,4] $(shmemSum[wid,4] ) shmemSum[wid,5]  $(shmemSum[wid,5])  shmemSum[wid,6]  $(shmemSum[wid,6])   \n"
 
 
 end#firstReduce
@@ -247,14 +297,14 @@ function getSecondBlockReduceSum(chosenWid,numb,wid, singleREs,shmemSum,blockId,
 
 
 end#getSecondBlockReduce
-function getSecondBlockReduceMin(chosenWid,numb,wid, singleREs,shmemSum,blockId,lane)
+function getSecondBlockReduceMin(chosenWid,numb,wid, singleREs::CuDeviceVector{UInt32, 1},shmemSum,blockId,lane)
     if(wid==chosenWid )
         shmemSum[33,numb] = reduce_warp_min(shmemSum[lane,numb],32 )
         
 
       #probably we do not need to sync warp as shfl dow do it for us         
       if(lane==1)
-          @inbounds @atomic singleREs[]=min(shmemSum[33,numb],singleREs[])    
+        @inbounds CUDA.atomic_min!(pointer(singleREs),UInt32(shmemSum[33,numb]))    
       end    
     #   if(lane==3)
     #     #ovewriting the value 
@@ -264,14 +314,21 @@ function getSecondBlockReduceMin(chosenWid,numb,wid, singleREs,shmemSum,blockId,
   end  
 
 end#getSecondBlockReduce
-function getSecondBlockReduceMax(chosenWid,numb,wid, singleREs,shmemSum,blockId,lane)
+function getSecondBlockReduceMax(chosenWid,numb,wid, singleREs::CuDeviceVector{UInt32, 1},shmemSum,blockId,lane,singleREsMin::CuDeviceVector{UInt32, 1},singleREsMax::CuDeviceVector{UInt32, 1})
     if(wid==chosenWid )
         shmemSum[33,numb] = reduce_warp_max(shmemSum[lane,numb],32 )
         
       #probably we do not need to sync warp as shfl dow do it for us         
       if(lane==1)
-          @inbounds @atomic singleREs[]=max(shmemSum[33,numb],singleREs[])     
+        @inbounds CUDA.atomic_max!(pointer(singleREs),UInt32(shmemSum[33,numb]))   
       end    
+      if(lane==3 && shmemSum[33,numb]>0)
+        @inbounds CUDA.atomic_min!(pointer(singleREsMin),UInt32(blockId))   
+      end  
+      if(lane==4&& shmemSum[33,numb]>0)
+        @inbounds CUDA.atomic_max!(pointer(singleREsMax),UInt32(blockId))   
+      end 
+      
     #   if(lane==3)
     #     #ovewriting the value 
     #     @inbounds shmemSum[1,numb]=vall
@@ -281,7 +338,23 @@ function getSecondBlockReduceMax(chosenWid,numb,wid, singleREs,shmemSum,blockId,
 
 end#getSecondBlockReduce
 
+# function getSecondBlockReduceForZ(chosenWid,numb,wid, singleREsMin::CuDeviceVector{UInt32, 1},singleREsMax::CuDeviceVector{UInt32, 1},value,lane)
+#     if(wid==chosenWid )
 
+#       if(lane==3)
+#         @inbounds CUDA.atomic_min!(pointer(singleREsMin),UInt32(blockId))   
+#       end  
+#       if(lane==4)
+#         @inbounds CUDA.atomic_max!(pointer(singleREsMax),UInt32(blockId))   
+#       end    
+#     #   if(lane==3)
+#     #     #ovewriting the value 
+#     #     @inbounds shmemSum[1,numb]=vall
+#     #   end     
+
+#   end  
+
+# end#getSecondBlockReduce
 
 
 

@@ -156,6 +156,7 @@ controls allocation of GPU memory - instantiating Cu arrays
  first we alocate the place for  metadata -  
 
    Metadata -  Assign blocks of size 32x32x32 for each we will have data structure holding data as pointed below all will be in UInt16
+        min and max x,y,z
         Is activeOrFullForFirsPassgold - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
         Is activeOrFullForFirsPasssegm - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
         Is activeOrFullForSecondPassgold - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
@@ -219,13 +220,19 @@ function allocateMomory(arrGoldDims::Tuple{Int64, Int64, Int64}
     workSchedule= CUDA.zeros(UInt16,blocksNum, cld(x*y*z,dataBlocksNum)  ,4) #in each entry 1) x;2)y;3)z;4)1 if gold standard pass and 2 if segm pass  ; length is set so we will have approximately equal number of blocks to work on
 
 
-    metaData= CUDA.zeros(UInt16,x,y,z,6)
+    metaData= CUDA.zeros(UInt16,x,y,z,12)
     resArray=CUDA.zeros(UInt16, blocksNum,maxresultPoints, 4)#in each entry 1) x;2)y;3)z;4)1 if gold standard pass and 2 if segm pass 
     localRes= CUDA.zeros(UInt16,maxresultPoints/2,4  ) #maxresultPoints/2 very conservative  we may experiment with far smaller number to  decrese memory usage
     localResLastEntryList= CUDA.zeros(UInt16, blocksNum) # 1 entry per thread block
     innerLoopStep= CUDA.zeros(UInt16, blocksNum) # 1 entry per thread block
     worksScheduleLastStep= CUDA.zeros(UInt16, blocksNum) # 1 entry per thread block
     isWorking = CUDA.zeros(Bool, blocksNum) # 1 entry per thread block
+    # for boolean arrays that will store all boolean data about analyzed array#we have two copies as Housdorff is composed of 2 passes 
+    reducedGoldA= CUDA.zeros(Bool,arrGoldDims)
+    reducedSegmA =CUDA.zeros(Bool,arrGoldDims)
+    
+    reducedGoldB= CUDA.zeros(Bool,arrGoldDims)
+    reducedSegmB =CUDA.zeros(Bool,arrGoldDims)
 
 return (metaData)
 end#allocateMomory

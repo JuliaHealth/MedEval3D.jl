@@ -32,7 +32,6 @@ function getTpfpfnData!(goldBoolGPU
     ,numberOfSlices::Int64
     ,numberToLooFor::T
     ,IndexesArray
-
     ,threadNumPerBlock::Int64 = 512) where T
 
 
@@ -74,7 +73,7 @@ function getBlockTpFpFn(goldBoolGPU
         ,intermediateResTp
         ,intermediateResFp
         ,intermediateResFn
-        ,loopNumb::Int64
+        ,loopNumb::UInt16
         ,indexCorr::Int64
         ,amountOfWarps::Int64
         ,pixelNumberPerSlice::Int64
@@ -94,7 +93,7 @@ function getBlockTpFpFn(goldBoolGPU
 
     locArr= zeros(MVector{3,UInt16})
     
-    @unroll for k in 0:loopNumb
+    @unroll for k in UInt16(0):loopNumb
         if(threadIdx().x+k*indexCorr <=pixelNumberPerSlice)           
             incr_locArr(goldBoolGPU[i+k*32]==numberToLooFor,segmBoolGPU[i+k*32]==numberToLooFor,locArr,shmemSum,wid )
              #IndexesArray[i+k*indexCorr]=1

@@ -1,7 +1,7 @@
 module GPUutils
 using CUDA
 
-export defineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc,reduce_warp_max,reduce_warp_min
+export defineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc,reduce_warp_max,reduce_warp_min,reduce_warp_min
 
 
 
@@ -87,8 +87,8 @@ end
 """
 Reduce a value across a warp and sum
 """
-@inline function reduce_warp( vall, lanesNumb)
-    offset = UInt32(1)
+@inline function reduce_warp( vall::T, lanesNumb) where T
+    offset = UInt16(1)
     while(offset <lanesNumb) 
         vall+=shfl_down_sync(FULL_MASK, vall, offset)  
         offset<<= 1
@@ -99,8 +99,8 @@ end
 """
 Reduce a value across a warp and return max
 """
-@inline function reduce_warp_max( vall, lanesNumb)
-    offset = UInt32(1)
+@inline function reduce_warp_max( vall, lanesNumb::UInt8)
+    offset = UInt16(1)
     while(offset <lanesNumb) 
         vall=max(vall, shfl_down_sync(FULL_MASK, vall, offset))
         offset<<= 1
@@ -112,14 +112,30 @@ end
 """
 Reduce a value across a warp and return min 
 """
-@inline function reduce_warp_min( vall, lanesNumb)
-    offset = UInt32(1)
+@inline function reduce_warp_min( vall::T, lanesNumb::UInt8) where T
+    offset = UInt16(1)
     while(offset <lanesNumb) 
+        #if(vall==0)  vall=T(10000) end
         vall=min(vall, shfl_down_sync(FULL_MASK, vall, offset))
         offset<<= 1
     end
     return vall
 end
+
+
+"""
+Reduce a value across a warp and return or (so if any value is true it will return true) 
+"""
+@inline function reduce_warp_min( vall::Bool, lanesNumb::UInt8) 
+    offset = UInt16(1)
+    while(offset <lanesNumb) 
+        #if(vall==0)  vall=T(10000) end
+        vall=vall | shfl_down_sync(FULL_MASK, vall, offset)
+        offset<<= 1
+    end
+    return vall
+end
+
 
 
 
