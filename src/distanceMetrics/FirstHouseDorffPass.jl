@@ -271,6 +271,8 @@ initialize constants
 function memoryAllocations(datablockDim::UInt16,zDim::UInt16)
     #for storing results
     #shmemGold,shmemSegm,shmemSum = createAndInitializeShmem(datablockDim, threadIdx().x)
+
+    krowa - here we have a problem main part will be overwritten but paddings are not 0  - we need to write function to make them 0 !!
     resShmem = CuStaticSharedArray(Bool,(datablockDim+2,datablockDim+2,zDim +2))#+2 in order to get the one padding 
     #coordinates of data in main array
     x,y,z = getxyz()
