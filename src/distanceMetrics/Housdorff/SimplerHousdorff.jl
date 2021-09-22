@@ -156,14 +156,12 @@ controls allocation of GPU memory - instantiating Cu arrays
  first we alocate the place for  metadata -  
 
    Metadata -  Assign blocks of size 32x32x32 for each we will have data structure holding data as pointed below all will be in UInt16
-        min and max x,y,z
-        Is activeOrFullForFirsPassgold - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
-        Is activeOrFullForFirsPasssegm - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
-        Is activeOrFullForSecondPassgold - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
-        Is activeOrFullForSecondPassSegm - 2 if neither in first mask , 1 if full in first mask; 0 if active in first mask 
-       activeIterNumbMaskA - The number of iteration when block was last active - needed to coordinate which block will be working now
-        activeIterNumbMaskB - The number of iteration when block was last active - needed to coordinate which block will be working now
-        Data will be stored in UInt16 4 dimensional array in such a way that data blocks block id x,y,z will point to metadata position
+      1) isActiveOrFullForPasssegm - true if other  mask is acive for modifications  
+      2) isActiveOrFullForPassgold -  true if gold standard mask is acive for modifications 
+      3) isFullSegm - true if other mask is full (only ones)
+      4) isFullGold - true if gold standard mask is full (only ones)
+
+      Data will be stored in Bool 4 dimensional array in such a way that data blocks block id x,y,z will point to metadata position
     
 
 

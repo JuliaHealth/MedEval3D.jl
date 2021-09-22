@@ -1,7 +1,7 @@
 module GPUutils
 using CUDA
 
-export defineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc,reduce_warp_max,reduce_warp_min,reduce_warp_min
+export defineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc,reduce_warp_max,reduce_warp_min,reduce_warp_min,reduce_warp_or,reduce_warp_and
 
 
 
@@ -126,7 +126,7 @@ end
 """
 Reduce a value across a warp and return or (so if any value is true it will return true) 
 """
-@inline function reduce_warp_min( vall::Bool, lanesNumb::UInt8) 
+@inline function reduce_warp_or( vall::Bool, lanesNumb::UInt8) 
     offset = UInt16(1)
     while(offset <lanesNumb) 
         #if(vall==0)  vall=T(10000) end
@@ -136,6 +136,18 @@ Reduce a value across a warp and return or (so if any value is true it will retu
     return vall
 end
 
+"""
+Reduce a value across a warp and return and (so if all values are true it will return true) 
+"""
+@inline function reduce_warp_and( vall::Bool, lanesNumb::UInt8) 
+    offset = UInt16(1)
+    while(offset <lanesNumb) 
+        #if(vall==0)  vall=T(10000) end
+        vall=vall & shfl_down_sync(FULL_MASK, vall, offset)
+        offset<<= 1
+    end
+    return vall
+end
 
 
 
