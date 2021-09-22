@@ -12,15 +12,24 @@ We check is block still active in first pass - we need to check is empty or full
         2) isActiveOrFullForPassgold -  true if gold standard mask is acive for modifications 
         3) isFullSegm - true if other mask is full (only ones)
         4) isFullGold - true if gold standard mask is full (only ones)
+
+        shmem- shared memory
+        metaData - 3 dim array with metadata of data blocks
+        currMatadataBlockX,currMatadataBlockY, currMatadataBlockZ - cartesian coordinates of current block in metadaa!!!
+        mainQuesCounter - counter that we will update atomically and will be usefull to populate the work queue
+        mainWorkQueue - the list of the indicies of  data blocks in metadata with additional information is it referencing the goldpass or second one 
+
 """
 function isActiveForFirstPass(isMaskFull::MVector{1,Bool}
                             , isMaskEmpty::MVector{1,Bool}
                             ,shmem
-                            ,currBlockX::UInt16
-                            ,currBlockY::UInt16
-                            ,CurrBlockZ::UInt16
+                            ,currMatadataBlockX::UInt8
+                            ,currMatadataBlockY::UInt8
+                            ,currMatadataBlockZ::UInt8
                             ,isPassGold::Bool
-                            ,metaData )
+                            ,metaData
+                            ,mainQuesCounter
+                            ,mainWorkQueue )
     @inbounds shmem[1,threadIdx().y,20]=  reduce_warp_and(isMaskFull, UInt8(32))
     @inbounds shmem[1,threadIdx().y,21]=  reduce_warp_and(isMaskEmpty, UInt8(32))
     #so now we have 32 booleans in shared memory so we need to reduce it one more time using single warp 
@@ -34,11 +43,19 @@ function isActiveForFirstPass(isMaskFull::MVector{1,Bool}
     end 
     sync_threads()
     #we have needed data in shmem
-    if(threadIdx().y==1 && threadIdx().x==1 && (shmem[1,2,22] || shmem[1,1,22]))
-        metaData[currBlockX,currBlockY,CurrBlockZ,isPassGold+1]=false # we set is inactive 
-        metaData[currBlockX,currBlockY,CurrBlockZ,isPassGold+3]=true # we set is as full
 
+    # we update matedata concurrently
+    if(threadIdx().y==1 && threadIdx().x==1 && (shmem[1,2,22] || shmem[1,1,22]))
+        metaData[currMatadataBlockX,currMatadataBlockY,currMatadataBlockZ,isPassGold+1]=false # we set is inactive 
+    end#if   
+    if(threadIdx().y==1 && threadIdx().x==1 && (shmem[1,2,22] || shmem[1,1,22]))
+        metaData[currMatadataBlockX,currMatadataBlockY,currMatadataBlockZ,isPassGold+3]=true # we set is as full
     end#if
+    #so in case it not empty and not full we need to put it into the work queue and increment appropriate counter
+    if(threadIdx().y==3&& threadIdx().x==3 && !(shmem[1,2,22] || shmem[1,1,22]))
+        mainWorkQueue[CUDA.atomic_inc!(pointer(mainQuesCounter), UInt16(1))+1]=[currMatadataBlockX,currMatadataBlockY,currMatadataBlockZ,UInt8(isPassGold)] #x dim of block in metadata
+    end#if
+
 end#isActiveForFirstPass   
 
 
@@ -59,6 +76,10 @@ function isActiveForNormalPass(isMaskFull)
         metaData[currBlockX,currBlockY,CurrBlockZ,isPassGold+1]=false # we set is inactive 
         metaData[currBlockX,currBlockY,CurrBlockZ,isPassGold+3]=true # we set is as full
     end#if
+
+    krowa update main working queue that this block is inactive
+
+
 end#isActiveForNormalPass
 
 end#IsBlockToStayActive

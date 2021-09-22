@@ -11,19 +11,22 @@ export executeDataIter
 
 """
 loads and do the main processing of data in arrays of intrest (padding of shmem will be analyzed separately)
-zDim - how far we want to iterate in z dimension - ussually 32
 analyzedArr - array we are currently dilatating
 refAray -array we are referencing (we do not dilatate it only check against it )
 iterationNumber - at what iteration of dilatation we are - so how many dilatations we already performed
-x,y,z - the x,y,z coordinates of the begining of this block
+blockBeginingX,blockBeginingY,blockBeginingZ - coordinates where our block is begining - will be used as offset by our threads
+isMaskFull,isMaskEmpty - enables later checking is mask is empty full or neither
+resShmem - shared memory 34x34x34 bit array
+locArr - local bit array of thread
+resArray- 3 dimensional array where we put results
 """
-function executeDataIter(zDim,analyzedArr, refAray,iterationNumber ,x::UInt16,y::UInt16,z::UInt16)
-    @unroll for zIter in UInt16(1):zDim# most outer loop is responsible for z dimension
+function executeDataIterFirstPass(analyzedArr, refAray,iterationNumber ,blockBeginingX,blockBeginingY,blockBeginingZ,isMaskFull,isMaskEmpty,resShmem,locArr,resArray)
+    @unroll for zIter in UInt16(1):32# most outer loop is responsible for z dimension
         processMaskData( analyzedArr[x,y,z+zIter], zIter, resShmem,locArr,isMaskFull,isMaskEmpty,resShmem )
     end#for 
     sync_threads() #we should have in resShmem what we need 
-    @unroll for zIter in UInt16(1):zDim # most outer loop is responsible for z dimension - importnant in this loop we ignore padding we will deal with it separately
-        validataData(locArr[zDim],resShmem[threadIdx().x+1,threadIdx().y+1,zIter+1],zDim,resShmem,isMaskFull,isMaskEmpty,x,y,z,analyzedArr, refAray,resArrayA,iterationNumber)
+    @unroll for zIter in UInt16(1):32 # most outer loop is responsible for z dimension - importnant in this loop we ignore padding we will deal with it separately
+        validataData(locArr[32],resShmem[threadIdx().x+1,threadIdx().y+1,zIter+1],32,resShmem,isMaskFull,isMaskEmpty,x,y,z,analyzedArr, refAray,resArray,UInt16(1))
     end#for
 end#executeDataIter
 
@@ -69,7 +72,6 @@ end#processMaskData
 
 locVal - value from registers
 shmemVal - value associated with this thread from shared memory - where we marked neighbours ...
-zDim - z dimension across which we stream our plane of threads
 resShmem - shared memory with our preliminary results
 isMaskFull, isMaskEmpty - register values needed to specify weather we have full or empty or neither block
 x,y,z - needed to access data from main data array in global memory
@@ -80,7 +82,6 @@ iterationNumber - in which iteration we are currently - the bigger it is the hig
         """
 function validataData(locVal::Bool
                     ,shmemVal::Bool
-                     ,zDim::UInt16
                      ,resShmem
                     ,isMaskFull::MVector{1, Bool}
                     ,isMaskEmpty::MVector{1, Bool}
@@ -95,10 +96,10 @@ function validataData(locVal::Bool
     setIsFullOrEmpty!((locVal | shmemVal),isMaskFull,isMaskEmpty  )
   if(!locVal && shmemVal)
     # setting value in global memory
-    masktoUpdate[x,y,z+zDim]= true
+    masktoUpdate[x,y,z+32]= true
     # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
-    if(maskToCompare[x,y,z+zDim])
-       resArray[x,y,z+zDim]=iterationNumber
+    if(maskToCompare[x,y,z+32])
+       resArray[x,y,z+32]=iterationNumber
     end#if
   end#if
 

@@ -161,27 +161,28 @@ controls allocation of GPU memory - instantiating Cu arrays
       3) isFullSegm - true if other mask is full (only ones)
       4) isFullGold - true if gold standard mask is full (only ones)
 
-      Data will be stored in Bool 4 dimensional array in such a way that data blocks block id x,y,z will point to metadata position
-    
+      Data will be stored in Bool 4 dimensional array in such a way that data blocks block id x,y,z will point to metadata position  
 
 
     resArray storing all coordinates that were covered and in which iteration it occured  and in pass from which mask it occured
 
     work scheduling structures
     
-    workSchedule- matrix that will have  number of rows that is equal to number of thread blocks that will work on a task
-        and in each column we will put metadata needed to localize on what data block we are working currently 
-        - so x,y,z indexes and 1 if we do it from perspective of gold sandard mask and 2 if from second mask
-    
-    worksScheduleLastStep - list with length equal to the number of thread blocks - will mark how many data blocks given thread block is working on 
 
-    localRes -  matrix that will have  number of rows that is equal to number of thread blocks that will work on a task - so blocks will write results to this array
-            and then scheduling block will collect those results from all matrix in the ResArray
-    localResLastEntryList - list with length equal to the number of thread blocks - will store the last number of occuppied  spot in Local Res (so block will know where to put next results)        
-    innerLoopStep -  list with length equal to the number of thread blocks - will mark on what iteration - on which data block from scheduled list the thread block is currently
+    mainWorkQueue - basically we need to add to the one dimensional queue all of the  active blocks we find in first pass- crerating basic queue that will be processed by normals passes
+    of course during those normal passes some blocks will be added to the queue and some will be removed in order to mage 
+        it will store 3 indicies (UInt8) of the place of the block in metadata plus  wheater we are referencing main pass or second one (UInt8 wchich will be 1 or 0)
+        it we would need additional helper structures
+    so we will have: 
+    mainQuesCounter - telling us how many entries we have in work queue - we will divide this by number of thread blocks + some constant 
+        - to get some amount of the data blocks to be processed + tail queue that will be accessed in atomic way - but it can be accessed by all blocks
+        so if some block will finish work before others it will start processing this tail queue
+    mainActiveCounterNow,mainActiveCounterNext - at first main queue will have only active blocks but progressively it will have more and more empty spots
+        so we need to get the second counter that will keep track on the ramaining active blocks in curent iteration  
+            -mainActiveCounterNow - will be reduced every time thread block finish processing block - we will sync grid and start next iteration when it will reach 0 
+            -mainActiveCounterNext - will be increased every time we activate some block - will become the  mainActiveCounterNow in next iteration if it will reach 0 we will 
+                call it the end and finish kernel       
 
-    isWorking - bollean list of length equal the number of thread blocks that will point out wheather given thread block is working or not 
-                - data needed for scheduling block 
     fp, fn - number of false positive and false negatives - we will get it from algorithm responsible for preparing data 
         - and it will be needed  to know how much data needs to be allocated andfor the scheduling block to be able to decide whether we finished
 
