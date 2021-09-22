@@ -13,7 +13,7 @@ change the indexing so  instead of transverse plane of threads we will get coron
     and in order to get left and right we need to  keep x as contant to 1 or 34 (34 in case we have size of data block = 32)
     so we will access shmem in changed indexing
 """
-function transvarseToCoronalThreadPlane(constantNumb,shmem)::Bool
+function transvarseToCoronalThreadPlane(constantNumb::UInt8,shmem)::Bool
     return shmem[threadIdx().x,constantNumb, threadIdx().y]
 end#transvarseToCoronalThreadPlane    
 
@@ -25,7 +25,7 @@ change the indexing so  instead of transverse plane of threads we will get coron
     and in order to get left and right we need to  keep x as contant to 1 or 34 (34 in case we have size of data block = 32)
     so we will access shmem in changed indexing
 """
-function transvarseToSaggitalhreadPlane(constantNumb,shmem)::Bool
+function transvarseToSaggitalhreadPlane(constantNumb::UInt8,shmem)::Bool
     return shmem[constantNumb,threadIdx().x, threadIdx().y]
 end#transvarseToSaggitalhreadPlane    
 
@@ -33,7 +33,7 @@ end#transvarseToSaggitalhreadPlane
 """
 clear main part of shared memory - padding will be cleared separately
 """
-function clearMainShmem(shmem,zDim)
+function clearMainShmem(shmem,zDim::UInt8)
     @unroll for zIter in UInt16(1):zDim# most outer loop is responsible for z dimension
         shmem[threadIdx().x+1,threadIdx().y+1,zIter+1]=0
     end#for 
@@ -43,14 +43,14 @@ end#clearMainShmem
 """
 set padding planes to 0 
 """
-function clearPadding(shmem,zDim)
+function clearPadding(shmem,zDim::UInt16)
     clearHalfOfPadding(shmem,1)
     clearHalfOfPadding(shmem,zDim+2)
 end#clearPadding
 """
 helper for clearPadding
 """
-function clearHalfOfPadding(shmem,constantNumb)
+function clearHalfOfPadding(shmem,constantNumb::UInt8)
     shmem[constantNumb,threadIdx().x, threadIdx().y]
     shmem[threadIdx().x,constantNumb, threadIdx().y]
     shmem[threadIdx().x,threadIdx().y, constantNumb]

@@ -19,7 +19,7 @@ x,y,z - the x,y,z coordinates of the begining of this block
 """
 function executeDataIter(zDim,analyzedArr, refAray,iterationNumber ,x::UInt16,y::UInt16,z::UInt16)
     @unroll for zIter in UInt16(1):zDim# most outer loop is responsible for z dimension
-        processMaskData( analyzedArr[x,y,z+zIter], zIter, resShmem,locArr )
+        processMaskData( analyzedArr[x,y,z+zIter], zIter, resShmem,locArr,isMaskFull,isMaskEmpty,resShmem )
     end#for 
     sync_threads() #we should have in resShmem what we need 
     @unroll for zIter in UInt16(1):zDim # most outer loop is responsible for z dimension - importnant in this loop we ignore padding we will deal with it separately

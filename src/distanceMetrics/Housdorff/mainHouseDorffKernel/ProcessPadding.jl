@@ -33,9 +33,8 @@ function processAllPaddingPlanes(    x::UInt16
                                     ,metadataDims
                                     ,isPassGold::Bool
                                     ,locArr)
-   #neded to gives shared memory space (we clea and reuse main shared memory) for establishing weather we should process given pading or not 
+   #neded to clear memory for establishing weather we should process given pading or not 
     #- basically wheather we care about block next to this - so is it full or is it on edge ...
-   shmem[threadIdx().x,threadIdx().y,13]= false 
    locArr[1]= false
 
    isNextBlockOfIntrest(currBlockX,currBlockY,currBlockZ,false,false,false,false,false,true,1,shmem,metadataDims,isPassGold)
@@ -136,9 +135,6 @@ function processPaddingPlaneAfterCheck(paddingVal::Bool
         #we need to check is it there  sth of our intrest there - we check shared memory value established in isNextBlockOfIntrestHelper function
         if( shmem[sliceNumbManual,sliceNumbManual,13]  )
 
-           #resetting  main part shared memory for reuse
-                shmem[threadIdx().x,threadIdx().y,sliceNumbManual]= false 
-                shmem[threadIdx().x,threadIdx().y,sliceNumbManual+1]= false 
                 #we are intrested in futher processing only if we have some true here
                 if(paddingVal)
                     setGlobalsFromPadding(correctedX,correctedY,correctedZ,resArr,sourceArray)       
@@ -243,7 +239,7 @@ function reducePaddingPlane(shmem,paddingVal,sliceNumbManual )::Bool
     @inbounds shmem[1,threadIdx().y,sliceNumbManual]=  reduce_warp_or(paddingVal, UInt8(32))
     #so now we have 32 booleans in shared memory so we need to reduce it one more time using single warp 
     #TODO() check weather warps are column or row wise this below also I am not sure is it good 
-    if(threadIdx().y==1)
+    if(threadIdx().y==1  && threadIdx().x==1  )
         @inbounds  shmem[1,1,sliceNumbManual+1]= reduce_warp_or(shmem[1,threadIdx().y,sliceNumbManual], UInt8(32))        
     end    
 end

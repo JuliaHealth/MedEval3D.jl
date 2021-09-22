@@ -60,25 +60,25 @@ function firstHouseDorffPassKernel(  reducedGoldA
                                     ,workSchedule
                                     ,datablockDim 
                                     ,mainArrayDims
-                                    ,zDim::UInt16 )
+                                    ,zDim::UInt8 )
     #constant for all threads in a block
     iterationNumber= UInt16(0)
-
+    ,isPassGold::Bool
     ############initializations of data 
     resShmem,  isMaskFull, isMaskEmpty,locArr = memoryAllocations(datablockDim,zDim)
 
     x,y,z krowa
 
     ############### execution
-    executeDataIter(zDim,analyzedArr, refAray,iterationNumber,x,y,z)
-
+    executeDataIter(zDim,analyzedArr, refAray,iterationNumber,x,y,z,isMaskFull,isMaskEmpty,resShmem,locArr)
+    #for futher processing we need to have space in main shmem
+    clearMainShmem(shmem,zDim)
     #now we need to deal with padding in shmem res
     processAllPaddingPlanes(x,y,z,shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr,metaData,metadataDims,isPassGold,locArr)
 
-
     # now let's check weather block is eligible for futher processing - for this we need sums ...
-    #first we check eligibity from gold mask perspective    
-     no!! we will modify reduce so it will work on bitwise operators not adding @inbounds shmemSum[wid] = reduce_warp(bitGold,32)
+    isActiveForFirstPass(isMaskFull, isMaskEmpty,resShmem,currBlockX,currBlockY,CurrBlockZ,isPassGold,metaData)
+
 
 end #FirstHouseDorffPassKernel
 
