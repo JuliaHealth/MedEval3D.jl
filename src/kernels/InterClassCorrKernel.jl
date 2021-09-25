@@ -3,7 +3,7 @@ calculating intercalss correlation
 """
 module InterClassCorrKernel
 
-using Main.BasicPreds, Main.GPUutils, CUDA
+using Main.BasicPreds, Main.CUDAGpuUtils, CUDA
 using Main.MainOverlap, Main.TpfpfnKernel
 
 """
@@ -33,7 +33,7 @@ function kernel_InterClassCorr(flatGold
                                 ,SsbTotalGlobal
                                 ,slicesPerBlockMatrix
                                 ,maxSlicesPerBlock::Int64)
-   wid, lane = fldmod1(threadIdx().x,32)
+   wid, lane = fldmod1(threadIdxX(),32)
    grid_handle = this_grid()
 
       #shared memory for  stroing intermidiate data per lane  
@@ -44,18 +44,18 @@ function kernel_InterClassCorr(flatGold
     for blockRef in 1:maxSlicesPerBlock
         sliceNumb= slicesPerBlockMatrix[blockIdx().x,blockRef]
         if(sliceNumb>-1)
-            i = ((threadIdx().x-1)* indexCorr) + (slicePixelNumb*(sliceNumb-1))+1# used as a basis to get data we want from global memory
+            i = ((threadIdxX()-1)* indexCorr) + (slicePixelNumb*(sliceNumb-1))+1# used as a basis to get data we want from global memory
             # at the begining of analyzing each slice we need to set shared memory to 0 
-            shmem[threadIdx().x, 1]=0
-            shmem[threadIdx().x, 2]=0
+            shmem[threadIdxX(), 1]=0
+            shmem[threadIdxX(), 2]=0
             shmemSum[wid,1]=0
             shmemSum[wid,2]=0
             # simple adding to the shared memory in order to  be able to calculate mean later
             @unroll for k in 0:loopNumb
-                incr_shmem_forMean(threadIdx().x,flatGold[i+k],flatSegm[i+k],shmem)
+                incr_shmem_forMean(threadIdxX(),flatGold[i+k],flatSegm[i+k],shmem)
             end#for 
             #reducing across the warp
-            firstReduce(shmem,shmemSum,wid,threadIdx().x,lane)
+            firstReduce(shmem,shmemSum,wid,threadIdxX(),lane)
             sync_threads()
             getSecondBlockReduce( 1,1,wid,sumOfGoldPartials,sumOfGold,shmemSum,sliceNumb,lane)
             getSecondBlockReduce( 2,2,wid,sumOfSegmPartials,sumOfSegm,shmemSum,sliceNumb,lane)
@@ -66,30 +66,30 @@ function kernel_InterClassCorr(flatGold
     for blockRef in 1:maxSlicesPerBlock
         sliceNumb= slicesPerBlockMatrix[blockIdx().x,blockRef]
         if(sliceNumb>-1)
-            i = ((threadIdx().x-1)* indexCorr) + (slicePixelNumb*(sliceNumb-1))+1# used as a basis to get data we want from global memory
+            i = ((threadIdxX()-1)* indexCorr) + (slicePixelNumb*(sliceNumb-1))+1# used as a basis to get data we want from global memory
             # at the begining of analyzing each slice we need to set shared memory to 0 
-            shmem[threadIdx().x, 1]=0
-            shmem[threadIdx().x, 2]=0
-            shmem[threadIdx().x, 3]=0
+            shmem[threadIdxX(), 1]=0
+            shmem[threadIdxX(), 2]=0
+            shmem[threadIdxX(), 3]=0
             shmemSum[wid,1]=0
             shmemSum[wid,2]=0
             shmemSum[wid,3]=0
             
             #loading  slice and global mean
-            if(threadIdx().x==1)
+            if(threadIdxX()==1)
             shmemSum[33,1]=  (sumOfGoldPartials[sliceNumb] +sumOfSegmPartials[sliceNumb])/slicePixelNumb     #slice mean
             end
-            if(threadIdx().x==2)
+            if(threadIdxX()==2)
                 shmemSum[33,2]= (sumOfGold[1]+sumOfSegm[1])/totalVoxelNumb #global mean   
             end
             sync_threads()
 
             # simple adding to the shared memory in order to  be able to calculate mean later
             @unroll for k in 0:loopNumb
-                incr_shmem_forRes(threadIdx().x,flatGold[i+k],flatSegm[i+k],shmem,shmemSum[33,1],shmemSum[33,2] )
+                incr_shmem_forRes(threadIdxX(),flatGold[i+k],flatSegm[i+k],shmem,shmemSum[33,1],shmemSum[33,2] )
             end#for 
             #reducing across the warp
-            firstReduce(shmem,shmemSum,wid,threadIdx().x,lane)
+            firstReduce(shmem,shmemSum,wid,threadIdxX(),lane)
             sync_threads()
             getSecondBlockReduce( 1,1,wid,sswPartials,sswTotal,shmemSum,sliceNumb,lane)
             getSecondBlockReduceNoAtomic( 2,2,wid,ssbPartialsperSlice,shmemSum,sliceNumb,lane)

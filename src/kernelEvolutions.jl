@@ -118,7 +118,7 @@ most primitive working example
 """
 function primitiveAtomicKernel(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGPU::CuDeviceArray{Bool, 1, 1},tp,tn,fp, fn,nx,ny,nz,xthreads, ythreads,zthreads)
         # getting all required indexes
-        i = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+        i = threadIdxX() + (blockIdx().x - 1) * blockDimX()
         #if(i< (nx*ny*nz)/ythreads ) #i<nx*ny && j<ny && z<nz
        # CUDA.@cuprint "goldBoolGPU[i,j,z] $(goldBoolGPU[i,j,z]) segmBoolGPU[i,j,z] $(segmBoolGPU[i,j,z]) i $(i) j $(j) z $(z) "
             if(goldBoolGPU[i] & segmBoolGPU[i] )
@@ -224,24 +224,24 @@ function primitiveAtomicKernel(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGP
 #         ,IndexesArray
 # ) where T
 #     # we multiply thread id as we are covering now 2 places using one lane - hence after all lanes gone through we will cover 2 blocks - hence second multiply    
-#     correctedIdx = (threadIdx().x-1)* indexCorr+1
+#     correctedIdx = (threadIdxX()-1)* indexCorr+1
 #     i = correctedIdx + (pixelNumberPerSlice*(blockIdx().x-1))
-#     #i = correctedIdx + ((blockIdx().x - 1) *indexCorr) * (blockDim().x)# used as a basis to get data we want from global memory
-#    wid, lane = fldmod1(threadIdx().x,32)
+#     #i = correctedIdx + ((blockIdx().x - 1) *indexCorr) * (blockDimX())# used as a basis to get data we want from global memory
+#    wid, lane = fldmod1(threadIdxX(),32)
 # #creates shared memory and initializes it to 0
-#    shmem,shmemSum = createAndInitializeShmem(wid,threadIdx().x,amountOfWarps,lane)
+#    shmem,shmemSum = createAndInitializeShmem(wid,threadIdxX(),amountOfWarps,lane)
 #    shmem[513,1]= numberToLooFor
 # # incrementing appropriate number of times 
 
 #     @unroll for k in 0:loopNumb
 #     if(correctedIdx+k<=pixelNumberPerSlice)
-#         incr_shmem(threadIdx().x,goldBoolGPU[i+k]==shmem[513,1],segmBoolGPU[i+k]==shmem[513,1],shmem)
-#         #incr_shmem(threadIdx().x+1,goldBoolGPU[i+k]==shmem[513,1],segmBoolGPU[i+k]==shmem[513,1],shmem,IndexesArray)
+#         incr_shmem(threadIdxX(),goldBoolGPU[i+k]==shmem[513,1],segmBoolGPU[i+k]==shmem[513,1],shmem)
+#         #incr_shmem(threadIdxX()+1,goldBoolGPU[i+k]==shmem[513,1],segmBoolGPU[i+k]==shmem[513,1],shmem,IndexesArray)
 #     end    
 #     end#for
 
 #     #reducing across the warp
-#     firstReduce(shmem,shmemSum,wid,threadIdx().x,lane,IndexesArray,i)
+#     firstReduce(shmem,shmemSum,wid,threadIdxX(),lane,IndexesArray,i)
 
 #     sync_threads()
 #     #now all data about of intrest should be in  shared memory so we will get all rsults from warp reduction in the shared memory 

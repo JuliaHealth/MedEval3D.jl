@@ -3,7 +3,7 @@ this kernel will prepare da
 """
 module PrepareArrtoBool
 
-using CUDA, Main.GPUutils, Logging,StaticArrays
+using CUDA, Main.CUDAGpuUtils, Logging,StaticArrays
 
 
 
@@ -121,11 +121,11 @@ function getBoolCubeKernel(goldBoolGPU3d
         ,warpNumber
 ) where T
     # we multiply thread id as we are covering now 2 places using one lane - hence after all lanes gone through we will cover 2 blocks - hence second multiply    
-   #i = correctedIdx + ((blockIdx().x - 1) *indexCorr) * (blockDim().x)# used as a basis to get data we want from global memory
-   wid, lane = getWidAndLane(threadIdx().x)
+   #i = correctedIdx + ((blockIdx().x - 1) *indexCorr) * (blockDimX())# used as a basis to get data we want from global memory
+   wid, lane = getWidAndLane(threadIdxX())
    anyPositive = zeros(MVector{1,Bool}) # true If any bit will bge positive in this array - we are not afraid of data race as we can set it multiple time to true
 #creates shared memory and initializes it to 0
-   shmemSum = createAndInitializeShmem(wid,threadIdx().x,lane)
+   shmemSum = createAndInitializeShmem(wid,threadIdxX(),lane)
 # incrementing appropriate number of times 
    
     #0 - false negative; 1- false positive; 2 -minx; 3 max x; 4 miny; 5 maxy
@@ -136,13 +136,13 @@ function getBoolCubeKernel(goldBoolGPU3d
 
     @unroll for k in 1:loopNumbYdim# k is effectively y dimension
         for kx in 0:loopNumbXdim
-            if(threadIdx().x+kx*xdim<=xdim)
-                #CUDA.@cuprint " threadIdx().x $(threadIdx().x)   kx $(kx)   xdim $(xdim)   threadIdx().x+kx*xdim  $(threadIdx().x+kx*xdim) \n"    
+            if(threadIdxX()+kx*xdim<=xdim)
+                #CUDA.@cuprint " threadIdxX() $(threadIdxX())   kx $(kx)   xdim $(xdim)   threadIdxX()+kx*xdim  $(threadIdxX()+kx*xdim) \n"    
                 #boolTT= goldBoolGPU3d[1, k+1, blockIdx().x]==numberToLooFor
-                incr_locArr(goldBoolGPU3d[threadIdx().x+kx*xdim, k, blockIdx().x]==numberToLooFor
-                            ,segmBoolGPU3d[threadIdx().x+kx*xdim, k, blockIdx().x]==numberToLooFor
+                incr_locArr(goldBoolGPU3d[threadIdxX()+kx*xdim, k, blockIdx().x]==numberToLooFor
+                            ,segmBoolGPU3d[threadIdxX()+kx*xdim, k, blockIdx().x]==numberToLooFor
                             ,locArr
-                            ,threadIdx().x+kx*xdim
+                            ,threadIdxX()+kx*xdim
                             ,k
                             ,blockIdx().x
                             ,reducedGoldA
@@ -382,10 +382,10 @@ end#TpfpfnKernel
 #     ,slicesPerBlockMatrix
 #     ,numberOfBlocks::Int64) where T
 # # we multiply thread id as we are covering now 2 places using one lane - hence after all lanes gone through we will cover 2 blocks - hence second multiply    
-# correctedIdx = (threadIdx().x-1)* indexCorr+1
+# correctedIdx = (threadIdxX()-1)* indexCorr+1
 # i= correctedIdx
-# #i = correctedIdx + ((blockIdx().x - 1) *indexCorr) * (blockDim().x)# used as a basis to get data we want from global memory
-# wid, lane = fldmod1(threadIdx().x,32)
+# #i = correctedIdx + ((blockIdx().x - 1) *indexCorr) * (blockDimX())# used as a basis to get data we want from global memory
+# wid, lane = fldmod1(threadIdxX(),32)
 # #creates shared memory and initializes it to 0
 # shmem,shmemSum = createAndInitializeShmem()
 # shmem[513,1]= numberToLooFor
@@ -394,16 +394,16 @@ end#TpfpfnKernel
 #     sliceNumb= slicesPerBlockMatrix[blockIdx().x,blockRef]
 #         if(sliceNumb>0)
 #             i = correctedIdx + (pixelNumberPerSlice*(sliceNumb-1))# used as a basis to get data we want from global memory
-#             setShmemTo0(wid,threadIdx().x,lane,shmem,shmemSum)           
+#             setShmemTo0(wid,threadIdxX(),lane,shmem,shmemSum)           
 #             # incrementing appropriate number of times 
         
 #         @unroll for k in 0:loopNumb
 #                 if(correctedIdx+k<=pixelNumberPerSlice)
-#                     incr_shmem(threadIdx().x,goldBoolGPU[i+k]==shmem[513,1],segmBoolGPU[i+k]==shmem[513,1],shmem)
+#                     incr_shmem(threadIdxX(),goldBoolGPU[i+k]==shmem[513,1],segmBoolGPU[i+k]==shmem[513,1],shmem)
 #                 end#if
 #             end#for   
 #         #reducing across the warp
-#         firstReduce(shmem,shmemSum,wid,threadIdx().x,lane,IndexesArray,i)
+#         firstReduce(shmem,shmemSum,wid,threadIdxX(),lane,IndexesArray,i)
         
         
 #         sync_threads()

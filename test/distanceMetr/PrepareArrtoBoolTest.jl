@@ -1,9 +1,9 @@
 using Test,Revise
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\gpuUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
 
 
 includet("C:/GitHub/GitHub/NuclearMedEval/src/kernels/PrepareArrtoBool.jl")
-using Main.PrepareArrtoBool, Main.GPUutils
+using Main.PrepareArrtoBool, Main.CUDAGpuUtils
 using CUDA
 
 @testset "getBoolCubeKernel" begin 
@@ -99,6 +99,3 @@ size(vv)
 
 end#testset
 
-t = true
-f = false
- 0-t

@@ -59,7 +59,7 @@ To maximize occupancy the blocks will concurrently work on both passes at once -
 
 """
 module SimplerHousdorff
-using CUDA, Main.GPUutils, Logging
+using CUDA, Main.CUDAGpuUtils, Logging
 """
 Metadata
 divide array into blocks and assigns the metadata for each 
@@ -125,17 +125,17 @@ function housedorffMetadataKernel(matadata
     shemm= CuDynamicSharedArray(Bool,(dimOfThreadBlock,dimOfThreadBlock,dimOfThreadBlock) )
     #as we constructed data dimensions o be always multiple of 32 we do not need to do bound checks
     @unroll for k in 1:32
-        shemm[blockIdx().x,blockIdx().y,k]=  [ (blockIdx().x-1)*dimOfThreadBlock+threadIdx().x,(blockIdx().y-1)*dimOfThreadBlock+threadIdx().y,(blockIdx().z-1)*dimOfThreadBlock+k]
+        shemm[blockIdx().x,blockIdx().y,k]=  [ (blockIdx().x-1)*dimOfThreadBlock+threadIdxX(),(blockIdx().y-1)*dimOfThreadBlock+threadIdxY(),(blockIdx().z-1)*dimOfThreadBlock+k]
     end#for
 
                                 # each lane will be responsible for one meta data  
     # @unroll for k in 0:metadataDims[1]
-    #     matadata[threadIdx().x,k+1, blockIdx().x,1]=(threadIdx().x-1)*32   #min x
-    #     matadata[threadIdx().x,k+1, blockIdx().x,2]=min(threadIdx().x*32,arrGoldDims[1])   #max x
-    #     matadata[threadIdx().x,k+1, blockIdx().x,3]=k*32   #min y
-    #     matadata[threadIdx().x,k+1, blockIdx().x,4]=min((k+1)*32,arrGoldDims[2] )   #max y
-    #     matadata[threadIdx().x,k+1, blockIdx().x,5]=(blockIdx().x-1)*32   #min z
-    #     matadata[threadIdx().x,k+1, blockIdx().x,6]=min((blockIdx().x)*32,arrGoldDims[3])   #max z
+    #     matadata[threadIdxX(),k+1, blockIdx().x,1]=(threadIdxX()-1)*32   #min x
+    #     matadata[threadIdxX(),k+1, blockIdx().x,2]=min(threadIdxX()*32,arrGoldDims[1])   #max x
+    #     matadata[threadIdxX(),k+1, blockIdx().x,3]=k*32   #min y
+    #     matadata[threadIdxX(),k+1, blockIdx().x,4]=min((k+1)*32,arrGoldDims[2] )   #max y
+    #     matadata[threadIdxX(),k+1, blockIdx().x,5]=(blockIdx().x-1)*32   #min z
+    #     matadata[threadIdxX(),k+1, blockIdx().x,6]=min((blockIdx().x)*32,arrGoldDims[3])   #max z
     # end#for
 end #housedorffMetadataKernel
 
@@ -172,6 +172,7 @@ controls allocation of GPU memory - instantiating Cu arrays
     mainWorkQueue - basically we need to add to the one dimensional queue all of the  active blocks we find in first pass- crerating basic queue that will be processed by normals passes
     of course during those normal passes some blocks will be added to the queue and some will be removed in order to mage 
         it will store 3 indicies (UInt8) of the place of the block in metadata plus  wheater we are referencing main pass or second one (UInt8 wchich will be 1 or 0)
+        so entry1 - x position in metadata 2)y pos 3) z pos 4) boolean marking is it gold pass or not
         it we would need additional helper structures
     so we will have: 
     mainQuesCounter - telling us how many entries we have in work queue - we will divide this by number of thread blocks + some constant 
@@ -284,7 +285,7 @@ end#SimplerHousdorff
 #         arrGoldDims - dimensions of the main array
 #     IMPORTANT - althought this is 1 dimensional kernel we will output 3 dim data
 #         so blockIdx().x - gives info about z - dimension 
-#         threadIdx().x - tell about position in x dimension
+#         threadIdxX() - tell about position in x dimension
 #         in y dimension we will iterate in a loop the number that is equal to the number of the size of the  y dimension (remember we are talking about metadata array)
 
 
@@ -294,11 +295,11 @@ end#SimplerHousdorff
 #                                 ,arrGoldDims::Tuple{Int64, Int64, Int64} )
 #     # each lane will be responsible for one meta data  
 #     @unroll for k in 0:metadataDims[1]
-#         matadata[threadIdx().x,k+1, blockIdx().x,1]=(threadIdx().x-1)*32   #min x
-#         matadata[threadIdx().x,k+1, blockIdx().x,2]=min(threadIdx().x*32,arrGoldDims[1])   #max x
-#         matadata[threadIdx().x,k+1, blockIdx().x,3]=k*32   #min y
-#         matadata[threadIdx().x,k+1, blockIdx().x,4]=min((k+1)*32,arrGoldDims[2] )   #max y
-#         matadata[threadIdx().x,k+1, blockIdx().x,5]=(blockIdx().x-1)*32   #min z
-#         matadata[threadIdx().x,k+1, blockIdx().x,6]=min((blockIdx().x)*32,arrGoldDims[3])   #max z
+#         matadata[threadIdxX(),k+1, blockIdx().x,1]=(threadIdxX()-1)*32   #min x
+#         matadata[threadIdxX(),k+1, blockIdx().x,2]=min(threadIdxX()*32,arrGoldDims[1])   #max x
+#         matadata[threadIdxX(),k+1, blockIdx().x,3]=k*32   #min y
+#         matadata[threadIdxX(),k+1, blockIdx().x,4]=min((k+1)*32,arrGoldDims[2] )   #max y
+#         matadata[threadIdxX(),k+1, blockIdx().x,5]=(blockIdx().x-1)*32   #min z
+#         matadata[threadIdxX(),k+1, blockIdx().x,6]=min((blockIdx().x)*32,arrGoldDims[3])   #max z
 #     end#for
 # end #housedorffMetadataKernel

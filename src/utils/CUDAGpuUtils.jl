@@ -1,13 +1,11 @@
-module GPUutils
+module CUDAGpuUtils
+
+
 using CUDA
 
-export defineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc,reduce_warp_max,reduce_warp_min,reduce_warp_min,reduce_warp_or,reduce_warp_and
-
-
-
-
-
+export defineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc,reduce_warp_max,reduce_warp_min,reduce_warp_min,reduce_warp_or,reduce_warp_and,blockIdxZ,blockIdxY,blockIdxX,blockDimZ, blockDimY, blockDimX, threadIdxX, threadIdxY, threadIdxZ
 export @unroll
+
 """
 Type{maskNumb}  - type of the numbers hold in mask
 G - 3 dimensional array holding ground truth segmentation
@@ -25,11 +23,79 @@ function defineBlocks(::Type{maskNumb}
 end#defineBlocks
 
 """
+wrapper to get x coordinates of thread
+"""
+function threadIdxX()::UInt32
+    threadIdx().x
+end
+"""
+wrapper to get y coordinates of thread
+"""
+function threadIdxY()::UInt32
+    threadIdx().y
+end
+"""
+wrapper to get x coordinates of thread
+"""
+function threadIdxZ()::UInt32
+    threadIdx().z
+end
+
+
+
+
+
+
+"""
+wrapper to get x dimension of thread block
+"""
+function blockDimX()::UInt32
+    blockDim().x
+end
+"""
+wrapper to get y dimension of thread block
+"""
+function blockDimY()::UInt32
+    blockDim().y
+end
+"""
+wrapper to get x dimension of thread block
+"""
+function blockDimZ()::UInt32
+    blockDim().z
+end
+
+
+
+"""
+wrapper to get x coordinates of thread block
+"""
+function blockIdxX()::UInt32
+    blockIdx().x
+end
+"""
+wrapper to get y coordinates of thread block
+"""
+function blockIdxY()::UInt32
+    blockIdx().y
+end
+"""
+wrapper to get x coordinates of thread block
+"""
+function blockIdxZ()::UInt32
+    blockIdx().z
+end
+
+
+
+
+
+"""
 defining basic indicies for 3 dimensional case
 """
 function defineIndicies()
-    i= (blockIdx().x-1) * blockDim().x + threadIdx().x
-    j = (blockIdx().y-1) * blockDim().y + threadIdx().y
+    i= (blockIdx().x-1) * blockDim().x + threadIdxX()
+    j = (blockIdx().y-1) * blockDim().y + threadIdxY()
     z = (blockIdx().z-1) * blockDim().z + threadIdx().z  
     return (i,j,z)
 
@@ -230,4 +296,4 @@ end #assignWorkToCooperativeBlocks
 
 
 
-end #GPUutils
+end #CUDAGpuUtils

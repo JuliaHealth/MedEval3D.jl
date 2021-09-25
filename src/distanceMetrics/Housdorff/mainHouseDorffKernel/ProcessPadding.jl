@@ -2,7 +2,7 @@
 process padding in shared memory - where we have results that may affect other blocks
 """
 module ProcessPadding
-using CUDA, Main.GPUutils, Logging
+using CUDA, Main.CUDAGpuUtils, Logging
 
 export
 """
@@ -18,6 +18,8 @@ resArr - 3 dimensional array where we put results
 metaData - basic data about data blocks - stored in 3 dimensional array
 metadataDims - dimensions of metaData array
 isPassGold - true if we are dilatating currently gold standard mask false if we are dilatating other mask
+resArraysCounter - counter needed to add keep track on how many results we have in our result array
+                    - we have separate counter for gold pass and other pass
 """
 function processAllPaddingPlanes(    x::UInt16
                                     ,y::UInt16
@@ -32,10 +34,12 @@ function processAllPaddingPlanes(    x::UInt16
                                     ,metaData
                                     ,metadataDims
                                     ,isPassGold::Bool
-                                    ,locArr)
+                                    ,locArr
+                                    ,resArraysCounter
+                                    ,iterationNumber)
    #neded to clear memory for establishing weather we should process given pading or not 
     #- basically wheather we care about block next to this - so is it full or is it on edge ...
-   locArr[1]= false
+   clearLocArr(locArr)
 
    isNextBlockOfIntrest(currBlockX,currBlockY,currBlockZ,false,false,false,false,false,true,1,shmem,metadataDims,isPassGold)
    isNextBlockOfIntrest(currBlockX,currBlockY,currBlockZ,false,false,true,false,false,false,3 ,shmem,metadataDims,isPassGold)
@@ -46,18 +50,24 @@ function processAllPaddingPlanes(    x::UInt16
    isNextBlockOfIntrest(currBlockX,currBlockY,currBlockZ,false,false,false,true,false,false,9,shmem,metadataDims,isPassGold)
    isNextBlockOfIntrest(currBlockX,currBlockY,currBlockZ,true,false,false,false,false,false,11,shmem,metadataDims,isPassGold)
 
-   sync_threads()
-
+    for i in [UInt8(1),UInt8(3),UInt8(5),UInt8(7),UInt8(9),UInt8(11)]
+        #we need to check weather we are in the same warp as we used in isNextBlockOfIntrest
+        if(threadIdxY()==i )
+            shmem[i,i,13]=reduce_warp_and(locArr[i], UInt8(32))    
+        end#if    
+    end#for
+    sync_threads()#now we should have all required booleans and we can reduce them
+    
    # so we have 6 planes to analyze all around our data cube and we already collected data wheather are blocks adjacent to those planes are of our intrest
     
-   processsPaddingTOP(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z)
-   processsPaddingBOTTOM(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z)
+   processsPaddingTOP(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z,mainQuesCounter,mainWorkQueue,resArraysCounter,iterationNumber)
+   processsPaddingBOTTOM(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z,mainQuesCounter,mainWorkQueue,resArraysCounter,iterationNumber)
 
-   processsPaddingFront(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z)
-   processsPaddingBack(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z)
+   processsPaddingFront(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z,mainQuesCounter,mainWorkQueue,resArraysCounter,iterationNumber)
+   processsPaddingBack(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z,mainQuesCounter,mainWorkQueue,resArraysCounter,iterationNumber)
 
-   processsPaddingLeft(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z)
-   processsPaddingRight(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z)
+   processsPaddingLeft(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z,mainQuesCounter,mainWorkQueue,resArraysCounter,iterationNumber)
+   processsPaddingRight(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z,mainQuesCounter,mainWorkQueue,resArraysCounter,iterationNumber)
 
  end#processAllPaddingPlanes
 
@@ -102,52 +112,34 @@ function processPaddingPlane(paddingVal::Bool
                             ,resArr
                             ,metaData
                             ,metadataDims
-                            ,isPassGold::Bool)
+                            ,isPassGold::Bool
+                            ,mainQuesCounter
+                            ,mainWorkQueue
+                            ,resArraysCounter
+                            ,iterationNumber)
     #we can ignore all of this if this is edge block - and we can ignore paddings in this situations from those directions, the same for blocks that are full
-    processPaddingPlaneAfterCheck(paddingVal,correctedX,correctedY,correctedZ ,sliceNumbManual,shmem
-    ,currBlockX+nextBlockXIncrease-nextBlockXDecrease
-    ,currBlockY+nextBlockYIncrease-nextBlockYDecrease
-    ,currBlockZ+nextBlockZIncrease-nextBlockZDecrease
-    ,sourceArray,referenceArray,resArr,metaData,metadataDims,isPassGold)
-end#processPaddingPlane
-
-
-"""
-helper function for processPaddingPlane - after passing here test that we care about neighbour
-"""
-function processPaddingPlaneAfterCheck(paddingVal::Bool
-                                        ,correctedX::UInt16
-                                        ,correctedY::UInt16
-                                        ,correctedZ::UInt16                           
-                                        ,sliceNumbManual::UInt8
-                                        ,shmem
-                                        ,newBlockX::UInt16
-                                        ,newBlockY::UInt16
-                                        ,newBlockZ::UInt16
-                                        ,sourceArray
-                                        ,referenceArray
-                                        ,resArr
-                                        ,metaData
-                                        ,metadataDims
-                                        ,isPassGold::Bool)
+    newBlockX = currBlockX+nextBlockXIncrease-nextBlockXDecrease
+    newBlockY= currBlockY+nextBlockYIncrease-nextBlockYDecrease
+    newBlockZ= currBlockZ+nextBlockZIncrease-nextBlockZDecrease
 
         #before we will start processing padding we need to check weather it makes sense - weather we are not at the edge  or next block is full
         #we need to check is it there  sth of our intrest there - we check shared memory value established in isNextBlockOfIntrestHelper function
         if( shmem[sliceNumbManual,sliceNumbManual,13]  )
 
-                #we are intrested in futher processing only if we have some true here
-                if(paddingVal)
-                    setGlobalsFromPadding(correctedX,correctedY,correctedZ,resArr,sourceArray)       
-                end#if
-                #we need to reduce now  the values  of padding vals to establish weather there is any true there if yes we put the neighbour block to be active 
-                reducePaddingPlane(shmem,paddingVal,sliceNumbManual )
-                #we have true in shmem[1,1,sliceNumbManual+1] if there is at least one true in this plane and false otherwise
-                if(shmem[1,1,sliceNumbManual+1])
-                    activateNextBlock(newBlockX,newBlockY,newBlockZ, metaData,metadataDims,isPassGold)
-                end#if    
-  
-    end#if 
-end #  processPaddingPlaneAfterCheck
+            #we are intrested in futher processing only if we have some true here
+            if(paddingVal)
+                setGlobalsFromPadding(correctedX,correctedY,correctedZ,resArr,sourceArray,resArraysCounter, iterationNumber)       
+            end#if
+            #we need to reduce now  the values  of padding vals to establish weather there is any true there if yes we put the neighbour block to be active 
+            reducePaddingPlane(shmem,paddingVal,sliceNumbManual )
+            #we have true in shmem[1,1,sliceNumbManual+1] if there is at least one true in this plane and false otherwise
+            if(shmem[1,1,sliceNumbManual+1])
+                activateNextBlock(newBlockX,newBlockY,newBlockZ, metaData,metadataDims,isPassGold,mainQuesCounter,mainWorkQueue)
+            end#if    
+
+end#if 
+end#processPaddingPlane
+
 
 
 """
@@ -169,54 +161,39 @@ function isNextBlockOfIntrest(currBlockX::UInt16
                             ,shmem
                             ,metadataDims
                             ,isPassGold)
-                            
-                        isNextBlockOfIntrestHelper(currBlockX+nextBlockXIncrease-nextBlockXDecrease
-                        ,currBlockY+nextBlockYIncrease-nextBlockYDecrease
-                        ,currBlockZ+nextBlockZIncrease-nextBlockZDecrease,sliceNumbManual,shmem,metadataDims,isPassGold)
+       nextBlockX = currBlockX+nextBlockXIncrease-nextBlockXDecrease
+       nextBlockY = currBlockY+nextBlockYIncrease-nextBlockYDecrease
+       nextBlockZ = currBlockZ+nextBlockZIncrease-nextBlockZDecrease                     
 
-end#isNextBlockOfIntrest
-
-"""
-helper function for isNextBlockOfIntrest
-"""
-function  isNextBlockOfIntrestHelper(nextBlockX::UInt16
-                                    ,nextBlockY::UInt16
-                                    ,nextBlockZ::UInt16
-                                    ,sliceNumbManual::UInt8
-                                    ,shmem
-                                    ,metadataDims
-                                    ,isPassGold)
-  #we are selecting single warp 
-  if(threadIdx().y==sliceNumbManual )
+#we are selecting single warp 
+if(threadIdxY()==sliceNumbManual )
     #we need to check is it there at all - it will not if we are in border case
-    if(threadIdx().x==1)
-        locArr[1]= (nextBlockX>0)
-    elseif(threadIdx().x==2)
-        locArr[1]= (nextBlockX<=metadataDims[1])
-    elseif(threadIdx().x==3)
-        locArr[1]= (nextBlockY>0)
-    elseif(threadIdx().x==4)
-        locArr[1]= (nextBlockY<=metadataDims[2])
-    elseif(threadIdx().x==5)
-        locArr[1]= (nextBlockZ>0)
-    elseif(threadIdx().x==6)
-        locArr[1]= (nextBlockZ<=metadataDims[3])
-    elseif(threadIdx().x==7)
-        locArr[1] = metaData[newBlockX,newBlockY,newBlockZ,isPassGold+3] #then we need to check weather mask is already full - in this case we can not activate it 
+    if(threadIdxX()==1)
+        locArr[sliceNumbManual]= (nextBlockX>0)
+    elseif(threadIdxX()==2)
+        locArr[sliceNumbManual]= (nextBlockX<=metadataDims[1])
+    elseif(threadIdxX()==3)
+        locArr[sliceNumbManual]= (nextBlockY>0)
+    elseif(threadIdxX()==4)
+        locArr[sliceNumbManual]= (nextBlockY<=metadataDims[2])
+    elseif(threadIdxX()==5)
+        locArr[sliceNumbManual]= (nextBlockZ>0)
+    elseif(threadIdxX()==6)
+        locArr[sliceNumbManual]= (nextBlockZ<=metadataDims[3])
+    elseif(threadIdxX()==7)
+        locArr[sliceNumbManual] = metaData[newBlockX,newBlockY,newBlockZ,isPassGold+3] #then we need to check weather mask is already full - in this case we can not activate it 
     else
-        locArr[1] = true # so when all are true we know it 
+        locArr[sliceNumbManual] = true # so when all are true we know it 
     end#inner if
-    sync_warp()#now we should have all required booleans and we can reduce them
-
-    shmem[sliceNumbManual,sliceNumbManual,13]=reduce_warp_and(locArr[1], UInt8(32))    
 
 end#outer if    
 
 #we will aslo experiment with looking in given direction if all block in this direction are full or empty in both masks we can also 
 
+
+
+
 end#isNextBlockOfIntrest
-
-
 
 
 """
@@ -224,10 +201,21 @@ end#isNextBlockOfIntrest
     metaData - basic data about data blocks - stored in 3 dimensional array
     metadataDims - dimensions of metaData array
     isPassGold - true if we are dilatating currently gold standard mask false if we are dilatating other mask
+    mainQuesCounter - counter that we will update atomically and will be usefull to populate the work queue
+mainWorkQueue - the list of the indicies of  data blocks in metadata with additional information is it referencing the goldpass or second one 
+
 
 """
-function activateNextBlock(newBlockX,newBlockY,newBlockZ,metadataDims,metaData,isPassGold)
+function activateNextBlock(newBlockX,newBlockY,newBlockZ,metadataDims,metaData,isPassGold,mainQuesCounter,mainWorkQueue)
+    if(threadIdxY()==1&& threadIdxX()==1)
     metaData[newBlockX,newBlockY,newBlockZ,isPassGold+1]= true
+    end
+   #so in case it not empty and not full we need to put it into the work queue and increment appropriate counter
+    if(threadIdxY()==3&& threadIdxX()==3)
+        mainWorkQueue[CUDA.atomic_inc!(pointer(mainQuesCounter), UInt16(1))+1,:]=[newBlockX,newBlockY,newBlockZ,UInt8(isPassGold)] #x,y,z dim of block in metadata
+    end#if
+
+
 end#activateNextBlock    
 
 """
@@ -236,11 +224,11 @@ we need to reduce now  the values  of padding vals to establish weather there is
 """
 function reducePaddingPlane(shmem,paddingVal,sliceNumbManual )::Bool
     #to be experimented is it better to reduce to varyiong y or x 
-    @inbounds shmem[1,threadIdx().y,sliceNumbManual]=  reduce_warp_or(paddingVal, UInt8(32))
+    @inbounds shmem[1,threadIdxY(),sliceNumbManual]=  reduce_warp_or(paddingVal, UInt8(32))
     #so now we have 32 booleans in shared memory so we need to reduce it one more time using single warp 
     #TODO() check weather warps are column or row wise this below also I am not sure is it good 
-    if(threadIdx().y==1  && threadIdx().x==1  )
-        @inbounds  shmem[1,1,sliceNumbManual+1]= reduce_warp_or(shmem[1,threadIdx().y,sliceNumbManual], UInt8(32))        
+    if(threadIdxY()==1  && threadIdxX()==1  )
+        @inbounds  shmem[1,1,sliceNumbManual+1]= reduce_warp_or(shmem[1,threadIdxY(),sliceNumbManual], UInt8(32))        
     end    
 end
 
@@ -251,85 +239,95 @@ end
 accesses source arrays and modifies it if needed - invoked from procesing of padding
     sourceArrValue - value of source array in x,y,z position
     generally function will be invoked only if value in padding was set to true
-"""
-function setGlobalsFromPadding(correctedX::UInt16,correctedY::UInt16,correctedZ::UInt16,resArr,sourceArray)
-            resArr[correctedX,correctedY,correctedZ]= true
-            sourceArray[correctedX,correctedY,correctedZ]= true
 
+resArraysCounter - counter needed to add keep track on how many results we have in our result array
+                    - we have separate counter for gold pass and other pass
+
+"""
+function setGlobalsFromPadding(correctedX::UInt16,correctedY::UInt16,correctedZ::UInt16,resArr,sourceArray,resArraysCounter, iterationNumber) 
+       processResArrBasedOnoldVal(CUDA.atomic_inc!(pointer(resArr[correctedX,correctedY,correctedZ]), UInt16(iterationNumber)),resArraysCounter )
+       sourceArray[correctedX,correctedY,correctedZ]= true
 end#setGlobalsFromPadding
 
 
-
-
+"""
+when we set new result from padding we need to take into account possibility that neighbour block already did it
+hence when we set atomic we check the old value if old value was 0 all is good if not we  do not increse  the rescounter
+"""
+function processResArrBasedOnoldVal(oldVal,resArraysCounter  )
+    if(oldVal==0)
+        CUDA.atomic_inc!(pointer(resArraysCounter), UInt16(1))
+    end    
+end
 
 
 
 """
 process Top Padding 
 """
-function processsPaddingTOP(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z)
+function processsPaddingTOP(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z,mainQuesCounter,mainWorkQueue,resArraysCounter,iterationNumber)
     processPaddingPlane(
-        sourceArray[threadIdx().x, threadIdx().y,1],x,y,z-1 # to specialize          
+        sourceArray[threadIdxX(), threadIdxY(),1],x,y,z-1 # to specialize          
        ,false,false,false,false,false,true # nextBlockXIncrease,nextBlockYIncrease,nextBlockZIncrease,nextBlockXDecrease,nextBlockYDecrease,nextBlockZDecrease
        ,1 # to specialize 
-      ,shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold )# this arguments will be the same for all invocations
+      ,shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold ,mainQuesCounter,mainWorkQueue,resArraysCounter,iterationNumber)# this arguments will be the same for all invocations
 end
 
 
 """
 process Bottom Padding 
 """
-function processsPaddingBOTTOM(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z)
+function processsPaddingBOTTOM(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z,mainQuesCounter,mainWorkQueue,resArraysCounter,iterationNumber)
     processPaddingPlane(
-        sourceArray[threadIdx().x, threadIdx().y,34],x,y,z+34          
+        sourceArray[threadIdxX(), threadIdxY(),34],x,y,z+34          
        ,false,false,true,false,false,false # nextBlockXIncrease,nextBlockYIncrease,nextBlockZIncrease,nextBlockXDecrease,nextBlockYDecrease,nextBlockZDecrease
        ,3 # to specialize 
-      ,shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold )# this arguments will be the same for all invocations
+      ,shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,mainQuesCounter,mainWorkQueue ,resArraysCounter,iterationNumber)# this arguments will be the same for all invocations
 end
 
 
 """
 process  Padding Front 
 """
-function processsPaddingFront(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z)
+function processsPaddingFront(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z,mainQuesCounter,mainWorkQueue,resArraysCounter,iterationNumber)
     processPaddingPlane(
-        sourceArray[threadIdx().x, 34 ,threadIdx().y],x,y+34,z          
+        sourceArray[threadIdxX(), 34 ,threadIdxY()],x,y+34,z          
        ,false,true,false,false,false,false # nextBlockXIncrease,nextBlockYIncrease,nextBlockZIncrease,nextBlockXDecrease,nextBlockYDecrease,nextBlockZDecrease
        ,5 # to specialize 
-      ,shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold )# this arguments will be the same for all invocations
+      ,shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,mainQuesCounter,mainWorkQueue ,resArraysCounter,iterationNumber)# this arguments will be the same for all invocations
 end
 
 """
 process  Padding back 
 """
-function processsPaddingBack(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z)
+function processsPaddingBack(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z,mainQuesCounter,mainWorkQueue,resArraysCounter,iterationNumber)
     processPaddingPlane(
-        sourceArray[threadIdx().x, 1 ,threadIdx().y],x,y-1,z          
+        sourceArray[threadIdxX(), 1 ,threadIdxY()],x,y-1,z          
        ,false,false,false,false,true,false # nextBlockXIncrease,nextBlockYIncrease,nextBlockZIncrease,nextBlockXDecrease,nextBlockYDecrease,nextBlockZDecrease
        ,7 # to specialize 
-      ,shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold )# this arguments will be the same for all invocations
+      ,shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold ,mainQuesCounter,mainWorkQueue,resArraysCounter,iterationNumber)# this arguments will be the same for all invocations
 end
 
 """
 process  Padding left 
 """
-function processsPaddingLeft(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z)
+function processsPaddingLeft(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z,mainQuesCounter,mainWorkQueue,resArraysCounter,iterationNumber)
     processPaddingPlane(
-        sourceArray[1,threadIdx().x,threadIdx().y],x-1,y,z          
+        sourceArray[1,threadIdxX(),threadIdxY()],x-1,y,z          
        ,false,false,false,true,false,false # nextBlockXIncrease,nextBlockYIncrease,nextBlockZIncrease,nextBlockXDecrease,nextBlockYDecrease,nextBlockZDecrease
        ,9 # to specialize 
-      ,shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold )# this arguments will be the same for all invocations
+      ,shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,mainQuesCounter,mainWorkQueue ,resArraysCounter,iterationNumber)# this arguments will be the same for all invocations
 end
 
 """
 process  Padding right 
 """
-function processsPaddingRight(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z)
+function processsPaddingRight(shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,x,y,z,mainQuesCounter,mainWorkQueue,resArraysCounter,iterationNumber)
     processPaddingPlane(
-        sourceArray[34,threadIdx().x,threadIdx().y],x+34,y,z          
+        sourceArray[34,threadIdxX(),threadIdxY()],x+34,y,z          
        ,true,false,false,false,false,false # nextBlockXIncrease,nextBlockYIncrease,nextBlockZIncrease,nextBlockXDecrease,nextBlockYDecrease,nextBlockZDecrease
        ,11 # to specialize 
-      ,shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold )# this arguments will be the same for all invocations
+      ,shmem,currBlockX,currBlockY,currBlockZ,sourceArray,referenceArray,resArr ,metaData,metadataDims,isPassGold,mainQuesCounter,mainWorkQueue,resArraysCounter,iterationNumber )# this arguments will be the same for all invocations
 end
 
 

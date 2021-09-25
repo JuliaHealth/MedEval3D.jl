@@ -1,7 +1,7 @@
 using CUDA
 include("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
-include("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\gpuUtils.jl")
-using Main.BasicPreds, Main.GPUutils,Cthulhu,BenchmarkTools , CUDA
+include("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
+using Main.BasicPreds, Main.CUDAGpuUtils,Cthulhu,BenchmarkTools , CUDA
 
 
 goldBoolGPU= CuArray(trues(16,16,16));
@@ -14,15 +14,15 @@ function kernelFunct(goldBoolGPU::CuDeviceArray{Bool, 3, 1}, segmBoolGPU::CuDevi
 
     mainAfDiv, zz = fldmod1(blockIdx().x,8)
 
-    i= (mainAfDiv-1) * blockDim().x + threadIdx().x
+    i= (mainAfDiv-1) * blockDimX() + threadIdxX()
 
-    j = (blockIdx().y-1) * blockDim().y + threadIdx().y
+    j = (blockIdx().y-1) * blockDimY() + threadIdxY()
 
-    z = (blockIdx().z-1) * blockDim().z + threadIdx().z 
+    z = (blockIdx().z-1) * blockDimZ() + threadIdxZ() 
 
 
 
-    CUDA.@cuprint """ i $(i)  j $(j) z $(z)   blockIdx().x $(blockIdx().x)  blockDim().x  $(blockDim().x)   threadIdx().x $(threadIdx().x)     blockIdx().y $(blockIdx().y)  blockDim().y  $(blockDim().y)   threadIdx().y $(threadIdx().y)  blockIdx().z $(blockIdx().z)  blockDim().z  $(blockDim().z)   threadIdx().z $(threadIdx().z) \n """
+    CUDA.@cuprint """ i $(i)  j $(j) z $(z)   blockIdx().x $(blockIdx().x)  blockDimX()  $(blockDimX())   threadIdxX() $(threadIdxX())     blockIdx().y $(blockIdx().y)  blockDimY()  $(blockDimY())   threadIdxY() $(threadIdxY())  blockIdx().z $(blockIdx().z)  blockDimZ()  $(blockDimZ())   threadIdxZ() $(threadIdxZ()) \n """
 
     sync_threads()
 

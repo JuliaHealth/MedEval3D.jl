@@ -1,8 +1,8 @@
 using Test,Revise
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\gpuUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
 
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/SimplerHousdorff.jl")
-using Main.SimplerHousdorff, Main.GPUutils
+using Main.SimplerHousdorff, Main.CUDAGpuUtils
 using CUDA
 
 # @testset "getBlockNumb" begin 

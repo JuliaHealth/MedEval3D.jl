@@ -2,7 +2,7 @@ using DrWatson
 @quickactivate "Medical segmentation evaluation"
 using Test
 
-module GPUutilsTest
+module CUDAGpuUtilsTest
 
 
 

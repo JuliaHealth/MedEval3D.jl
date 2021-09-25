@@ -3,7 +3,7 @@
 initializations of Housedorff kernelalso clear up functions
 """
 module HKernelInits
-using CUDA, Main.GPUutils, Logging,StaticArrays
+using CUDA, Main.CUDAGpuUtils, Logging,StaticArrays
 using Main.HFUtils
 export memoryAllocations,clearMainShmem,clearPadding,clearHalfOfPadding
 
@@ -12,8 +12,8 @@ initialize constants
 """
 function memoryAllocations()
     #for storing results
-    #shmemGold,shmemSegm,shmemSum = createAndInitializeShmem(datablockDim, threadIdx().x)
-    resShmem = CuStaticSharedArray(Bool,(34,34,34))#+2 in order to get the one padding 
+    #shmemGold,shmemSegm,shmemSum = createAndInitializeShmem(datablockDim, threadIdxX())
+    resShmem =  @cuStaticSharedMem(Bool,(34,34,34))#+2 in order to get the one padding 
     #we need to set the values of the shared memory to 0 as it is not guaranteed by CUDA to be so 
     clearMainShmem(resShmem,32)
     clearPadding(resShmem,32)# we separately clear padding

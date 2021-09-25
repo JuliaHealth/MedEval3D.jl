@@ -6,7 +6,7 @@ loads and do the main processing of data in arrays of intrest (padding of shmem 
 """
 module ProcessMainData
 
-export executeDataIter
+export executeDataIterFirstPass,executeDataIterOtherPasses
 
 
 """
@@ -20,15 +20,29 @@ resShmem - shared memory 34x34x34 bit array
 locArr - local bit array of thread
 resArray- 3 dimensional array where we put results
 """
-function executeDataIterFirstPass(analyzedArr, refAray,iterationNumber ,blockBeginingX,blockBeginingY,blockBeginingZ,isMaskFull,isMaskEmpty,resShmem,locArr,resArray)
+function executeDataIterFirstPass(analyzedArr, refAray,blockBeginingX,blockBeginingY,blockBeginingZ,isMaskFull,isMaskEmpty,resShmem,locArr,resArray)
     @unroll for zIter in UInt16(1):32# most outer loop is responsible for z dimension
-        processMaskData( analyzedArr[x,y,z+zIter], zIter, resShmem,locArr,isMaskFull,isMaskEmpty,resShmem )
+        processMaskData( analyzedArr[x,y,z+zIter], zIter, resShmem,locArr)
     end#for 
     sync_threads() #we should have in resShmem what we need 
     @unroll for zIter in UInt16(1):32 # most outer loop is responsible for z dimension - importnant in this loop we ignore padding we will deal with it separately
-        validataData(locArr[32],resShmem[threadIdx().x+1,threadIdx().y+1,zIter+1],32,resShmem,isMaskFull,isMaskEmpty,x,y,z,analyzedArr, refAray,resArray,UInt16(1))
+        validataDataFirstPass(locArr[32],resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1],resShmem,isMaskFull,isMaskEmpty,blockBeginingX,blockBeginingY,blockBeginingZ,analyzedArr, refAray,resArray,resArraysCounter)
     end#for
 end#executeDataIter
+
+"""
+specializes executeDataIterFirstPass as it do not consider possibility of block being empty 
+"""
+function executeDataIterOtherPasses(analyzedArr, refAray,iterationNumber ,blockBeginingX,blockBeginingY,blockBeginingZ,isMaskFull,resShmem,locArr,resArray,resArraysCounter)
+    @unroll for zIter in UInt16(1):32# most outer loop is responsible for z dimension
+        processMaskData( analyzedArr[x,y,z+zIter], zIter, resShmem,locArr )
+    end#for 
+    sync_threads() #we should have in resShmem what we need 
+    @unroll for zIter in UInt16(1):32 # most outer loop is responsible for z dimension - importnant in this loop we ignore padding we will deal with it separately
+        validataData(locArr[32],resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1],32,resShmem,isMaskFull,isMaskEmpty,blockBeginingX,blockBeginingY,blockBeginingZ,analyzedArr, refAray,resArray,resArraysCounter)
+    end#for
+end#executeDataIter
+
 
 
 
@@ -47,14 +61,14 @@ function processMaskData(maskBool::Bool
     locArr[zIter]=maskBool
     #now we are saving results evrywhere we are intrested in so around without diagonals (we use supremum norm instead of euclidean)
     if(maskBool)
-        resShmem[threadIdx().x+1,threadIdx().y+1,zIter]=true #up
-        resShmem[threadIdx().x+1,threadIdx().y+1,zIter+2]=true #down
+        resShmem[threadIdxX()+1,threadIdxY()+1,zIter]=true #up
+        resShmem[threadIdxX()+1,threadIdxY()+1,zIter+2]=true #down
     
-        resShmem[threadIdx().x,threadIdx().y+1,zIter+1]=true #left
-        resShmem[threadIdx().x+2,threadIdx().y+1,zIter+1]=true #right
+        resShmem[threadIdxX(),threadIdxY()+1,zIter+1]=true #left
+        resShmem[threadIdxX()+2,threadIdxY()+1,zIter+1]=true #right
 
-        resShmem[threadIdx().x+1,threadIdx().y+2,zIter+1]=true #front
-        resShmem[threadIdx().x+1,threadIdx().y,zIter+1]=true #back
+        resShmem[threadIdxX()+1,threadIdxY()+2,zIter+1]=true #front
+        resShmem[threadIdxX()+1,threadIdxY(),zIter+1]=true #back
     end#if    
 
 end#processMaskData
@@ -80,7 +94,7 @@ maskToCompare - the other mask that we need to check before we write to result a
 iterationNumber - in which iteration we are currently - the bigger it is the higher housedorfrf,,
 
         """
-function validataData(locVal::Bool
+function validataDataFirstPass(locVal::Bool
                     ,shmemVal::Bool
                      ,resShmem
                     ,isMaskFull::MVector{1, Bool}
@@ -91,7 +105,7 @@ function validataData(locVal::Bool
                     ,maskToCompare
                     ,masktoUpdate
                     ,resArray
-                    ,iterationNumber::UInt16)
+                    ,resArraysCounter)
     #when this one and previous is true it will still be true
     setIsFullOrEmpty!((locVal | shmemVal),isMaskFull,isMaskEmpty  )
   if(!locVal && shmemVal)
@@ -99,11 +113,44 @@ function validataData(locVal::Bool
     masktoUpdate[x,y,z+32]= true
     # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
     if(maskToCompare[x,y,z+32])
-       resArray[x,y,z+32]=iterationNumber
+       resArray[x,y,z+32]=UInt16(1)
+       CUDA.atomic_inc!(pointer(resArraysCounter), UInt16(1))
     end#if
   end#if
 
 end
+
+"""
+specializes validataDataFirstPass ignoring case of potentially empty mask
+"""
+function validataDataOtherPass(locVal::Bool
+                                ,shmemVal::Bool
+                                ,resShmem
+                                ,isMaskFull::MVector{1, Bool}
+                                ,isMaskEmpty::MVector{1, Bool}
+                                ,x::UInt16
+                                ,y::UInt16
+                                ,z::UInt16
+                                ,maskToCompare
+                                ,masktoUpdate
+                                ,resArray
+                                ,iterationNumber::UInt16
+                                ,resArraysCounter)
+    #when this one and previous is true it will still be true
+    setIsFull!((locVal | shmemVal),isMaskEmpty  )
+    if(!locVal && shmemVal)
+    # setting value in global memory
+    masktoUpdate[x,y,z+32]= true
+    # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
+    if(maskToCompare[x,y,z+32])
+    resArray[x,y,z+32]=iterationNumber
+    CUDA.atomic_inc!(pointer(resArraysCounter), UInt16(1))
+
+    end#if
+    end#if
+
+end
+
 
 
 """
@@ -118,5 +165,12 @@ function setIsFullOrEmpty!(locValOrShmem::Bool
     isMaskFull[1]= locValOrShmem & isMaskFull[1]
     isMaskEmpty[1] = ~locValOrShmem & isMaskEmpty[1]
 end#setIsFullOrEmpty
+
+
+function setIsFull!(locValOrShmem::Bool
+    ,isMaskFull::MVector{1, Bool})
+isMaskFull[1]= locValOrShmem & isMaskFull[1]
+end#setIsFullOrEmpty
+
 
 end#ProcessMainData

@@ -15,7 +15,7 @@ mainActiveCounterNow,mainActiveCounterNext - at first main queue will have only 
             call it the end and finish kernel       
 """
 module ScheduleBlocksHD
-using CUDA, Main.GPUutils, Logging,StaticArrays
+using CUDA, Main.CUDAGpuUtils, Logging,StaticArrays
 
 
 
@@ -39,9 +39,9 @@ function getLinearIndexFrom3d()::UInt32
     blockId = blockIdx().x + blockIdx().y * gridDim.x
     + gridDim().x * gridDim().y * blockIdx().z
 
-    return blockId * (blockDim().x * blockDim().y * blockDim().z)
-    + threadIdx().z * blockDim().x * blockDim().y
-    + threadIdx().y * blockDim().x + threadIdx().x
+    return blockId * (blockDimX() * blockDimY() * blockDimZ())
+    + threadIdxZ() * blockDimX() * blockDimY()
+    + threadIdxY() * blockDimX() + threadIdxX()
 end
 
 

@@ -6,7 +6,7 @@ using synergism described by Taha et al. this will enable later fast calculation
 module TpfpfnKernel
 export getTpfpfnData
 
-using CUDA, Main.GPUutils, Logging,StaticArrays
+using CUDA, Main.CUDAGpuUtils, Logging,StaticArrays
 
 
 
@@ -81,12 +81,12 @@ function getBlockTpFpFn(goldBoolGPU
         ,IndexesArray
 ) where T
     # we multiply thread id as we are covering now 2 places using one lane - hence after all lanes gone through we will cover 2 blocks - hence second multiply    
-    i = threadIdx().x+(pixelNumberPerSlice*(blockIdx().x-1))
+    i = threadIdxX()+(pixelNumberPerSlice*(blockIdx().x-1))
     
-    #i = correctedIdx + ((blockIdx().x - 1) *indexCorr) * (blockDim().x)# used as a basis to get data we want from global memory
-   wid, lane = getWidAndLane(threadIdx().x)
+    #i = correctedIdx + ((blockIdx().x - 1) *indexCorr) * (blockDimX())# used as a basis to get data we want from global memory
+   wid, lane = getWidAndLane(threadIdxX())
 #creates shared memory and initializes it to 0
-   shmemSum = createAndInitializeShmem(wid,threadIdx().x,amountOfWarps,lane)
+   shmemSum = createAndInitializeShmem(wid,threadIdxX(),amountOfWarps,lane)
 # incrementing appropriate number of times 
    
     #locArr::Tuple{Int16, Int16, Int16}= (Int16(0),Int16(0),Int16(0))
@@ -94,7 +94,7 @@ function getBlockTpFpFn(goldBoolGPU
     locArr= zeros(MVector{3,UInt16})
     
     @unroll for k in UInt16(0):loopNumb
-        if(threadIdx().x+k*indexCorr <=pixelNumberPerSlice)           
+        if(threadIdxX()+k*indexCorr <=pixelNumberPerSlice)           
             incr_locArr(goldBoolGPU[i+k*32]==numberToLooFor,segmBoolGPU[i+k*32]==numberToLooFor,locArr,shmemSum,wid )
              #IndexesArray[i+k*indexCorr]=1
             #@inbounds @atomic tp[]+=1
@@ -234,10 +234,10 @@ end#TpfpfnKernel
 #     ,slicesPerBlockMatrix
 #     ,numberOfBlocks::Int64) where T
 # # we multiply thread id as we are covering now 2 places using one lane - hence after all lanes gone through we will cover 2 blocks - hence second multiply    
-# correctedIdx = (threadIdx().x-1)* indexCorr+1
+# correctedIdx = (threadIdxX()-1)* indexCorr+1
 # i= correctedIdx
-# #i = correctedIdx + ((blockIdx().x - 1) *indexCorr) * (blockDim().x)# used as a basis to get data we want from global memory
-# wid, lane = fldmod1(threadIdx().x,32)
+# #i = correctedIdx + ((blockIdx().x - 1) *indexCorr) * (blockDimX())# used as a basis to get data we want from global memory
+# wid, lane = fldmod1(threadIdxX(),32)
 # #creates shared memory and initializes it to 0
 # shmem,shmemSum = createAndInitializeShmem()
 # shmem[513,1]= numberToLooFor
@@ -246,16 +246,16 @@ end#TpfpfnKernel
 #     sliceNumb= slicesPerBlockMatrix[blockIdx().x,blockRef]
 #         if(sliceNumb>0)
 #             i = correctedIdx + (pixelNumberPerSlice*(sliceNumb-1))# used as a basis to get data we want from global memory
-#             setShmemTo0(wid,threadIdx().x,lane,shmem,shmemSum)           
+#             setShmemTo0(wid,threadIdxX(),lane,shmem,shmemSum)           
 #             # incrementing appropriate number of times 
         
 #         @unroll for k in 0:loopNumb
 #                 if(correctedIdx+k<=pixelNumberPerSlice)
-#                     incr_shmem(threadIdx().x,goldBoolGPU[i+k]==shmem[513,1],segmBoolGPU[i+k]==shmem[513,1],shmem)
+#                     incr_shmem(threadIdxX(),goldBoolGPU[i+k]==shmem[513,1],segmBoolGPU[i+k]==shmem[513,1],shmem)
 #                 end#if
 #             end#for   
 #         #reducing across the warp
-#         firstReduce(shmem,shmemSum,wid,threadIdx().x,lane,IndexesArray,i)
+#         firstReduce(shmem,shmemSum,wid,threadIdxX(),lane,IndexesArray,i)
         
         
 #         sync_threads()

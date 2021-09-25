@@ -17,7 +17,7 @@ Toexperiment
 
 """
 module FirstHouseDorffPass
-using CUDA, Main.GPUutils, Logging,StaticArrays
+using CUDA, Main.CUDAGpuUtils, Logging,StaticArrays
 
 """
 prepare first pass of Housedorff kernel run
@@ -131,7 +131,7 @@ function singleDataBlockPass(analyzedArr
                 ,mainWorkQueue
                 ,resArray )
             ############### execution
-            executeDataIterFirstPass(analyzedArr, refAray,iterationNumber,blockBeginingX,blockBeginingY,blockBeginingZ,isMaskFull,isMaskEmpty,resShmem,locArr)
+            executeDataIterFirstPass(analyzedArr, refAray,iterationNumber,blockBeginingX,blockBeginingY,blockBeginingZ,isMaskFull,isMaskEmpty,resShmem,locArr,resArray,mainQuesCounter)
             #for futher processing we need to have space in main shmem
             clearMainShmem(shmem)
             #now we need to deal with padding in shmem res
@@ -143,16 +143,3 @@ end#singleDataBlockPass
 
 end #FirstHouseDorffPass
 
-
-# """
-# creates shared memory and initializes it to 0
-# wid - the number of the warp in the block
-# """
-# function createAndInitializeShmem(datablockDim, threadIdX)
-#    shmemGold = @cuStaticSharedMem(Bool, (datablockDim,datablockDim,datablockDim))
-#    shmemSegm = @cuStaticSharedMem(Bool, (datablockDim,datablockDim,datablockDim))
-#    #in order to help with summing operations - so we will know wheather block is empty /full ...
-#    shmemSums = @cuStaticSharedMem(UInt8,datablockDim)
-#    shmemSums[threadIdX] =0
-# return (shmemGold,shmemSegm,shmemSums)
-# end#createAndInitializeShmem
