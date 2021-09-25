@@ -11,9 +11,9 @@ export    clearLocArr,clearMainShmem,clearPadding
 """
 clear main part of shared memory - padding will be cleared separately
 """
-function clearMainShmem(shmem,threadIdxX::UInt32,threadIdxY::UInt32)
+function clearMainShmem(shmem)
     @unroll for zIter in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
-        shmem[threadIdxX+1,threadIdxY+1,zIter+1]=0
+        shmem[threadIdxX()+1,threadIdxY()+1,zIter+1]=0
     end#for 
 end#clearMainShmem
 
@@ -30,17 +30,20 @@ end#clearMainShmem
 set padding planes to 0 
 """
 function clearPadding(shmem)
-    clearHalfOfPadding(shmem,1)
-    clearHalfOfPadding(shmem,34)
+    clearHalfOfPadding(shmem,UInt8(1))
+    clearHalfOfPadding(shmem,UInt8(34))
 end#clearPadding
 """
 helper for clearPadding
 """
 function clearHalfOfPadding(shmem,constantNumb::UInt8)
-    shmem[constantNumb,threadIdxX(), threadIdxY()]
-    shmem[threadIdxX(),constantNumb, threadIdxY()]
-    shmem[threadIdxX(),threadIdxY(), constantNumb]
+    shmem[constantNumb,threadIdxX()+1, threadIdxY()+1]=false
+    shmem[threadIdxX()+1,constantNumb, threadIdxY()+1]=false
+    shmem[threadIdxX()+1,threadIdxY()+1, constantNumb]=false
 end   
+
+
+
 
 
 end#HFUtils

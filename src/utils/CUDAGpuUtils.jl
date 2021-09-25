@@ -1,10 +1,44 @@
 module CUDAGpuUtils
 
 
-using CUDA
+using CUDA, StaticArrays
 
-export defineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc,reduce_warp_max,reduce_warp_min,reduce_warp_min,reduce_warp_or,reduce_warp_and,blockIdxZ,blockIdxY,blockIdxX,blockDimZ, blockDimY, blockDimX, threadIdxX, threadIdxY, threadIdxZ
-export @unroll
+export clearLocArrdefineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc,reduce_warp_max,reduce_warp_min,reduce_warp_min,reduce_warp_or,reduce_warp_and,blockIdxZ,blockIdxY,blockIdxX,blockDimZ, blockDimY, blockDimX, threadIdxX, threadIdxY, threadIdxZ
+export @unroll, @ifX, @ifY, @ifXY
+
+"""
+convinience macro that will execute only if it has given thread Id X
+"""
+macro ifX(x, ex)
+    return esc(:(if threadIdxX()==$x
+        $ex
+    end))
+
+end
+
+"""
+convinience macro that will execute only if it has given thread Id Y
+"""
+macro ifY(y, ex)
+    return esc(:(if threadIdxY()==$y 
+        $ex
+    end))
+
+end
+
+"""
+convinience macro that will execute only if it has given thread Id Y
+"""
+macro ifXY(x,y, ex)
+        return esc(:(if threadIdxY()==$y && threadIdxX()==$x
+            $ex
+        end))
+
+end
+
+
+
+
 
 """
 Type{maskNumb}  - type of the numbers hold in mask
@@ -292,6 +326,10 @@ function assignWorkToCooperativeBlocks(slicesNumb, numberOfBlocksPerMultprocesso
     zz = CuArray(sliceAssignMatrix)
    return (maxSlicesPerBlock, zz,numberOfBlocks)
 end #assignWorkToCooperativeBlocks
+
+
+####### profiling
+#   nv-nsight-cu-cli --mode=launch julia 
 
 
 
