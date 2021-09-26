@@ -4,7 +4,7 @@
 using  Test, Revise 
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\mainHouseDorffKernel\\HFUtils.jl")
-
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\GPUtestUtils.jl")
 using Main.HFUtils
 using Main.CUDAGpuUtils,Cthulhu,BenchmarkTools , CUDA, StaticArrays
 
@@ -91,21 +91,22 @@ end # clearLocArr
             resShmem[threadIdxX()+2,threadIdxY(),z ]=1
             resShmem[threadIdxX(),threadIdxY()+2,z ]=1
         end 
+        fillGlobalFromShmem(testArrInn,resShmem)
 
         # clearPadding(resShmem)
 
-        for z in 1:34   
-            testArrInn[threadIdxX(),threadIdxY(),z ]=resShmem[threadIdxX(),threadIdxY(),z ]
-            testArrInn[threadIdxX()+2,threadIdxY()+2,z ]=  resShmem[threadIdxX()+2,threadIdxY()+2,z ]
-            testArrInn[threadIdxX(),threadIdxY()+2,z ]=  resShmem[threadIdxX(),threadIdxY()+2,z ]
-            testArrInn[threadIdxX()+2,threadIdxY(),z ]=  resShmem[threadIdxX()+2,threadIdxY(),z ]
-        end    
+        # for z in 1:34   
+        #     testArrInn[threadIdxX(),threadIdxY(),z ]=resShmem[threadIdxX(),threadIdxY(),z ]
+        #     testArrInn[threadIdxX()+2,threadIdxY()+2,z ]=  resShmem[threadIdxX()+2,threadIdxY()+2,z ]
+        #     testArrInn[threadIdxX(),threadIdxY()+2,z ]=  resShmem[threadIdxX(),threadIdxY()+2,z ]
+        #     testArrInn[threadIdxX()+2,threadIdxY(),z ]=  resShmem[threadIdxX()+2,threadIdxY(),z ]
+        # end    
                 
         return
     end    
 
     @cuda threads=(32,32) blocks=1 testclearPadding(testArr) 
-    @test (length(testArr)-sum(testArr)) ==0
+    @test (length(testArr)-(sum(testArr)+(4*34)+(8*32)  )) ==0
 
 
 
@@ -125,21 +126,9 @@ sync_threads()
         clearPadding(resShmem)
         clearMainShmem(resShmem)
         sync_threads()
-        for z in 1:34   
-            testArrInn[threadIdxX()+1,threadIdxY()+1,z ]=resShmem[threadIdxX()+1,threadIdxY()+1,z ]
-            sync_threads()
-        end    
-        
-        for z in 1:32
-            testArrInn[threadIdxX()+1,threadIdxY()+2,z+1 ]=  resShmem[threadIdxX()+1,threadIdxY()+2,z+1 ]
-            sync_threads()
-            testArrInn[threadIdxX()+1,threadIdxY(),z+1 ]=  resShmem[threadIdxX()+1,threadIdxY()+2,z+1 ]
-            sync_threads()
-            testArrInn[threadIdxX()+2,threadIdxY()+1,z+1 ]=  resShmem[threadIdxX()+2,threadIdxY()+1,z+1 ]
-            sync_threads()
-            testArrInn[threadIdxX(),threadIdxY()+1,z+1 ]=  resShmem[threadIdxX(),threadIdxY()+1,z+1 ]
-            sync_threads()
-        end
+
+        fillGlobalFromShmem(testArrInn,resShmem)
+
         return
     end    
     @cuda threads=(32,32) blocks=1 testclearPadding(testArrB) 
@@ -152,3 +141,67 @@ end#clearPadding
 
 
 
+# macro addArguments(x, ex)
+#     return esc(:(if threadIdxX()==$x
+#         $ex
+#     end))
+
+# end
+
+
+# macro times3(ex)
+#     return _times3(ex)
+# end
+
+
+
+# function _times3(ex)
+#     # if ex.head == :call && ex.args[1] == :+
+#     #     ex.args[1] = :*
+#     # end   
+#     push!(ex.args,3)
+
+#     return ex
+# end
+
+
+# function addd(aa,bb)
+#     return aa+bb
+# end    
+
+# a = 2; b = 3
+
+# @times3 addd(a)
+
+
+# function outer(bb)
+#     aa=5
+#     addd(bb)
+# end
+
+# using MacroTools
+
+# ex = quote
+#     struct someStr
+#       x::Int
+#       y
+#     end
+#   end
+
+#   prettify(ex)
+
+
+#   @capture(ex, struct T_ fields__ end)
+#   T, fields
+
+
+#   exB = quote
+#     xi::Int = 2
+#     xiB::Int = 2
+#     xiC::Int = 2
+#     xiD::Int = 2
+#   end
+
+#   MacroTools.prewalk(x -> @show(x) isa Symbol ? x : x, exB);
+
+#   @capture(exB, Symbol__ )

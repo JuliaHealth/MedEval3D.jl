@@ -5,8 +5,8 @@ loads and do the main processing of data in arrays of intrest (padding of shmem 
 
 """
 module ProcessMainData
-
-export executeDataIterFirstPass,executeDataIterOtherPasses
+using  StaticArrays,Main.CUDAGpuUtils ,Main.HFUtils, CUDA
+export executeDataIterFirstPass,executeDataIterOtherPasses,processMaskData
 
 
 """
@@ -22,27 +22,41 @@ resArray- 3 dimensional array where we put results
 """
 function executeDataIterFirstPass(analyzedArr, refAray,blockBeginingX,blockBeginingY,blockBeginingZ,isMaskFull,isMaskEmpty,resShmem,locArr,resArray)
     @unroll for zIter in UInt16(1):32# most outer loop is responsible for z dimension
-        processMaskData( analyzedArr[x,y,z+zIter], zIter, resShmem,locArr)
+        local locBool = testArrInn[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
+        locArr|= locBool << zIter
+       processMaskData( locBool, zIter, resShmem)
+       CUDA.unsafe_free!(locBool)
     end#for 
     sync_threads() #we should have in resShmem what we need 
     @unroll for zIter in UInt16(1):32 # most outer loop is responsible for z dimension - importnant in this loop we ignore padding we will deal with it separately
-        validataDataFirstPass(locArr[32],resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1],resShmem,isMaskFull,isMaskEmpty,blockBeginingX,blockBeginingY,blockBeginingZ,analyzedArr, refAray,resArray,resArraysCounter)
+          local locBoolRegister = (locArr>>zIter & UInt32(1))==UInt32(1)
+          local locBoolShmem = resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1]
+        validataDataFirstPass(locBoolRegister,locBoolShmem,resShmem,isMaskFull,isMaskEmpty,blockBeginingX,blockBeginingY,blockBeginingZ,analyzedArr, refAray,resArray,resArraysCounter,zIter)
     end#for
 end#executeDataIter
 
-"""
-specializes executeDataIterFirstPass as it do not consider possibility of block being empty 
-"""
-function executeDataIterOtherPasses(analyzedArr, refAray,iterationNumber ,blockBeginingX,blockBeginingY,blockBeginingZ,isMaskFull,resShmem,locArr,resArray,resArraysCounter)
-    @unroll for zIter in UInt16(1):32# most outer loop is responsible for z dimension
-        processMaskData( analyzedArr[x,y,z+zIter], zIter, resShmem,locArr )
-    end#for 
-    sync_threads() #we should have in resShmem what we need 
-    @unroll for zIter in UInt16(1):32 # most outer loop is responsible for z dimension - importnant in this loop we ignore padding we will deal with it separately
-        validataData(locArr[32],resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1],32,resShmem,isMaskFull,isMaskEmpty,blockBeginingX,blockBeginingY,blockBeginingZ,analyzedArr, refAray,resArray,resArraysCounter)
-    end#for
-end#executeDataIter
+# """
+# specializes executeDataIterFirstPass as it do not consider possibility of block being empty 
+# """
+# function executeDataIterOtherPasses(analyzedArr, refAray,iterationNumber ,blockBeginingX,blockBeginingY,blockBeginingZ,isMaskFull,resShmem,locArr,resArray,resArraysCounter)
+#     @unroll for zIter in UInt16(1):32# most outer loop is responsible for z dimension
+#         local locBool = testArrInn[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
+#         locArr|= locBool << zIter
+#        processMaskData( locBool, zIter, resShmem)
+#        CUDA.unsafe_free!(locBool)
+#     end#for 
+#     sync_threads() #we should have in resShmem what we need 
+#     @unroll for zIter in UInt16(1):32 # most outer loop is responsible for z dimension - importnant in this loop we ignore padding we will deal with it separately
+#          local locBoolRegister = (locArr>>zIter & UInt32(1))==1
+#          local locBoolShmem = resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1]
+#          validataDataOtherPass(locBoolRegister,locBoolShmem,isMaskFull,isMaskEmpty,blockBeginingX,blockBeginingY,blockBeginingZ,analyzedArr, refAray,resArray,resArraysCounter)
+#        CUDA.unsafe_free!(locBool)
+        
+        
+#     end#for
+# end#executeDataIter
 
+#numb>>1 & UInt32(1)
 
 
 
@@ -54,24 +68,29 @@ uploaded data from shared memory in amask of intrest gets processed in this func
             - also we need to make sure that in corner cases we are getting to correct spot
 """
 function processMaskData(maskBool::Bool
-                         ,zIter::UInt16
+                         ,zIter::UInt8
                          ,resShmem
-                         ,locArr )
+                          ) #::CUDA.CuRefValue{Int32}
     # save it to registers - we will need it later
-    locArr[zIter]=maskBool
+    #locArr[zIter]=maskBool
     #now we are saving results evrywhere we are intrested in so around without diagonals (we use supremum norm instead of euclidean)
+    #locArr.x|= maskBool << zIter
     if(maskBool)
-        resShmem[threadIdxX()+1,threadIdxY()+1,zIter]=true #up
-        resShmem[threadIdxX()+1,threadIdxY()+1,zIter+2]=true #down
+        @inbounds resShmem[threadIdxX()+1,threadIdxY()+1,zIter]=true #up
+        @inbounds  resShmem[threadIdxX()+1,threadIdxY()+1,zIter+2]=true #down
     
-        resShmem[threadIdxX(),threadIdxY()+1,zIter+1]=true #left
-        resShmem[threadIdxX()+2,threadIdxY()+1,zIter+1]=true #right
+        @inbounds  resShmem[threadIdxX(),threadIdxY()+1,zIter+1]=true #left
+        @inbounds   resShmem[threadIdxX()+2,threadIdxY()+1,zIter+1]=true #right
 
-        resShmem[threadIdxX()+1,threadIdxY()+2,zIter+1]=true #front
-        resShmem[threadIdxX()+1,threadIdxY(),zIter+1]=true #back
+        @inbounds  resShmem[threadIdxX()+1,threadIdxY()+2,zIter+1]=true #front
+        @inbounds  resShmem[threadIdxX()+1,threadIdxY(),zIter+1]=true #back
     end#if    
-
 end#processMaskData
+
+function myIncreaseBitt(maskBool::Bool,zIter::UInt8, locArr::CUDA.CuRefValue{Int32} )::Bool
+    locArr.x|= maskBool << zIter
+    return true
+end    
 
 
 """
@@ -88,54 +107,56 @@ locVal - value from registers
 shmemVal - value associated with this thread from shared memory - where we marked neighbours ...
 resShmem - shared memory with our preliminary results
 isMaskFull, isMaskEmpty - register values needed to specify weather we have full or empty or neither block
-x,y,z - needed to access data from main data array in global memory
+blockBeginingX,blockBeginingY,blockBeginingZ - coordinates where our block is begining - will be used as offset by our threads
 masktoUpdate - mask that we analyzed and now we write to data about dilatation
 maskToCompare - the other mask that we need to check before we write to result array
-iterationNumber - in which iteration we are currently - the bigger it is the higher housedorfrf,,
-
+resArray 
         """
 function validataDataFirstPass(locVal::Bool
                     ,shmemVal::Bool
-                     ,resShmem
-                    ,isMaskFull::MVector{1, Bool}
-                    ,isMaskEmpty::MVector{1, Bool}
-                    ,x::UInt16
-                    ,y::UInt16
-                    ,z::UInt16
+                    ,isMaskFull#::CUDA.CuRefValue{Bool}
+                    ,isMaskEmpty#::CUDA.CuRefValue{Bool}
+                    ,blockBeginingX::UInt8
+                    ,blockBeginingY::UInt8
+                    ,blockBeginingZ::UInt8
                     ,maskToCompare
                     ,masktoUpdate
                     ,resArray
-                    ,resArraysCounter)
+                    ,resArraysCounter
+                    ,zIter::UInt8)::Bool
     #when this one and previous is true it will still be true
-    setIsFullOrEmpty!((locVal | shmemVal),isMaskFull,isMaskEmpty  )
+    locValOrShmem = (locVal | shmemVal)
+    isMaskFull.x= locValOrShmem & isMaskFull.x
+    isMaskEmpty.x = ~locValOrShmem & isMaskEmpty.x
+
   if(!locVal && shmemVal)
     # setting value in global memory
-    masktoUpdate[x,y,z+32]= true
+    @inbounds  masktoUpdate[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]= true
     # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
-    if(maskToCompare[x,y,z+32])
-       resArray[x,y,z+32]=UInt16(1)
-       CUDA.atomic_inc!(pointer(resArraysCounter), UInt16(1))
+    if(maskToCompare[@inbounds  (blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)])
+        @inbounds  resArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]=UInt16(1)
+       
+       atomicallyAddOneUint32(resArraysCounter)
     end#if
   end#if
-
+return true
 end
 
 """
 specializes validataDataFirstPass ignoring case of potentially empty mask
+iterationNumber - in which iteration we are currently - the bigger it is the higher housedorfrf,,
+
 """
 function validataDataOtherPass(locVal::Bool
                                 ,shmemVal::Bool
-                                ,resShmem
-                                ,isMaskFull::MVector{1, Bool}
                                 ,isMaskEmpty::MVector{1, Bool}
-                                ,x::UInt16
-                                ,y::UInt16
-                                ,z::UInt16
+                                ,blockBeginingX,blockBeginingY,blockBeginingZ
                                 ,maskToCompare
                                 ,masktoUpdate
                                 ,resArray
                                 ,iterationNumber::UInt16
-                                ,resArraysCounter)
+                                ,resArraysCounter
+                                ,zIter)
     #when this one and previous is true it will still be true
     setIsFull!((locVal | shmemVal),isMaskEmpty  )
     if(!locVal && shmemVal)
@@ -153,18 +174,6 @@ end
 
 
 
-"""
-set the isMaskFull and isMaskEmpty
-locVal - value of the voxel from registry (what was loaded from globl memory and not modified)
-shmemVal - what was loaded in shared memory - so after dilatation
-yet we pass into locValOrShmem (locVal | shmemVal)
-"""
-function setIsFullOrEmpty!(locValOrShmem::Bool
-                        ,isMaskFull::MVector{1, Bool}
-                        ,isMaskEmpty::MVector{1, Bool} )
-    isMaskFull[1]= locValOrShmem & isMaskFull[1]
-    isMaskEmpty[1] = ~locValOrShmem & isMaskEmpty[1]
-end#setIsFullOrEmpty
 
 
 function setIsFull!(locValOrShmem::Bool
