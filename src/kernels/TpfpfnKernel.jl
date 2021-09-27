@@ -7,7 +7,7 @@ module TpfpfnKernel
 export getTpfpfnData
 
 using CUDA, Main.CUDAGpuUtils, Logging,StaticArrays
-
+using Main.MainOverlap, Main.RandIndex, Main.ProbabilisticMetrics, Main.VolumeMetric, Main.InformationTheorhetic
 
 
 """
@@ -19,41 +19,29 @@ tp,tn,fp,fn - holding single values for true positive, true negative, false posi
 intermediateResTp, intermediateResFp, intermediateResFn - arrays holding slice wise results for true positive ...
 threadNumPerBlock = threadNumber per block defoult is 512
 numberToLooFor - num
-IMPORTANT - in the ned of the goldBoolGPU and segmBoolGPU one need  to add some  additional number of 0=falses - number needs to be the same as indexCorr
-IMPORTANT - currently block sizes of 512 are supported only
+conf- adapted ConfigurtationStruct - used to pass information what metrics should be
+
 """
 function getTpfpfnData!(goldBoolGPU
     , segmBoolGPU
     ,tp,tn,fp,fn
-    ,intermediateResTp
-    ,intermediateResFp
-    ,intermediateResFn
+    ,sliceMetricsTupl
     ,pixelNumberPerSlice::Int64
     ,numberOfSlices::Int64
     ,numberToLooFor::T
-    ,IndexesArray
-    ,threadNumPerBlock::Int64 = 512) where T
+    ,conf) where T
 
-
- 
-
-loopNumb, indexCorr = getKernelContants(threadNumPerBlock,pixelNumberPerSlice)
-args = (goldBoolGPU
+args = ( goldBoolGPU
         ,segmBoolGPU
+        ,sliceMetricsTupl
         ,tp,tn,fp,fn
-        ,intermediateResTp
-        ,intermediateResFp
-        ,intermediateResFn
-        ,loopNumb
-        ,indexCorr
-        ,Int64(round(threadNumPerBlock/32))
+        ,cld(pixelNumberPerSlice,1024)
         ,pixelNumberPerSlice
         ,numberToLooFor
-        ,IndexesArray
-)
+        ,conf )
 #getMaxBlocksPerMultiproc(args, getBlockTpFpFn) -- evaluates to 3
 
-@cuda threads=threadNumPerBlock blocks=numberOfSlices getBlockTpFpFn(args...) 
+@cuda threads=(32,32) blocks=numberOfSlices getBlockTpFpFn(args...) 
 return args
 end#getTpfpfnData
 
@@ -62,58 +50,114 @@ adapted from https://github.com/JuliaGPU/CUDA.jl/blob/afe81794038dddbda49639c8c2
 goldBoolGPU - array holding data of gold standard bollean array
 segmBoolGPU - boolean array with the data we want to compare with gold standard
 tp,tn,fp,fn - holding single values for true positive, true negative, false positive and false negative
-intermediateResTp, intermediateResFp, intermediateResFn - arrays holding slice wie results for true positive ...
+sliceMetricsTupl - tuple of arrays holding slice wise results for tp,fp,fn and all metrics of intrest - in case we would not be intrested in some metric tuple in this spot will have the array of length 1
 loopNumb - number of times the single lane needs to loop in order to get all needed data
 sliceEdgeLength - length of edge of the slice we need to square this number to get number of pixels in a slice
 amountOfWarps - how many warps we can stick in the vlock
+conf- adapted ConfigurtationStruct - used to pass information what metrics should be
 """
-function getBlockTpFpFn(goldBoolGPU
-        , segmBoolGPU
-        ,tp,tn,fp,fn
-        ,intermediateResTp
-        ,intermediateResFp
-        ,intermediateResFn
-        ,loopNumb::UInt16
-        ,indexCorr::Int64
-        ,amountOfWarps::Int64
-        ,pixelNumberPerSlice::Int64
-        ,numberToLooFor::T
-        ,IndexesArray
-) where T
+function getBlockTpFpFn(goldBoolGPU#goldBoolGPU
+        , segmBoolGPU#segmBoolGPU
+        ,sliceMetricsTupl
+        ,tp,tn,fp,fn#tp,tn,fp,fn
+        ,loopNumb#loopNumb
+        ,pixelNumberPerSlice#pixelNumberPerSlice
+        ,numberToLooFor#numberToLooFor
+        ,conf)
     # we multiply thread id as we are covering now 2 places using one lane - hence after all lanes gone through we will cover 2 blocks - hence second multiply    
-    i = threadIdxX()+(pixelNumberPerSlice*(blockIdx().x-1))
+    offset = (pixelNumberPerSlice*(blockIdx().y-1))
     
-    #i = correctedIdx + ((blockIdx().x - 1) *indexCorr) * (blockDimX())# used as a basis to get data we want from global memory
-   wid, lane = getWidAndLane(threadIdxX())
 #creates shared memory and initializes it to 0
-   shmemSum = createAndInitializeShmem(wid,threadIdxX(),amountOfWarps,lane)
+   shmemSum = createAndInitializeShmem(threadIdxX(),threadIdxY())
 # incrementing appropriate number of times 
-   
-    #locArr::Tuple{Int16, Int16, Int16}= (Int16(0),Int16(0),Int16(0))
-
     locArr= zeros(MVector{3,UInt16})
-    
+
     @unroll for k in UInt16(0):loopNumb
-        if(threadIdxX()+k*indexCorr <=pixelNumberPerSlice)           
-            incr_locArr(goldBoolGPU[i+k*32]==numberToLooFor,segmBoolGPU[i+k*32]==numberToLooFor,locArr,shmemSum,wid )
-             #IndexesArray[i+k*indexCorr]=1
-            #@inbounds @atomic tp[]+=1
-            end#if 
+        if(threadIdxX()+(threadIdxY()-1)*32+k*1024 <=pixelNumberPerSlice)
+           ind =offset+ threadIdxX()+(threadIdxY()-1)*32+k*1024
+           boolGold = goldBoolGPU[ind]==numberToLooFor  
+           boolSegm = segmBoolGPU[ind]==numberToLooFor      
+           @inbounds locArr[ (boolGold & boolSegm + boolSegm +1) ]+=(boolGold | boolSegm)
+        end#if 
+    end#for
 
-        end#for
-
-    @inbounds shmemSum[wid,1] = reduce_warp(locArr[0],32)
-    @inbounds shmemSum[wid,2] = reduce_warp(locArr[1],32)
-    @inbounds shmemSum[wid,3] = reduce_warp(locArr[2],32)
+   offset = UInt16(1)
+    while(offset <32) 
+      locArr[3]+=shfl_down_sync(FULL_MASK, locArr[3], offset)  
+      locArr[2]+=shfl_down_sync(FULL_MASK, locArr[2], offset)  
+      locArr[1]+=shfl_down_sync(FULL_MASK, locArr[1], offset)  
+        offset<<= 1
+    end
+    #shmemSum[threadIdxX(),3]+=locArr[3]
+    if(threadIdxX()==1)
+      shmemSum[threadIdxY(),3]+=locArr[3]
+      shmemSum[threadIdxY(),2]+=locArr[2]
+      shmemSum[threadIdxY(),1]+=locArr[1]
+    end
 
     sync_threads()
-    #now all data about of intrest should be in  shared memory so we will get all rsults from warp reduction in the shared memory 
-    getSecondBlockReduce( 1,3,wid,intermediateResTp,tp,shmemSum,blockIdx().x,lane)
-    getSecondBlockReduce( 2,2,wid,intermediateResFp,fp,shmemSum,blockIdx().x,lane)
-    getSecondBlockReduce( 3,1,wid,intermediateResFn,fn,shmemSum,blockIdx().x,lane)
+    if(threadIdxY()==1)
+      offsetB = UInt16(1)
+      while(offsetB <32) 
+        shmemSum[threadIdxX(),3]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),3], offsetB)  
+        shmemSum[threadIdxX(),2]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),2], offsetB)  
+        shmemSum[threadIdxX(),1]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),1], offsetB)  
+        offsetB<<= 1
+      end
+    end  
+#now we have needed values in  shmemSum[1,2] shmemSum[1,3] and shmemSum[1,1]
+sync_threads()
+
+#no point in calculating anything if we have 0 
+if((shmemSum[1,3] + shmemSum[1,2] +shmemSum[1,1] >0))
+  @ifXY 1 1  @inbounds @atomic tp[]+= shmemSum[1,3]
+  @ifXY 1 2  @inbounds @atomic fp[]+= shmemSum[1,2]
+  @ifXY 1 3  @inbounds @atomic fn[]+= shmemSum[1,1]
+#calculated if we are intrewested in given slice wise metrics
+  if(conf.sliceWiseMatrics)
+    @ifXY 1 4  @inbounds sliceMetricsTupl[1][blockIdxX()]=shmemSum[1,3]
+    @ifXY 1 5  @inbounds sliceMetricsTupl[2][blockIdxX()]=shmemSum[1,2]
+    @ifXY 1 6  @inbounds sliceMetricsTupl[3][blockIdxX()]=shmemSum[1,1]
+    
+    getMetrics(shmemSum[1,3], shmemSum[1,2], shmemSum[1,1] , pixelNumberPerSlice-(shmemSum[1,3] + shmemSum[1,2] +shmemSum[1,1]) ,sliceMetricsTupl,conf )
+
+  end#if
+end#if
 
    return  
    end
+
+"""
+loading data into results
+sliceMetricsTupl
+   1) true positives
+   2) false positives
+   3) flse negatives
+   4) dice
+   5) jaccard
+   6) gce
+   7) randInd
+   8) cohen kappa
+   9) volume metric
+   10) mutual information
+   11) variation of information
+"""
+function getMetrics(tp,fp, fn,tn,sliceMetricsTupl,conf  )
+@ifXY 1 7 if (conf.dice ) @inbounds sliceMetricsTupl[4][blockIdxX()]=   MainOverlap.dice(tp,fp, fn) end 
+@ifXY 1 8  if (conf.jaccard ) @inbounds sliceMetricsTupl[5][blockIdxX()]= MainOverlap.jaccard(tp,fp, fn) end 
+@ifXY 1 9  if (conf.gce ) @inbounds sliceMetricsTupl[6][blockIdxX()]= MainOverlap.gce(tn,tp,fp, fn) end 
+#@ifXY 1 10 if (conf.randInd ) @inbounds sliceMetricsTupl[7][blockIdxX()]=  RandIndex.calculateAdjustedRandIndex(tn,tp,fp, fn) end 
+#@ifXY 1 11 if (conf.kc ) @inbounds sliceMetricsTupl[8][blockIdxX()]=  ProbabilisticMetrics.calculateCohenCappa(tn,tp,fp, fn  ) end 
+# @ifXY 1 12  if (conf.vol ) @inbounds sliceMetricsTupl[9][blockIdxX()]= VolumeMetric.getVolumMetric(tp,fp, fn ) end 
+# @ifXY 1 13 if (conf.mi ) @inbounds sliceMetricsTupl[10][blockIdxX()]=   InformationTheorhetic.mutualInformationMetr(tn,tp,fp, fn) end 
+#@ifXY 1 14 if (conf.vi ) @inbounds sliceMetricsTupl[11][blockIdxX()]=  InformationTheorhetic.variationOfInformation(tn,tp,fp, fn) end 
+
+end
+
+
+
+
+
 
 """
 add value to the shared memory in the position i, x where x is 1 ,2 or 3 and is calculated as described below
@@ -123,11 +167,9 @@ boolGold & boolSegm + boolGold +1 will evaluate to
     1 in case of false negative
 """
 @inline function incr_locArr(boolGold::Bool,boolSegm::Bool,locArr::MVector{3, UInt16} ,shmemSum,wid)
-  #  z::Int8 =  (boolGold & boolSegm + boolSegm )
-  #  locArr[2]+=1
-  @inbounds locArr[ (boolGold & boolSegm + boolSegm ) ]+=(boolGold | boolSegm)
-   #@inbounds locArr[ (boolGold & boolSegm + boolSegm ) ]+=(boolGold | boolSegm) 
-   
+
+  @inbounds locArr[ (boolGold & boolSegm + boolSegm +1) ]+=(boolGold | boolSegm)
+  
     return true
 end
 """
@@ -141,7 +183,7 @@ end
 creates shared memory and initializes it to 0
 wid - the number of the warp in the block
 """
-function createAndInitializeShmem(wid, threadId,amountOfWarps,lane)
+function createAndInitializeShmem(wid,lane)
    #for storing results from warp reductions
    shmemSum = @cuStaticSharedMem(UInt16, (33,3))
 
@@ -163,14 +205,10 @@ end#createAndInitializeShmem
 """
 reduction across the warp and adding to appropriate spots in the  shared memory
 """
-function firstReduce(shmem,shmemSum,wid,threadIdx,lane,IndexesArray,i   )
-    @inbounds shmemSum[wid,1] = reduce_warp(shmem[threadIdx,1],32)
-    @inbounds shmemSum[wid,2] = reduce_warp(shmem[threadIdx,2],32)
-    @inbounds shmemSum[wid,3] = reduce_warp(shmem[threadIdx,3],32)
-
-
-
-
+function firstReduce(shmemSum ,locArr)
+    @inbounds shmemSum[threadIdxX(),1] = reduce_warp(locArr[1],32)
+    @inbounds shmemSum[threadIdxX(),2] = reduce_warp(locArr[2],32)
+    @inbounds shmemSum[threadIdxX(),3] = reduce_warp(locArr[3],32)
 end#firstReduce
 
 """
@@ -185,10 +223,10 @@ shmemSum - shared memory where we get the  results to be reduced now and to whic
 blockId - number related to block we are currently in 
 lane - the lane in the warp
 """
-function getSecondBlockReduce(chosenWid,numb,wid, intermediateRes,singleREs,shmemSum,blockId,lane)
+function getSecondBlockReduce(chosenWid,numb,wid, intermediateRes,singleREs,shmemSum,blockId,lane,IndexesArray)
     if(wid==chosenWid )
-        shmemSum[33,numb] = reduce_warp(shmemSum[lane,numb],32 )
-        
+      IndexesArray[blockId+lane]=shmemSum[lane,numb]
+      shmemSum[33,numb] = reduce_warp(shmemSum[lane,numb],32 )
       #probably we do not need to sync warp as shfl dow do it for us         
       if(lane==1)
         @inbounds @atomic singleREs[]+=shmemSum[33,numb]

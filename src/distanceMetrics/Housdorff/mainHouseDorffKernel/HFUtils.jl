@@ -3,8 +3,8 @@
 utility functions for Housedorff kernel
 """
 module HFUtils
-using CUDA, Main.CUDAGpuUtils, Logging,StaticArrays
-
+using Main.CUDAGpuUtils, Logging,StaticArrays
+ using CUDA, Main.BasicStructs, Logging
 export    clearLocArr,clearMainShmem,clearPadding
 
 
@@ -43,8 +43,60 @@ function clearHalfOfPadding(shmem,constantNumb::UInt8)
 end   
 
 
+"""
+this macro will be used to 
+    - decide wheather the part of the code will be executed at all - in order to avoid branching at runtime
+    - select at compile time appropriate target for the statement (generally the global memory array )
+    - all will be based on the  ConfigurtationStruct struct - conf
+    entryName - will tell us what particularly we should look for in the conf
+    if the entry of name entryName in conf will be true  we will return expression otherwise we will return nothing
+    we will
+    metricsArr - will be used from caller scope - and it is an array in global memory that will be      
+"""
+macro isInConf(conf, entryName, ex)
+    
+    index = 0
+    if(conf.sliceWiseMatrics)
+        index=3# 3 becouse one will be added in a moment
+    end    
+    # we look for the all of the properties that are true - we need to also remember that in case of sliceWiseMatrics - it will mark that we need 4 arrays
+    for i in propertynames(eval(conf))
+        if getproperty(conf, i)
+            index+=1
+        end#if
+        if i == Symbol(entryName)
+            break
+        end        
+    end#for   
 
+    if getproperty(conf, Symbol(entryName))
 
+    return esc(quote   
+    
+        @inbounds metricsArr[$index]  = $ex # @inbounds fp[]+= 
+   
+    end#quote
+    )
+end#if
+    
+
+end
+
+bb= (zeros(5),"aa")
+bb[1][1] = 1.0
+
+con = ConfigurtationStruct(sliceWiseMatrics=true,dice=true,jaccard=true)
+
+metricsArr = zeros(10,10,10);
+using CUDA, Main.BasicStructs
+
+@isInConf con "jaccard" "I am here" 
+
+length(propertynames(con))
+
+propertynames(con)[2]==Symbol("dice")
+
+false ? println("aa") : "bb";
 
 end#HFUtils
 

@@ -199,11 +199,13 @@ end
 Reduce a value across a warp and sum
 """
 @inline function reduce_warp( vall::T, lanesNumb) where T
+        
     offset = UInt16(1)
     while(offset <lanesNumb) 
         vall+=shfl_down_sync(FULL_MASK, vall, offset)  
         offset<<= 1
     end
+
     return vall
 end
 

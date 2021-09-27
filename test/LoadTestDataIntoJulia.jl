@@ -3,6 +3,7 @@
 using Revise, Parameters, Logging
 using CUDA
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernels\\TpfpfnKernel.jl")
 
@@ -104,14 +105,17 @@ sizz= size(goldS)
 goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools();
 IndexesArray= CUDA.zeros(Int32,10000000)
 #TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn,sizz[1],sizz[1]*sizz[2],1,UInt8(1),IndexesArray)
-
-
-
+using Main.BasicStructs
+conf = ConfigurtationStruct(trues(12)...)
+sliceMetricsTupl=(CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3])
+                            ,CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3])
+                            ,CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]) )#eleven entries
 argsB = TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn
-                            , intermediateResTp,intermediateResFp
-                            ,intermediateResFn,sizz[1]*sizz[2],sizz[3]
+                            ,sliceMetricsTupl
+                            ,sizz[1]*sizz[2]
+                            ,sizz[3]
                             ,UInt8(1)
-                            ,IndexesArray)
+                            ,conf)
 tp[1]
 
 BenchmarkTools.DEFAULT_PARAMETERS.samples = 100
@@ -156,7 +160,7 @@ pixelNumberPerSlice-512*77
 # Subject_2  GREYMATTER   0.298  10.863     74392.000   0.298
 # Subject_2  WHITEMATTER  0.654  6.000      206422.000  0.654
 
-tpTotalTrue = filter(pair->pair[2]== vec(goldS)[pair[1]] ==1 ,collect(enumerate(vec(segmAlgo))))|>length
+#tpTotalTrue = filter(pair->pair[2]== vec(goldS)[pair[1]] ==1 ,collect(enumerate(vec(segmAlgo))))|>length
 
 
 arrOnesA = CUDA.ones(sizz);
@@ -165,25 +169,27 @@ arrOnesB = CUDA.ones(sizz);
 goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools();
 IndexesArray= CUDA.zeros(Int32,10000000)
 
-TpfpfnKernel.getTpfpfnData!(arrOnesA,arrOnesB,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn,sizz[1]*sizz[2],sizz[3],Float32(1),IndexesArray,1024)
-sum(IndexesArray)
+TpfpfnKernel.getTpfpfnData!(arrOnesA,arrOnesB,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn,sizz[1]*sizz[2],sizz[3],Float32(1),IndexesArray)
+# sum(IndexesArray)
 tp[1]
-length(arrOnesA) -sum(IndexesArray)
-length(arrOnesA) - tp[1]
+tp[1] -length(arrOnesA)
+# length(arrOnesA) -sum(IndexesArray)
+#length(arrOnesA) - tp[1]
 
 
-tp
-fp
-fn
-tn
+tp = 5
+fp = 5
+fn = 5
+tn = 5
 
 
+using Main.RandIndex
 
 MainOverlap.dice(tp,fp, fn)
 MainOverlap.jaccard(tp,fp, fn)
-MainOverlap.gce(tp,fp, fn)
+MainOverlap.gce(tn,tp,fp, fn)
 RandIndex.calculateAdjustedRandIndex(tn,tp,fp, fn)
-ProbabilisticMetrics.calculateCohenCappa(tp,fp, fn )
+ProbabilisticMetrics.calculateCohenCappa(tn,tp,fp, fn )
 VolumeMetric.getVolumMetric(tp,fp, fn )
 InformationTheorhetic.mutualInformationMetr(tn,tp,fp, fn)
 InformationTheorhetic.variationOfInformation(tn,tp,fp, fn)
@@ -195,5 +201,5 @@ InformationTheorhetic.variationOfInformation(tn,tp,fp, fn)
 
 
 
-
 end #module
+
