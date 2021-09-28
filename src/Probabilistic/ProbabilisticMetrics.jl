@@ -1,9 +1,7 @@
 
-using DrWatson
-@quickactivate "Medical segmentation evaluation"
-
 module ProbabilisticMetrics
 using Main.BasicStructs, Parameters, Setfield
+ export calculateCohenCappa
 
 # """
 # calculate  probabilistic metrics - Intercalss Correlation and Cohen cappa  based on precalulated constants
@@ -73,7 +71,7 @@ function calculateCohenCappa(tn,tp,fp, fn ) ::Float64
     chance_1 = (fp+tp)*(fn+tp) 
     chance = chance_0 + chance_1 
     sum = (tn + fn + fp + tp) 
-    chance = chance/sum 
+    chance::Float32 = chance/sum 
     return (agreement - chance)/(sum - chance) 
 end #calculateVolumeMetric
 

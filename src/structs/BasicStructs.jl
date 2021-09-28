@@ -24,7 +24,7 @@ configuration struct that when passed will marks what kind of metrics we are int
     vol::Bool = false# Volume metric
     randInd::Bool= false # Rand Index 
     ic::Bool= false # interclass correlation
-    Kc::Bool= false # Kohen Cappa
+    kc::Bool= false # Kohen Cappa
     mi::Bool= false # mutual information
     vi::Bool= false # variation Of Information
     md::Bool= false # mahalanobis distance

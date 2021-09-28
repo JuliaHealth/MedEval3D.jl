@@ -1,5 +1,4 @@
-using DrWatson
-@quickactivate "Medical segmentation evaluation"
+
 """
 based on  https://github.com/Visceral-Project/EvaluateSegmentation/blob/master/source/VolumeSimilarityCoefficient.h
 

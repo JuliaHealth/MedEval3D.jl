@@ -109,7 +109,7 @@ function getBlockTpFpFn(goldBoolGPU#goldBoolGPU
 sync_threads()
 
 #no point in calculating anything if we have 0 
-if((shmemSum[1,3] + shmemSum[1,2] +shmemSum[1,1] >0))
+if((shmemSum[1,3] + shmemSum[1,2] +shmemSum[1,1]) >0)
   @ifXY 1 1  @inbounds @atomic tp[]+= shmemSum[1,3]
   @ifXY 1 2  @inbounds @atomic fp[]+= shmemSum[1,2]
   @ifXY 1 3  @inbounds @atomic fn[]+= shmemSum[1,1]
@@ -146,11 +146,11 @@ function getMetrics(tp,fp, fn,tn,sliceMetricsTupl,conf  )
 @ifXY 1 7 if (conf.dice ) @inbounds sliceMetricsTupl[4][blockIdxX()]=   MainOverlap.dice(tp,fp, fn) end 
 @ifXY 1 8  if (conf.jaccard ) @inbounds sliceMetricsTupl[5][blockIdxX()]= MainOverlap.jaccard(tp,fp, fn) end 
 @ifXY 1 9  if (conf.gce ) @inbounds sliceMetricsTupl[6][blockIdxX()]= MainOverlap.gce(tn,tp,fp, fn) end 
-#@ifXY 1 10 if (conf.randInd ) @inbounds sliceMetricsTupl[7][blockIdxX()]=  RandIndex.calculateAdjustedRandIndex(tn,tp,fp, fn) end 
-#@ifXY 1 11 if (conf.kc ) @inbounds sliceMetricsTupl[8][blockIdxX()]=  ProbabilisticMetrics.calculateCohenCappa(tn,tp,fp, fn  ) end 
-# @ifXY 1 12  if (conf.vol ) @inbounds sliceMetricsTupl[9][blockIdxX()]= VolumeMetric.getVolumMetric(tp,fp, fn ) end 
-# @ifXY 1 13 if (conf.mi ) @inbounds sliceMetricsTupl[10][blockIdxX()]=   InformationTheorhetic.mutualInformationMetr(tn,tp,fp, fn) end 
-#@ifXY 1 14 if (conf.vi ) @inbounds sliceMetricsTupl[11][blockIdxX()]=  InformationTheorhetic.variationOfInformation(tn,tp,fp, fn) end 
+@ifXY 1 10 if (conf.randInd ) @inbounds sliceMetricsTupl[7][blockIdxX()]=  RandIndex.calculateAdjustedRandIndex(tn,tp,fp, fn) end 
+@ifXY 1 11 if (conf.kc ) @inbounds sliceMetricsTupl[8][blockIdxX()]=  ProbabilisticMetrics.calculateCohenCappa(tn,tp,fp, fn  ) end 
+@ifXY 1 12  if (conf.vol ) @inbounds sliceMetricsTupl[9][blockIdxX()]= VolumeMetric.getVolumMetric(tp,fp, fn ) end 
+@ifXY 1 13 if (conf.mi ) @inbounds sliceMetricsTupl[10][blockIdxX()]=   InformationTheorhetic.mutualInformationMetr(tn,tp,fp, fn) end 
+@ifXY 1 14 if (conf.vi ) @inbounds sliceMetricsTupl[11][blockIdxX()]=  InformationTheorhetic.variationOfInformation(tn,tp,fp, fn) end 
 
 end
 
