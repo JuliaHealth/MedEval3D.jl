@@ -66,7 +66,6 @@ function getDataAndEvaluationFromPymia(examplemhaDat)
     labels = Dict([(1,"WHITEMATTER"),(2,"GREYMATTER") ])
     
     metrics = [pymMetr.DiceCoefficient()
-                , pymMetr.DiceCoefficient()
                 , pymMetr.JaccardCoefficient()
                 , pymMetr.GlobalConsistencyError()
                 , pymMetr.AdjustedRandIndex()
@@ -80,6 +79,14 @@ function getDataAndEvaluationFromPymia(examplemhaDat)
                 ,pymMetr.FalsePositive()   
                 
                 ]
+    # metrics = [pymMetr.DiceCoefficient()
+
+    #             ,pymMetr.TruePositive()   
+    #             ,pymMetr.TrueNegative()   
+    #             ,pymMetr.FalsePositive()   
+    #             ,pymMetr.FalseNegative()   
+                
+    #             ]
     evaluator = pymEval.SegmentationEvaluator(metrics, labels)
     
     evaluator.evaluate(prediction, ground_truth, examplemhaDat[1])
@@ -102,6 +109,8 @@ arrGold = CuArray(vec(goldS))
 arrAlgo = CuArray(vec(segmAlgo))
 sizz= size(goldS)
 
+maximum(arrAlgo)
+
 
 goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools();
 IndexesArray= CUDA.zeros(Int32,10000000)
@@ -111,14 +120,25 @@ conf = ConfigurtationStruct(trues(12)...)
 sliceMetricsTupl=(CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3])
                             ,CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3])
                             ,CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]) )#eleven entries
+
+metricsTuplGlobal=  (CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1)
+,CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1)
+,CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1) )#eleven entries
+
+totalNumberOfVoxels=sizz[1]*sizz[2]*sizz[3]
+
 argsB = TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn
                             ,sliceMetricsTupl
+                            ,metricsTuplGlobal
                             ,sizz[1]*sizz[2]
                             ,sizz[3]
                             ,UInt8(1)
-                            ,conf)
-tp[1]
-
+                            ,conf
+                            ,totalNumberOfVoxels)
+tp[1]==206422
+#tn[1]==6684530
+fp[1]==0
+fn[1]==218185
 BenchmarkTools.DEFAULT_PARAMETERS.samples = 100
 BenchmarkTools.DEFAULT_PARAMETERS.seconds =60
 BenchmarkTools.DEFAULT_PARAMETERS.gcsample = true
@@ -182,6 +202,8 @@ tp = 5
 fp = 5
 fn = 5
 tn = 5
+
+getGlobalMetricsKernel(5,5,5,100,metricsTuplGlobal,conf )
 
 
 using Main.RandIndex
