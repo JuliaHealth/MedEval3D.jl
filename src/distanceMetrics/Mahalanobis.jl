@@ -8,14 +8,35 @@ calculates Mahalanobis distance between two segmentations
 		all of blocks will accumulate sum of elements  and count, it will also add point coordinates (x,y,z) to shared memory queue - if shared memory queue will
 		get filled to its capacity we will update the main global sparse matrix representation using atomics to update the counter
 		- summation will be done as ussual using first accumulation in private variables than summation across 
-2) sow we should have 3 sums (of x,y and z coordinates) and their count and a 3 column table with all x,y,z coordinates of the non empty entries		
-	- we will have this data for both 
+2) so we should have 3 sums (of x,y and z coordinates) and their count and a 3 column table with all x,y,z coordinates of the non empty entries		
+	- we will have this data for both  arrays - representing gold standard and other segmentation
+	now we need to calculate covariance matriscies of each point using global means and accumulate (add) all of those matricies
+	We will use WMMA to speed things up - and in order to utilize WMMA constraints we will write calculation of covariance matrix in 
+	matrix multiplication notation look into https://docs.google.com/document/d/1G5FqjRj7WrDs4LWtBH667_orA8HzGa_JtTQ5Yb8vu8E/edit
+	- in order to get those matricies we just need to load values prepared in step 1 - probably best way would be to keep means in shared memory 
+
+https://github.com/JuliaGPU/GemmKernels.jl/blob/40c1dacb2ff2d24d7d392fc784c389e5e7fd8307/src/kernel.jl
 
 example of WMMA https://github.com/JuliaGPU/CUDA.jl/blob/800b7b89c4c19b9b98a7d150a813a0e3d0e18be5/examples/wmma/high-level.jl
 """
 module MahalanobisDist
 
 look into https://math.stackexchange.com/questions/4240707/mahalanobis-distance-between-two-3-dimensional-boolean-arrays
+
+
+
+
+
+taken from https://github.com/JuliaGPU/GemmKernels.jl/blob/40c1dacb2ff2d24d7d392fc784c389e5e7fd8307/src/kernel.jl
+- probably how to load element by element to fragment
+
+    # ld.global(0 : block_shape.K)
+    @unroll for (i, warp_tile) = enumerate(parallellise(block_tile.MK, Tile(conf.mem_a_warp), warpId, conf.warps_per_block, conf.is_a_col_major))
+        @unroll for (j, thread_tile) = enumerate(parallellise(warp_tile, Tile(conf.mem_a_thread), laneId, 32, conf.is_a_col_major))
+            @inbounds a_fragment[i, j] = Layout.load(conf.global_a_layout, a, translate_base(thread_tile, (M = block_i, K = 0)))
+        end
+    end
+
 
 """
 calculating means 
