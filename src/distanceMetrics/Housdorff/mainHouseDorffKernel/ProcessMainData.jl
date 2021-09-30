@@ -67,9 +67,16 @@ end#executeDataIter
 
 
 
+
+
+
+
+
+
+
 function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBeginingX
                                 ,blockBeginingY,blockBeginingZ,resShmem,resArray,resArraysCounter
-                                ,currBlockX,currBlockY,currBlockZ,isPassGold,metadata,metadataDims
+                                ,currBlockX,currBlockY,currBlockZ,isPassGold,metaData,metadataDims
                                 ,mainQuesCounter,mainWorkQueue,iterationNumber)
     locArr = Int32(0)
     isMaskFull= true
@@ -174,6 +181,8 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
                                     ,correctedX::UInt16 # x value to find padding value of intrest in global memory
                                     ,correctedY::UInt16# y value to find padding value of intrest in global memory
                                     ,correctedZ::UInt16)# z value to find padding value of intrest in global memory
+        sync_warp()# to reduce warp divergence
+
         nextBlockX = currBlockX+(zIter==1)-(zIter==2)
         nextBlockY = currBlockY+(zIter==3)-(zIter==4)
         nextBlockZ = currBlockZ+(zIter==5)-(zIter==6)
@@ -182,12 +191,12 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
         #whether we should analyze next block
         if(resShmem[2,primaryZiter+1,2] && resShmem[primaryZiter+1,2,3] )
             #activating next block
-            @ifXY 1 1 metaData[nextBlockX,nextBlockY,nextBlockZ,UInt8(isPassGold+1)]= true
+            @ifXY 1 primaryZiter metaData[nextBlockX,nextBlockY,nextBlockZ,UInt8(isPassGold+1)]= true
             #increasing mainWorkQueue counter and using its old value we know where we should update the mainWorkQueue with newly activated block
-            @ifXY 1 2 mainWorkQueue[atomicallyAddOneInt(mainQuesCounter)+1,:]=[newBlockX,newBlockY,newBlockZ,UInt8(isPassGold)] #x,y,z dim of block in metadata
+            @ifXY 2 primaryZiter mainWorkQueue[atomicallyAddOneInt(mainQuesCounter)+1,:]=[newBlockX,newBlockY,newBlockZ,UInt8(isPassGold)] #x,y,z dim of block in metadata
             # when we set new result from padding we need to take into account possibility that neighbour block already did it
             # hence when we set atomic we check the old value if old value was 0 all is good if not we  do not increse  the rescounter
-            @ifXY 1 3 begin
+            @ifXY 3 primaryZiter begin
                 old = atomicallySetValueTrreeDim(resArr,correctedX,correctedY,correctedZ,iterationNumber)
                 if(old==0)
                     atomicallyAddOneInt(resArrayCounter)
@@ -254,7 +263,47 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
                         ,blockBeginingY -1#correctedY
                         ,blockBeginingZ+threadIdxY()#correctedZ
                         )   
+sync_threads()
 
+###########################################
+#after all processing we need to establish weather the mask is full  (in case of first iteration also is it empty)
+     #reduction
+     offset = UInt16(1)
+     while(offset <32) 
+         isMaskFull = isMaskFull & shfl_down_sync(FULL_MASK, isMaskFull, offset)  
+         isMaskEmpty = isMaskEmpty & shfl_down_sync(FULL_MASK, isMaskEmpty, offset)  
+         offset<<= 1
+     end
+     @ifX 1  begin 
+        @inbounds  resShmem[2,threadIdxY()+1,6]=isMaskFull
+        @inbounds  resShmem[2,threadIdxY()+1,7]=isMaskEmpty
+     end   
+end
+sync_threads()#now we have partially reduced values marking wheather we have full or empty block
+# we get full reductions
+ offset = UInt16(1)
+ if(threadIdxY()==1)
+     while(offset <32)
+         @inbounds  resShmem[2,threadIdxX()+1,6] = shfl_down_sync(FULL_MASK,resShmem[2,threadIdxX()+1,6], offset)
+         @inbounds  resShmem[2,threadIdxX()+1,7] = shfl_down_sync(FULL_MASK,resShmem[2,threadIdxX()+1,7], offset)
+     end#while    
+    end#if 
+#now we have in resShmem[2,2,6] boolean marking is data block is full of trues and in resShmem[2,2,7] if there is no true at all
+##########  now we need to update meta data in case we have now empty or full block
+if(threadIdxY()==5 && threadIdxX()==5 && (resShmem[2,2,6] || resShmem[2,2,7]))
+    metaData[currBlockX,currBlockY,currBlockZ,isPassGold+1]=false # we set is inactive 
+end#if   
+if(threadIdxY()==6 && threadIdxX()==6 && (resShmem[2,2,6] || resShmem[2,2,7]))
+    metaData[currBlockX,currBlockY,currBlockZ,isPassGold+3]=true # we set is as full
+end#if
+#so in case it not empty and not full we need to put it into the work queue and increment appropriate counter
+if(threadIdxY()==7&& threadIdxX()==7 && !(resShmem[2,2,6] || resShmem[2,2,7]))
+    mainWorkQueue[atomicallyAddOneInt(mainQuesCounter)+1]=[currBlockX,currBlockY,currBlockZ,UInt8(isPassGold)]    
+end#if
+#######now in case block remains neither full nor empty we add it to the work queue
+
+
+sync_threads()
 
 end#executeDataIter
 
