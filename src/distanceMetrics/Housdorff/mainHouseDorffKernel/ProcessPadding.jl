@@ -39,7 +39,7 @@ function processAllPaddingPlanes(    x::UInt16
                                     ,iterationNumber)
    #neded to clear memory for establishing weather we should process given pading or not 
     #- basically wheather we care about block next to this - so is it full or is it on edge ...
-   clearLocArr(locArr)
+    locArr = Int32(0)
 
    isNextBlockOfIntrest(currBlockX,currBlockY,currBlockZ,false,false,false,false,false,true,1,shmem,metadataDims,isPassGold)
    isNextBlockOfIntrest(currBlockX,currBlockY,currBlockZ,false,false,true,false,false,false,3 ,shmem,metadataDims,isPassGold)
@@ -93,6 +93,7 @@ we need to pass data to source array about new "trues"
     isPassGold - true if we are dilatating currently gold standard mask false if we are dilatating other mask
 """
 function processPaddingPlane(paddingVal::Bool
+                            ,isOfIntrest::Bool
                             ,correctedX::UInt16
                             ,correctedY::UInt16
                             ,correctedZ::UInt16                           
@@ -137,63 +138,16 @@ function processPaddingPlane(paddingVal::Bool
                 activateNextBlock(newBlockX,newBlockY,newBlockZ, metaData,metadataDims,isPassGold,mainQuesCounter,mainWorkQueue)
             end#if    
 
-end#if 
+        end#if 
+        
 end#processPaddingPlane
 
 
 
-"""
-    before we will start processing padding we need to check weather it makes sense - weather we are not at the edge  or next block is full
-    we will aslo experiment with looking in given direction if all block in this direction are full or empty in both masks - sth to experiment upon
-    In order to parallelize the work we will  use separate warps to check the conditions for all  
-    we will write results to appropriate spots in shared memory       
-"""
-function isNextBlockOfIntrest(currBlockX::UInt16
-                            ,currBlockY::UInt16
-                            ,currBlockZ::UInt16                         
-                            ,nextBlockXIncrease::Bool
-                            ,nextBlockYIncrease::Bool
-                            ,nextBlockZIncrease::Bool
-                            ,nextBlockXDecrease::Bool
-                            ,nextBlockYDecrease::Bool
-                            ,nextBlockZDecrease::Bool
-                            ,sliceNumbManual::UInt8
-                            ,shmem
-                            ,metadataDims
-                            ,isPassGold)
-       nextBlockX = currBlockX+nextBlockXIncrease-nextBlockXDecrease
-       nextBlockY = currBlockY+nextBlockYIncrease-nextBlockYDecrease
-       nextBlockZ = currBlockZ+nextBlockZIncrease-nextBlockZDecrease                     
-
-#we are selecting single warp 
-if(threadIdxY()==sliceNumbManual )
-    #we need to check is it there at all - it will not if we are in border case
-    if(threadIdxX()==1)
-        locArr[sliceNumbManual]= (nextBlockX>0)
-    elseif(threadIdxX()==2)
-        locArr[sliceNumbManual]= (nextBlockX<=metadataDims[1])
-    elseif(threadIdxX()==3)
-        locArr[sliceNumbManual]= (nextBlockY>0)
-    elseif(threadIdxX()==4)
-        locArr[sliceNumbManual]= (nextBlockY<=metadataDims[2])
-    elseif(threadIdxX()==5)
-        locArr[sliceNumbManual]= (nextBlockZ>0)
-    elseif(threadIdxX()==6)
-        locArr[sliceNumbManual]= (nextBlockZ<=metadataDims[3])
-    elseif(threadIdxX()==7)
-        locArr[sliceNumbManual] = metaData[newBlockX,newBlockY,newBlockZ,isPassGold+3] #then we need to check weather mask is already full - in this case we can not activate it 
-    else
-        locArr[sliceNumbManual] = true # so when all are true we know it 
-    end#inner if
-
-end#outer if    
-
-#we will aslo experiment with looking in given direction if all block in this direction are full or empty in both masks we can also 
 
 
 
 
-end#isNextBlockOfIntrest
 
 
 """
@@ -338,3 +292,53 @@ end
 
 
 end#ProcessPadding
+
+
+
+# """
+#     before we will start processing padding we need to check weather it makes sense - weather we are not at the edge  or next block is full
+#     we will aslo experiment with looking in given direction if all block in this direction are full or empty in both masks - sth to experiment upon
+#     In order to parallelize the work we will  use separate warps to check the conditions for all  
+#     we will write results to appropriate spots in shared memory       
+# """
+# function isNextBlockOfIntrest(currBlockX::UInt16
+#                             ,currBlockY::UInt16
+#                             ,currBlockZ::UInt16                         
+#                             ,nextBlockXIncrease::Bool
+#                             ,nextBlockYIncrease::Bool
+#                             ,nextBlockZIncrease::Bool
+#                             ,nextBlockXDecrease::Bool
+#                             ,nextBlockYDecrease::Bool
+#                             ,nextBlockZDecrease::Bool
+#                             ,sliceNumbManual::UInt8
+#                             ,shmem
+#                             ,metadataDims
+#                             ,isPassGold)
+#        nextBlockX = currBlockX+nextBlockXIncrease-nextBlockXDecrease
+#        nextBlockY = currBlockY+nextBlockYIncrease-nextBlockYDecrease
+#        nextBlockZ = currBlockZ+nextBlockZIncrease-nextBlockZDecrease                     
+
+# #we are selecting single warp 
+# if(threadIdxY()==sliceNumbManual )
+#     #we need to check is it there at all - it will not if we are in border case
+#     if(threadIdxX()==1)
+#         locArr[sliceNumbManual]= (nextBlockX>0)
+#     elseif(threadIdxX()==2)
+#         locArr[sliceNumbManual]= (nextBlockX<=metadataDims[1])
+#     elseif(threadIdxX()==3)
+#         locArr[sliceNumbManual]= (nextBlockY>0)
+#     elseif(threadIdxX()==4)
+#         locArr[sliceNumbManual]= (nextBlockY<=metadataDims[2])
+#     elseif(threadIdxX()==5)
+#         locArr[sliceNumbManual]= (nextBlockZ>0)
+#     elseif(threadIdxX()==6)
+#         locArr[sliceNumbManual]= (nextBlockZ<=metadataDims[3])
+#     elseif(threadIdxX()==7)
+#         locArr[sliceNumbManual] = metaData[newBlockX,newBlockY,newBlockZ,isPassGold+3] #then we need to check weather mask is already full - in this case we can not activate it 
+#     else
+#         locArr[sliceNumbManual] = true # so when all are true we know it 
+#     end#inner if
+
+# end#outer if    
+
+# #we will aslo experiment with looking in given direction if all block in this direction are full or empty in both masks we can also 

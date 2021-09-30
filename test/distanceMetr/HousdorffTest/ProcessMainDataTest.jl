@@ -157,11 +157,46 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\m
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\GPUtestUtils.jl")
 
 
-using Main.CUDAGpuUtils, Main.HFUtils
+using Main.CUDAGpuUtils, Main.HFUtils,Cthulhu
 
 
+using Main.CUDAGpuUtils, Main.HFUtils,Cthulhu
 
 
+@testset "executeDataIterFirstPass" begin 
+
+    testArrInCPU= falses(60,60,60)
+    testArrInCPU[CartesianIndex(1,1,1)]= true
+    testArrInCPU[CartesianIndex(5,5,5)]= true
+    testArrIn = CuArray(testArrInCPU);
+    referenceArray= CUDA.ones(Bool,32,32,32);
+    resArray = CUDA.zeros(UInt16,32,32,32);
+    resArraysCounter=CUDA.zeros(Int32,1);
+    blockBeginingX,blockBeginingY,blockBeginingZ =UInt8(0),UInt8(0),UInt8(0)
+
+function testKernelForExecuteMainPass(analyzedArr, refAray,blockBeginingX,blockBeginingY,blockBeginingZ,resArray,resArraysCounter)
+        resShmem =  @cuStaticSharedMem(Bool,(34,34,34))#+2 in order to get the one padding 
+        ProcessMainData.executeDataIterFirstPass(analyzedArr, refAray,blockBeginingX,blockBeginingY,blockBeginingZ,resShmem,resArray,resArraysCounter)
+    return
+end
+
+@cuda threads=(16,16) blocks=1 testKernelForExecuteMainPass(testArrIn,referenceArray,blockBeginingX,blockBeginingY,blockBeginingZ ,resArray,resArraysCounter) 
+@test resArraysCounter[1]==9
+
+@test resArray[5,5,5]==false
+@test resArray[5,6,5]==true
+@test resArray[6,5,5]==true
+@test resArray[4,5,5]==true
+@test resArray[5,4,5]==true
+@test resArray[5,6,5]==true
+@test resArray[5,5,4]==true
+@test resArray[5,5,6]==true
+
+# @test resArray[1,1,2]==true
+# @test resArray[1,2,1]==true
+# @test resArray[2,1,1]==true
+
+end
 
 
 @testset "processMaskData" begin 
@@ -169,66 +204,57 @@ using Main.CUDAGpuUtils, Main.HFUtils
     testArrIn = CUDA.ones(Bool,32,32,32);
     referenceArray= CUDA.ones(Bool,32,32,32);
     resArray = CUDA.zeros(UInt16,32,32,32);
-    resArraysCounter=CUDA.ones(UInt32,1);
-    isMaskFull = Ref(false)
-    isMaskEmpty = Ref(false)
-    locArr = Ref(Int32(0))
+    resArraysCounter=CUDA.zeros(Int32,1);
 
-
-    function testprocessMaskData(testArrInn::CuDeviceArray{Bool, 3, 1},resArray,referenceArray,resArraysCounter,isMaskFull::CUDA.CuRefValue{Bool},isMaskEmpty::CUDA.CuRefValue{Bool},locArr)
+    function testprocessMaskData(testArrInn::CuDeviceArray{Bool, 3, 1},resArray,referenceArray,resArraysCounter)
     blockBeginingX,blockBeginingY,blockBeginingZ =UInt8(0),UInt8(0),UInt8(0)
+
     resShmem =  @cuStaticSharedMem(Bool,(34,34,34))#+2 in order to get the one padding 
-    #locArr = Int32(0)
+    locArr = Int32(0)
+    isMaskFull= false
+    isMaskEmpty = false
     #locArr.x |= true << UInt8(2)
 
-   for zIter::UInt8 in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
+    @unroll for zIter::UInt8 in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
         locBool::Bool = @inbounds testArrInn[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
-        #ProcessMainData.myIncreaseBitt(locBool, zIter,locArr)
-        #locArr.x|= locBool << zIter
-        locArr.x|= true << 4
-        #locArr[] |= locBool << UInt8(zIter)
-        processMaskData( locBool, zIter, resShmem)
+        locArr|= locBool << zIter
+        ProcessMainData.processMaskData( locBool, zIter, resShmem)
     end#for 
+   sync_threads() #we should have in resShmem what we need 
 
-    sync_threads() #we should have in resShmem what we need 
+    @unroll for zIter::UInt8 in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
+        locVal::Bool = @inbounds  (locArr>>zIter & Int32(1))==Int32(1)
+        shmemVal::Bool = @inbounds resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1]
+        locValOrShmem = (locVal | shmemVal)
+        isMaskFull= locValOrShmem & isMaskFull
+        isMaskEmpty = ~locValOrShmem & isMaskEmpty
+     
+       if(!locVal && shmemVal)
+         # setting value in global memory
+         @inbounds  testArrInn[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]= true
+         # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
+         isInReferencaArr::Bool= @inbounds referenceArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
+         if(isInReferencaArr)
+            @inbounds  resArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]=UInt16(1)
+            #CUDA.atomic_inc!(pointer(resArraysCounter), Int32(1))
+
+            atomicallyAddOneInt(resArraysCounter)
+         end#if
+       end#if
+
+       
+
+         end#for
+
     
-    # @unroll for zIter::UInt8  in UInt8(1):UInt8(32) # most outer loop is responsible for z dimension - importnant in this loop we ignore padding we will deal with it separately
-    #       local locBoolRegister::Bool = (locArr.x>>zIter & 1)==1
-    #       local locBoolShmem::Bool = @inbounds resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1]
-    #       #validataDataFirstPass(locBoolRegister,locBoolShmem,resShmem,isMaskFull,isMaskEmpty,blockBeginingX,blockBeginingY,blockBeginingZ,testArrInn, referenceArray,resArray,resArraysCounter,zIter)
-    #     #CUDA.unsafe_free!(locBoolRegister)
-    #     # CUDA.unsafe_free!(locBoolShmem)
-    #  end#for
+  # IterToValidate()
 
     return
 
 end#testprocessMaskData
 
-@cuda threads=(32,32) blocks=1 testprocessMaskData(testArrIn,resArray,referenceArray,resArraysCounter,isMaskFull,isMaskEmpty,locArr) 
-isMaskFull
-
-@device_code_warntype interactive=true @cuda testprocessMaskData(testArrIn,resArray,referenceArray,resArraysCounter,isMaskFull,isMaskEmpty,locArr)
-
-
-outB= false
-function modBool(bb)
-    bb=true
-end    
-modBool(outB)
-outB
-
-
-rr = Ref(false)
-
-function modBoolB(rrr)
-    rrr[]=true
-end   
-modBoolB(rr)
-
-rr[]
-
-
-
+@cuda threads=(32,32) blocks=1 testprocessMaskData(testArrIn,resArray,referenceArray,resArraysCounter) 
+resArraysCounter
 
 
 end

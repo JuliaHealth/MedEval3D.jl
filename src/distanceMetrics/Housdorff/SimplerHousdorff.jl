@@ -155,7 +155,7 @@ end#chooseBlockToWorkOn
 controls allocation of GPU memory - instantiating Cu arrays
  first we alocate the place for  metadata -  
 
-   Metadata -  Assign blocks of size 32x32x32 for each we will have data structure holding data as pointed below all will be in UInt16
+   Metadata -  Assign blocks of size 32x32x32 for each we will have data structure holding data as pointed below all will be in Bool - so 4 bytes of metadata per block
       1) isActiveOrFullForPasssegm - true if other  mask is acive for modifications  
       2) isActiveOrFullForPassgold -  true if gold standard mask is acive for modifications 
       3) isFullSegm - true if other mask is full (only ones)

@@ -65,28 +65,25 @@ function getDataAndEvaluationFromPymia(examplemhaDat)
     
     labels = Dict([(1,"WHITEMATTER"),(2,"GREYMATTER") ])
     
-    metrics = [pymMetr.DiceCoefficient()
-                , pymMetr.JaccardCoefficient()
-                , pymMetr.GlobalConsistencyError()
-                , pymMetr.AdjustedRandIndex()
-                , pymMetr.CohenKappaCoefficient()
-                , pymMetr.MutualInformation()
-                , pymMetr.VariationOfInformation()
-                , pymMetr.VolumeSimilarity()
-                ,pymMetr.TruePositive()   
-                ,pymMetr.TrueNegative()   
-                ,pymMetr.FalsePositive()   
-                ,pymMetr.FalsePositive()   
-                
-                ]
     # metrics = [pymMetr.DiceCoefficient()
-
+    #             , pymMetr.DiceCoefficient()
+    #             , pymMetr.JaccardCoefficient()
+    #             , pymMetr.GlobalConsistencyError()
+    #             , pymMetr.AdjustedRandIndex()
+    #             , pymMetr.CohenKappaCoefficient()
+    #             , pymMetr.MutualInformation()
+    #             , pymMetr.VariationOfInformation()
+    #             , pymMetr.VolumeSimilarity()
     #             ,pymMetr.TruePositive()   
     #             ,pymMetr.TrueNegative()   
     #             ,pymMetr.FalsePositive()   
-    #             ,pymMetr.FalseNegative()   
+    #             ,pymMetr.FalsePositive()   
                 
     #             ]
+    metrics = [pymMetr.CohenKappaCoefficient()
+                ,pymMetr.AdjustedRandIndex()                  
+                ]
+
     evaluator = pymEval.SegmentationEvaluator(metrics, labels)
     
     evaluator.evaluate(prediction, ground_truth, examplemhaDat[1])
@@ -108,8 +105,6 @@ goldS,segmAlgo =getDataAndEvaluationFromPymia(examplemhaDat);
 arrGold = CuArray(vec(goldS))
 arrAlgo = CuArray(vec(segmAlgo))
 sizz= size(goldS)
-
-maximum(arrAlgo)
 
 
 goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools();
@@ -139,14 +134,35 @@ tp[1]==206422
 #tn[1]==6684530
 fp[1]==0
 fn[1]==218185
+
+#numbers below taken from pymia
+
+isapprox(metricsTuplGlobal[4][1],0.654; atol = 0.1) #4) dice
+isapprox(metricsTuplGlobal[5][1],0.486; atol = 0.1) #5) jaccard
+isapprox(metricsTuplGlobal[6][1],0.000; atol = 0.1) #6) gce
+isapprox(metricsTuplGlobal[7][1],1.163; atol = 0.1) #7) randInd  - false
+isapprox(metricsTuplGlobal[8][1],0.969; atol = 0.1) #8) cohen kappa - false
+isapprox(metricsTuplGlobal[9][1],0.654; atol = 0.1) #9) volume metric
+isapprox(metricsTuplGlobal[10][1],0.130; atol = 0.1) #10) mutual information
+isapprox(metricsTuplGlobal[11][1],0.256; atol = 0.1) #11) variation of information
+
+
+
 BenchmarkTools.DEFAULT_PARAMETERS.samples = 100
 BenchmarkTools.DEFAULT_PARAMETERS.seconds =60
 BenchmarkTools.DEFAULT_PARAMETERS.gcsample = true
 
 
 function toBench(FlattGoldGPU,FlattSegGPU,tp,tn,fp,fn)
-    CUDA.@sync TpfpfnKernel.getTpfpfnData!(FlattGoldGPU,FlattSegGPU,tp,tn,fp,fn , intermediateResTp,intermediateResFp ,intermediateResFn,sizz[1]*sizz[2],sizz[3],UInt8(1),IndexesArray,1024)
-end
+    CUDA.@sync TpfpfnKernel.getTpfpfnData!(FlattGoldGPU,FlattSegGPU,tp,tn,fp,fn
+                            ,sliceMetricsTupl
+                            ,metricsTuplGlobal
+                            ,sizz[1]*sizz[2]
+                            ,sizz[3]
+                            ,UInt8(1)
+                            ,conf
+                            ,totalNumberOfVoxels)
+                        end
 
 bb2 = @benchmark toBench(FlattGoldGPU,FlattSegGPU,tp,tn,fp,fn)  setup=(goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools())
 
@@ -202,8 +218,6 @@ tp = 5
 fp = 5
 fn = 5
 tn = 5
-
-getGlobalMetricsKernel(5,5,5,100,metricsTuplGlobal,conf )
 
 
 using Main.RandIndex

@@ -89,25 +89,25 @@ function getBlockTpFpFn(goldBoolGPU#goldBoolGPU
 
    offset = UInt16(1)
     while(offset <32) 
-      locArr[3]+=shfl_down_sync(FULL_MASK, locArr[3], offset)  
-      locArr[2]+=shfl_down_sync(FULL_MASK, locArr[2], offset)  
-      locArr[1]+=shfl_down_sync(FULL_MASK, locArr[1], offset)  
+      @inbounds locArr[3]+=shfl_down_sync(FULL_MASK, locArr[3], offset)  
+      @inbounds locArr[2]+=shfl_down_sync(FULL_MASK, locArr[2], offset)  
+      @inbounds locArr[1]+=shfl_down_sync(FULL_MASK, locArr[1], offset)  
         offset<<= 1
     end
     #shmemSum[threadIdxX(),3]+=locArr[3]
     if(threadIdxX()==1)
-      shmemSum[threadIdxY(),3]+=locArr[3]
-      shmemSum[threadIdxY(),2]+=locArr[2]
-      shmemSum[threadIdxY(),1]+=locArr[1]
+      @inbounds shmemSum[threadIdxY(),3]+=locArr[3]
+      @inbounds shmemSum[threadIdxY(),2]+=locArr[2]
+      @inbounds shmemSum[threadIdxY(),1]+=locArr[1]
     end
 
     sync_threads()
     if(threadIdxY()==1)
       offsetB = UInt16(1)
       while(offsetB <32) 
-        shmemSum[threadIdxX(),3]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),3], offsetB)  
-        shmemSum[threadIdxX(),2]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),2], offsetB)  
-        shmemSum[threadIdxX(),1]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),1], offsetB)  
+        @inbounds shmemSum[threadIdxX(),3]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),3], offsetB)  
+        @inbounds shmemSum[threadIdxX(),2]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),2], offsetB)  
+        @inbounds shmemSum[threadIdxX(),1]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),1], offsetB)  
         offsetB<<= 1
       end
     end  

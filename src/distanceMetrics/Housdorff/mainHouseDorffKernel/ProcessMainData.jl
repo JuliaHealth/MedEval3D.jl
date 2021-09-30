@@ -5,8 +5,8 @@ loads and do the main processing of data in arrays of intrest (padding of shmem 
 
 """
 module ProcessMainData
-using  StaticArrays,Main.CUDAGpuUtils ,Main.HFUtils, CUDA
-export executeDataIterFirstPass,executeDataIterOtherPasses,processMaskData
+using  StaticArrays,Main.CUDAGpuUtils ,Main.HFUtils, CUDA, Main.ProcessPadding
+export executeDataIterFirstPass,executeDataIterOtherPasses,processMaskData,executeDataIterFirstPassWithPadding
 
 
 """
@@ -20,20 +20,253 @@ resShmem - shared memory 34x34x34 bit array
 locArr - local bit array of thread
 resArray- 3 dimensional array where we put results
 """
-function executeDataIterFirstPass(analyzedArr, refAray,blockBeginingX,blockBeginingY,blockBeginingZ,isMaskFull,isMaskEmpty,resShmem,locArr,resArray)
-    @unroll for zIter in UInt16(1):32# most outer loop is responsible for z dimension
-        local locBool = testArrInn[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
+function executeDataIterFirstPass(analyzedArr, referenceArray,blockBeginingX,blockBeginingY,blockBeginingZ,resShmem,resArray,resArraysCounter)
+    locArr = Int32(0)
+    isMaskFull= true
+    isMaskEmpty = true
+    #locArr.x |= true << UInt8(2)
+
+    ############## upload data
+    @unroll for zIter::UInt8 in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
+        locBool::Bool = @inbounds analyzedArr[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
         locArr|= locBool << zIter
-       processMaskData( locBool, zIter, resShmem)
-       CUDA.unsafe_free!(locBool)
+        # CUDA.@cuprint "locBool $(locBool)  locArr $(locArr) \n  "
+        ProcessMainData.processMaskData( locBool, zIter, resShmem)
     end#for 
-    sync_threads() #we should have in resShmem what we need 
-    @unroll for zIter in UInt16(1):32 # most outer loop is responsible for z dimension - importnant in this loop we ignore padding we will deal with it separately
-          local locBoolRegister = (locArr>>zIter & UInt32(1))==UInt32(1)
-          local locBoolShmem = resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1]
-        validataDataFirstPass(locBoolRegister,locBoolShmem,resShmem,isMaskFull,isMaskEmpty,blockBeginingX,blockBeginingY,blockBeginingZ,analyzedArr, refAray,resArray,resArraysCounter,zIter)
-    end#for
+   sync_threads() #we should have in resShmem what we need 
+    ########## check data aprat from padding
+    @unroll for zIter::UInt8 in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
+        locVal::Bool = @inbounds  (locArr>>zIter & Int32(1))==Int32(1)
+        shmemVal::Bool = @inbounds resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1]
+        # CUDA.@cuprint "locVal $(locVal)  shmemVal $(shmemVal) \n  "
+        locValOrShmem = (locVal | shmemVal)
+        isMaskFull= locValOrShmem & isMaskFull
+        isMaskEmpty = ~locValOrShmem & isMaskEmpty
+
+        #CUDA.@cuprint "locVal $(locVal)  shmemVal $(shmemVal) \n  "
+        if(!locVal && shmemVal)
+            # setting value in global memory
+            @inbounds  analyzedArr[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]= true
+            # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
+            isInReferencaArr::Bool= @inbounds referenceArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
+            if(isInReferencaArr)
+                #CUDA.@cuprint "isInReferencaArr $(isInReferencaArr) \n  "
+                @inbounds  resArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]=UInt16(1)
+                #CUDA.atomic_inc!(pointer(resArraysCounter), Int32(1))              
+                atomicallyAddOneInt(resArraysCounter)
+            end#if
+        end#if
+      end#for
+
 end#executeDataIter
+
+
+
+
+
+
+
+
+function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBeginingX
+                                ,blockBeginingY,blockBeginingZ,resShmem,resArray,resArraysCounter
+                                ,currBlockX,currBlockY,currBlockZ,isPassGold,metadata,metadataDims
+                                ,mainQuesCounter,mainWorkQueue,iterationNumber)
+    locArr = Int32(0)
+    isMaskFull= true
+    isMaskEmpty = true
+    isMaskOkForProcessing = true
+    offset = UInt16(1)
+    nextBlockX,nextBlockY, nextBlockZ = UInt8(0), UInt8(0),UInt8(0)
+    #locArr.x |= true << UInt8(2)
+
+    ############## upload data
+    @unroll for zIter::UInt8 in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
+        locBool::Bool = @inbounds analyzedArr[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
+        locArr|= locBool << zIter
+        # CUDA.@cuprint "locBool $(locBool)  locArr $(locArr) \n  "
+        ProcessMainData.processMaskData( locBool, zIter, resShmem)
+    end#for 
+   sync_threads() #we should have in resShmem what we need 
+    ########## check data aprat from padding
+    @unroll for zIter::UInt8 in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
+        locVal::Bool = @inbounds  (locArr>>zIter & Int32(1))==Int32(1)
+        shmemVal::Bool = @inbounds resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1]
+        locValOrShmem = (locVal | shmemVal)
+        isMaskFull= locValOrShmem & isMaskFull
+        isMaskEmpty = ~locValOrShmem & isMaskEmpty
+
+        if(!locVal && shmemVal)
+            # setting value in global memory
+            @inbounds  analyzedArr[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]= true
+            # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
+            isInReferencaArr::Bool= @inbounds referenceArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
+            if(isInReferencaArr)
+                @inbounds  resArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]=UInt16(1)
+                atomicallyAddOneInt(resArraysCounter)
+            end#if
+        end#if
+      end#for
+     ################################################################################################################################ 
+     #processing padding
+     HFUtils.clearMainShmem(resShmem)
+
+     # first we check weather next block is viable for processing
+     @unroll for zIter::UInt8 in UInt8(1):UInt8(6)
+        #we will iterate over all padding planes below way to calculate the next block in all dimensions not counting oblique directions
+        nextBlockX = currBlockX+(zIter==1)-(zIter==2)
+        nextBlockY = currBlockY+(zIter==3)-(zIter==4)
+        nextBlockZ = currBlockZ+(zIter==5)-(zIter==6)
+
+        @ifXY 1 zIter @inbounds isMaskOkForProcessing = nextBlockX>0
+        @ifXY 2 zIter @inbounds isMaskOkForProcessing = nextBlockX<=metadataDims[1]
+        @ifXY 3 zIter @inbounds isMaskOkForProcessing = nextBlockY>0
+        @ifXY 4 zIter @inbounds isMaskOkForProcessing = nextBlockY<=metadataDims[2]
+        @ifXY 5 zIter @inbounds isMaskOkForProcessing = nextBlockZ>0
+        @ifXY 6 zIter @inbounds isMaskOkForProcessing = nextBlockZ<=metadataDims[3]
+        @ifXY 7 zIter @inbounds isMaskOkForProcessing = metaData[nextBlockX,nextBlockZ,newBlockZ,isPassGold+3]#then we need to check weather mask is already full - in this case we can not activate it 
+        #now we check are all true 
+        @ifY zIter begin 
+                while(offset <UInt16(8)) 
+                isMaskOkForProcessing = isMaskOkForProcessing & shfl_down_sync(FULL_MASK, isMaskOkForProcessing, offset)
+                offset<<= 1
+            end #while
+        end# @ifY 
+        #here is the information wheather we want to process next block
+        @ifXY zIter 1 @inbounds resShmem[2,zIter+1,2]
+    end#for zIter   
+    sync_threads()#now we should know wheather we are intrested in blocks around
+    isMaskOkForProcessing=false#reset for reuse
+    
+     ################################################################################################################################ 
+    #checking is there anything in the padding plane - so we basically do (most of reductions)
+    if(resShmem[2,zIter+1,2] )
+        @unroll for zIter::UInt8 in UInt8(1):UInt8(6)       
+               #we need to reduce now  the values  of padding vals to establish weather there is any true there if yes we put the neighbour block to be active 
+                #reduction
+                offset = UInt16(1)
+                while(offset <32) 
+                    isMaskOkForProcessing = isMaskOkForProcessing | shfl_down_sync(FULL_MASK, isMaskOkForProcessing, offset)  
+                    offset<<= 1
+                end
+                @ifX 1  @inbounds  resShmem[zIter+1,threadIdxY()+1,3]=isMaskOkForProcessing
+        end
+        sync_threads()#now we have partially reduced values marking wheather we have any true in padding
+        # we get full reductions
+        @unroll for zIter::UInt8 in UInt8(1):UInt8(6)
+            offset = UInt16(1)
+            if(threadIdxY()==zIter)
+                while(offset <32)
+                    @inbounds  resShmem[zIter+1,threadIdxX()+1,3] = shfl_down_sync(FULL_MASK,resShmem[zIter+1,threadIdxX()+1,3], offset)
+                end#while    
+            end#if    
+        end#for
+    end#if  
+    sync_threads()#now we have fully reduced in resShmem[zIter+1,1+1,3]= resShmem[zIter+1,2,3]
+
+     ################################################################################################################################ 
+
+
+    #function will be invoked on paddings from all sides
+    function innerProcessPadding(   resShmemX::UInt8 # x value to find padding value of intrest in shared memory
+                                    ,resShmemY::UInt8 # y value to find padding value of intrest in shared memory
+                                    ,resShmemZ::UInt8 # z value to find padding value of intrest in shared memory
+                                    ,primaryZiter::UInt8 # the same as we analyzed above what blocks should be analyzed
+                                    ,correctedX::UInt16 # x value to find padding value of intrest in global memory
+                                    ,correctedY::UInt16# y value to find padding value of intrest in global memory
+                                    ,correctedZ::UInt16)# z value to find padding value of intrest in global memory
+        nextBlockX = currBlockX+(zIter==1)-(zIter==2)
+        nextBlockY = currBlockY+(zIter==3)-(zIter==4)
+        nextBlockZ = currBlockZ+(zIter==5)-(zIter==6)
+        #getting value from padding
+        @inbounds paddingVal= resShmem[resShmemX,resShmemY,resShmemZ ]
+        #whether we should analyze next block
+        if(resShmem[2,primaryZiter+1,2] && resShmem[primaryZiter+1,2,3] )
+            #activating next block
+            @ifXY 1 1 metaData[nextBlockX,nextBlockY,nextBlockZ,UInt8(isPassGold+1)]= true
+            #increasing mainWorkQueue counter and using its old value we know where we should update the mainWorkQueue with newly activated block
+            @ifXY 1 2 mainWorkQueue[atomicallyAddOneInt(mainQuesCounter)+1,:]=[newBlockX,newBlockY,newBlockZ,UInt8(isPassGold)] #x,y,z dim of block in metadata
+            # when we set new result from padding we need to take into account possibility that neighbour block already did it
+            # hence when we set atomic we check the old value if old value was 0 all is good if not we  do not increse  the rescounter
+            @ifXY 1 3 begin
+                old = atomicallySetValueTrreeDim(resArr,correctedX,correctedY,correctedZ,iterationNumber)
+                if(old==0)
+                    atomicallyAddOneInt(resArrayCounter)
+                end    
+            end   
+        end#if
+    end#innerProcessPadding
+    
+    ######################################## 
+    #now we will analyze the padding planes one by one using innerProcessPadding
+
+    ######## TOP
+    innerProcessPadding(threadIdxX()#resShmemX
+                        ,threadIdxY()#resShmemY
+                        ,1#resShmemZ
+                        ,5 #primaryZiter
+                        ,blockBeginingX+threadIdxX()#correctedX
+                        ,blockBeginingY +threadIdxY()#correctedY
+                        ,blockBeginingZ-1#correctedZ
+                        )
+   
+   ######## BOTTOM
+   innerProcessPadding(threadIdxX()#resShmemX
+                        ,threadIdxY()#resShmemY
+                        ,34#resShmemZ
+                        ,6 #primaryZiter
+                        ,blockBeginingX+threadIdxX()#correctedX
+                        ,blockBeginingY +threadIdxY()#correctedY
+                        ,blockBeginingZ+33#correctedZ
+                        )
+   ######## LEFT
+   innerProcessPadding(1#resShmemX
+                        ,threadIdxY()#resShmemY
+                        ,threadIdxX()#resShmemZ
+                        ,2 #primaryZiter
+                        ,blockBeginingX-1#correctedX
+                        ,blockBeginingY +threadIdxX()#correctedY
+                        ,blockBeginingZ+threadIdxY()#correctedZ
+                        )
+   ######## RIGHT
+   innerProcessPadding(1#resShmemX
+                        ,threadIdxY()#resShmemY
+                        ,threadIdxX()#resShmemZ
+                        ,1 #primaryZiter
+                        ,blockBeginingX+33#correctedX
+                        ,blockBeginingY +threadIdxX()#correctedY
+                        ,blockBeginingZ+threadIdxY()#correctedZ
+                        )                        
+   ######## Anterior
+   innerProcessPadding(threadIdxX()#resShmemX
+                        ,34#resShmemY
+                        ,threadIdxY()#resShmemZ
+                        ,3 #primaryZiter
+                        ,blockBeginingX+threadIdxX()#correctedX
+                        ,blockBeginingY +33#correctedY
+                        ,blockBeginingZ+threadIdxY()#correctedZ
+                        )   
+   ######## Posterior
+   innerProcessPadding(threadIdxX()#resShmemX
+                        ,1#resShmemY
+                        ,threadIdxY()#resShmemZ
+                        ,4 #primaryZiter
+                        ,blockBeginingX+threadIdxX()#correctedX
+                        ,blockBeginingY -1#correctedY
+                        ,blockBeginingZ+threadIdxY()#correctedZ
+                        )   
+
+
+end#executeDataIter
+
+
+
+
+
+
+
+
+
+
 
 # """
 # specializes executeDataIterFirstPass as it do not consider possibility of block being empty 
@@ -125,21 +358,23 @@ function validataDataFirstPass(locVal::Bool
                     ,resArraysCounter
                     ,zIter::UInt8)::Bool
     #when this one and previous is true it will still be true
-    locValOrShmem = (locVal | shmemVal)
-    isMaskFull.x= locValOrShmem & isMaskFull.x
-    isMaskEmpty.x = ~locValOrShmem & isMaskEmpty.x
 
-  if(!locVal && shmemVal)
-    # setting value in global memory
-    @inbounds  masktoUpdate[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]= true
-    # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
-    if(maskToCompare[@inbounds  (blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)])
-        @inbounds  resArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]=UInt16(1)
-       
-       atomicallyAddOneUint32(resArraysCounter)
-    end#if
-  end#if
-return true
+
+return 
+
+end
+
+
+
+function IterToValidate()::Bool
+    @unroll for zIteB::UInt8 in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
+        # locBoolRegister::Bool = getLocalBoolRegister(locArr,zIter)
+            #  locBoolShmem::Bool = getLocalBoolShemem(resShmem, zIter)
+            # ProcessMainData.validataDataFirstPass(locBoolRegister,locBoolShmem,resShmem,isMaskFull,isMaskEmpty,blockBeginingX,blockBeginingY,blockBeginingZ,testArrInn, referenceArray,resArray,resArraysCounter,zIter)
+            #CUDA.unsafe_free!(locBoolRegister)
+            # CUDA.unsafe_free!(locBoolShmem)
+         end#for
+     return true    
 end
 
 """

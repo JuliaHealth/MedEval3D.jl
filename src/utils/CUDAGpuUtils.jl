@@ -3,19 +3,26 @@ module CUDAGpuUtils
 
 using CUDA, StaticArrays
 
-export atomicallyAddOneUint,clearLocArrdefineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc,reduce_warp_max,reduce_warp_min,reduce_warp_min,reduce_warp_or,reduce_warp_and,blockIdxZ,blockIdxY,blockIdxX,blockDimZ, blockDimY, blockDimX, threadIdxX, threadIdxY, threadIdxZ
+export atomicallySetValueTrreeDim,atomicallyAddOneInt,clearLocArrdefineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc,reduce_warp_max,reduce_warp_min,reduce_warp_min,reduce_warp_or,reduce_warp_and,blockIdxZ,blockIdxY,blockIdxX,blockDimZ, blockDimY, blockDimX, threadIdxX, threadIdxY, threadIdxZ
 export @unroll, @ifX, @ifY, @ifXY
 
 
 
 """
 atomically add to given 1 length array 1
-data type need to be UInt32
+data type need to be Int32
 """
-function atomicallyAddOneUint(arr)
-    CUDA.atomic_inc!(pointer(arr), UInt16(1))
+function atomicallyAddOneInt(arr)
+    @inbounds @atomic arr[]+=Int32(1)
+   # CUDA.atomic_inc!(pointer(arr), Int32(1))
 end
 
+"""
+looking in arr for entry x,y,z and setting atomically value it return old one also
+"""
+function atomicallySetValueTrreeDim(arr,x,y,z,value)
+    @inbounds @atomic arr[]+=Int32(1)
+end
 
 """
 convinience macro that will execute only if it has given thread Id X

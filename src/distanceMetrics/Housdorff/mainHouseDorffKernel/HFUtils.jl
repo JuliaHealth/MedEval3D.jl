@@ -82,22 +82,6 @@ end#if
 
 end
 
-bb= (zeros(5),"aa")
-bb[1][1] = 1.0
-
-con = ConfigurtationStruct(sliceWiseMatrics=true,dice=true,jaccard=true)
-
-metricsArr = zeros(10,10,10);
-using CUDA, Main.BasicStructs
-
-@isInConf con "jaccard" "I am here" 
-
-length(propertynames(con))
-
-propertynames(con)[2]==Symbol("dice")
-
-false ? println("aa") : "bb";
-
 end#HFUtils
 
 # """
