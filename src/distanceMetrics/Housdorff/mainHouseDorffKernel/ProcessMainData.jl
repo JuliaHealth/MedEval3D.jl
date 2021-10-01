@@ -31,7 +31,7 @@ function executeDataIterFirstPass(analyzedArr, referenceArray,blockBeginingX,blo
         locBool::Bool = @inbounds analyzedArr[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
         locArr|= locBool << zIter
         # CUDA.@cuprint "locBool $(locBool)  locArr $(locArr) \n  "
-        ProcessMainData.processMaskData( locBool, zIter, resShmem)
+        processMaskData( locBool, zIter, resShmem)
     end#for 
    sync_threads() #we should have in resShmem what we need 
     ########## check data aprat from padding
@@ -91,7 +91,7 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
         locBool::Bool = @inbounds analyzedArr[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
         locArr|= locBool << zIter
         # CUDA.@cuprint "locBool $(locBool)  locArr $(locArr) \n  "
-        ProcessMainData.processMaskData( locBool, zIter, resShmem)
+        processMaskData( locBool, zIter, resShmem)
     end#for 
    sync_threads() #we should have in resShmem what we need 
     ########## check data aprat from padding
@@ -115,60 +115,73 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
       end#for
      ################################################################################################################################ 
      #processing padding
-     HFUtils.clearMainShmem(resShmem)
+     function isNextBlockOfIntrest()
 
-     # first we check weather next block is viable for processing
-     @unroll for zIter::UInt8 in UInt8(1):UInt8(6)
-        #we will iterate over all padding planes below way to calculate the next block in all dimensions not counting oblique directions
-        nextBlockX = currBlockX+(zIter==1)-(zIter==2)
-        nextBlockY = currBlockY+(zIter==3)-(zIter==4)
-        nextBlockZ = currBlockZ+(zIter==5)-(zIter==6)
 
-        @ifXY 1 zIter @inbounds isMaskOkForProcessing = nextBlockX>0
-        @ifXY 2 zIter @inbounds isMaskOkForProcessing = nextBlockX<=metadataDims[1]
-        @ifXY 3 zIter @inbounds isMaskOkForProcessing = nextBlockY>0
-        @ifXY 4 zIter @inbounds isMaskOkForProcessing = nextBlockY<=metadataDims[2]
-        @ifXY 5 zIter @inbounds isMaskOkForProcessing = nextBlockZ>0
-        @ifXY 6 zIter @inbounds isMaskOkForProcessing = nextBlockZ<=metadataDims[3]
-        @ifXY 7 zIter @inbounds isMaskOkForProcessing = metaData[nextBlockX,nextBlockZ,newBlockZ,isPassGold+3]#then we need to check weather mask is already full - in this case we can not activate it 
-        #now we check are all true 
-        @ifY zIter begin 
-                while(offset <UInt16(8)) 
-                isMaskOkForProcessing = isMaskOkForProcessing & shfl_down_sync(FULL_MASK, isMaskOkForProcessing, offset)
-                offset<<= 1
-            end #while
-        end# @ifY 
-        #here is the information wheather we want to process next block
-        @ifXY zIter 1 @inbounds resShmem[2,zIter+1,2]
-    end#for zIter   
-    sync_threads()#now we should know wheather we are intrested in blocks around
-    isMaskOkForProcessing=false#reset for reuse
-    
-     ################################################################################################################################ 
-    #checking is there anything in the padding plane - so we basically do (most of reductions)
-    if(resShmem[2,zIter+1,2] )
-        @unroll for zIter::UInt8 in UInt8(1):UInt8(6)       
-               #we need to reduce now  the values  of padding vals to establish weather there is any true there if yes we put the neighbour block to be active 
-                #reduction
-                offset = UInt16(1)
-                while(offset <32) 
-                    isMaskOkForProcessing = isMaskOkForProcessing | shfl_down_sync(FULL_MASK, isMaskOkForProcessing, offset)  
-                    offset<<= 1
-                end
-                @ifX 1  @inbounds  resShmem[zIter+1,threadIdxY()+1,3]=isMaskOkForProcessing
-        end
-        sync_threads()#now we have partially reduced values marking wheather we have any true in padding
-        # we get full reductions
+
+        HFUtils.clearMainShmem(resShmem)
+
+        # first we check weather next block is viable for processing
         @unroll for zIter::UInt8 in UInt8(1):UInt8(6)
-            offset = UInt16(1)
-            if(threadIdxY()==zIter)
-                while(offset <32)
-                    @inbounds  resShmem[zIter+1,threadIdxX()+1,3] = shfl_down_sync(FULL_MASK,resShmem[zIter+1,threadIdxX()+1,3], offset)
-                end#while    
-            end#if    
-        end#for
-    end#if  
-    sync_threads()#now we have fully reduced in resShmem[zIter+1,1+1,3]= resShmem[zIter+1,2,3]
+            #we will iterate over all padding planes below way to calculate the next block in all dimensions not counting oblique directions
+            nextBlockX = currBlockX+(zIter==1)-(zIter==2)
+            nextBlockY = currBlockY+(zIter==3)-(zIter==4)
+            nextBlockZ = currBlockZ+(zIter==5)-(zIter==6)
+
+            @ifXY 1 zIter @inbounds isMaskOkForProcessing = nextBlockX>0
+            @ifXY 2 zIter @inbounds isMaskOkForProcessing = nextBlockX<=metadataDims[1]
+            @ifXY 3 zIter @inbounds isMaskOkForProcessing = nextBlockY>0
+            @ifXY 4 zIter @inbounds isMaskOkForProcessing = nextBlockY<=metadataDims[2]
+            @ifXY 5 zIter @inbounds isMaskOkForProcessing = nextBlockZ>0
+            @ifXY 6 zIter @inbounds isMaskOkForProcessing = nextBlockZ<=metadataDims[3]
+            @ifXY 7 zIter @inbounds isMaskOkForProcessing = metaData[nextBlockX,nextBlockZ,newBlockZ,isPassGold+3]#then we need to check weather mask is already full - in this case we can not activate it 
+            #now we check are all true 
+            @ifY zIter begin 
+                    while(offset <UInt16(8)) 
+                    isMaskOkForProcessing = isMaskOkForProcessing & shfl_down_sync(FULL_MASK, isMaskOkForProcessing, offset)
+                    offset<<= 1
+                end #while
+            end# @ifY 
+            #here is the information wheather we want to process next block
+            @ifXY zIter 1 @inbounds resShmem[2,zIter+1,2]
+        end#for zIter   
+        sync_threads()#now we should know wheather we are intrested in blocks around
+        isMaskOkForProcessing=false#reset for reuse
+        
+        # ################################################################################################################################ 
+        #checking is there anything in the padding plane - so we basically do (most of reductions)
+        if(resShmem[2,zIter+1,2] )
+            @unroll for zIter::UInt8 in UInt8(1):UInt8(6)       
+                #we need to reduce now  the values  of padding vals to establish weather there is any true there if yes we put the neighbour block to be active 
+                    #reduction
+                    offset = UInt16(1)
+                    while(offset <32) 
+                        isMaskOkForProcessing = isMaskOkForProcessing | shfl_down_sync(FULL_MASK, isMaskOkForProcessing, offset)  
+                        offset<<= 1
+                    end
+                    @ifX 1  @inbounds  resShmem[zIter+1,threadIdxY()+1,3]=isMaskOkForProcessing
+            end
+             sync_threads()#now we have partially reduced values marking wheather we have any true in padding
+            # we get full reductions
+            @unroll for zIter::UInt8 in UInt8(1):UInt8(6)
+                offset = UInt16(1)
+                if(threadIdxY()==zIter)
+                    while(offset <32)                        
+                        @inbounds  resShmem[zIter+1,threadIdxX()+1,3] = shfl_down_sync(FULL_MASK,resShmem[zIter+1,threadIdxX()+1,3], offset)
+                    end#while    
+                end#if    
+            end#for
+         end#if  
+         sync_threads()#now we have fully reduced in resShmem[zIter+1,1+1,3]= resShmem[zIter+1,2,3]
+
+         CUDA.@cuprint "resShmem[zIter+1,threadIdxX()+1,3]" 
+
+
+
+
+    end#isNextBlockOfIntrest
+    
+   # isNextBlockOfIntrest() krowa
 
      ################################################################################################################################ 
 
@@ -209,100 +222,111 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
     #now we will analyze the padding planes one by one using innerProcessPadding
 
     ######## TOP
-    innerProcessPadding(threadIdxX()#resShmemX
-                        ,threadIdxY()#resShmemY
-                        ,1#resShmemZ
-                        ,5 #primaryZiter
-                        ,blockBeginingX+threadIdxX()#correctedX
-                        ,blockBeginingY +threadIdxY()#correctedY
-                        ,blockBeginingZ-1#correctedZ
-                        )
+#     innerProcessPadding(threadIdxX()#resShmemX
+#                         ,threadIdxY()#resShmemY
+#                         ,1#resShmemZ
+#                         ,5 #primaryZiter
+#                         ,blockBeginingX+threadIdxX()#correctedX
+#                         ,blockBeginingY +threadIdxY()#correctedY
+#                         ,blockBeginingZ-1#correctedZ
+#                         )
    
-   ######## BOTTOM
-   innerProcessPadding(threadIdxX()#resShmemX
-                        ,threadIdxY()#resShmemY
-                        ,34#resShmemZ
-                        ,6 #primaryZiter
-                        ,blockBeginingX+threadIdxX()#correctedX
-                        ,blockBeginingY +threadIdxY()#correctedY
-                        ,blockBeginingZ+33#correctedZ
-                        )
-   ######## LEFT
-   innerProcessPadding(1#resShmemX
-                        ,threadIdxY()#resShmemY
-                        ,threadIdxX()#resShmemZ
-                        ,2 #primaryZiter
-                        ,blockBeginingX-1#correctedX
-                        ,blockBeginingY +threadIdxX()#correctedY
-                        ,blockBeginingZ+threadIdxY()#correctedZ
-                        )
-   ######## RIGHT
-   innerProcessPadding(1#resShmemX
-                        ,threadIdxY()#resShmemY
-                        ,threadIdxX()#resShmemZ
-                        ,1 #primaryZiter
-                        ,blockBeginingX+33#correctedX
-                        ,blockBeginingY +threadIdxX()#correctedY
-                        ,blockBeginingZ+threadIdxY()#correctedZ
-                        )                        
-   ######## Anterior
-   innerProcessPadding(threadIdxX()#resShmemX
-                        ,34#resShmemY
-                        ,threadIdxY()#resShmemZ
-                        ,3 #primaryZiter
-                        ,blockBeginingX+threadIdxX()#correctedX
-                        ,blockBeginingY +33#correctedY
-                        ,blockBeginingZ+threadIdxY()#correctedZ
-                        )   
-   ######## Posterior
-   innerProcessPadding(threadIdxX()#resShmemX
-                        ,1#resShmemY
-                        ,threadIdxY()#resShmemZ
-                        ,4 #primaryZiter
-                        ,blockBeginingX+threadIdxX()#correctedX
-                        ,blockBeginingY -1#correctedY
-                        ,blockBeginingZ+threadIdxY()#correctedZ
-                        )   
+#    ######## BOTTOM
+#    innerProcessPadding(threadIdxX()#resShmemX
+#                         ,threadIdxY()#resShmemY
+#                         ,34#resShmemZ
+#                         ,6 #primaryZiter
+#                         ,blockBeginingX+threadIdxX()#correctedX
+#                         ,blockBeginingY +threadIdxY()#correctedY
+#                         ,blockBeginingZ+33#correctedZ
+#                         )
+#    ######## LEFT
+#    innerProcessPadding(1#resShmemX
+#                         ,threadIdxY()#resShmemY
+#                         ,threadIdxX()#resShmemZ
+#                         ,2 #primaryZiter
+#                         ,blockBeginingX-1#correctedX
+#                         ,blockBeginingY +threadIdxX()#correctedY
+#                         ,blockBeginingZ+threadIdxY()#correctedZ
+#                         )
+#    ######## RIGHT
+#    innerProcessPadding(1#resShmemX
+#                         ,threadIdxY()#resShmemY
+#                         ,threadIdxX()#resShmemZ
+#                         ,1 #primaryZiter
+#                         ,blockBeginingX+33#correctedX
+#                         ,blockBeginingY +threadIdxX()#correctedY
+#                         ,blockBeginingZ+threadIdxY()#correctedZ
+#                         )                        
+#    ######## Anterior
+#    innerProcessPadding(threadIdxX()#resShmemX
+#                         ,34#resShmemY
+#                         ,threadIdxY()#resShmemZ
+#                         ,3 #primaryZiter
+#                         ,blockBeginingX+threadIdxX()#correctedX
+#                         ,blockBeginingY +33#correctedY
+#                         ,blockBeginingZ+threadIdxY()#correctedZ
+#                         )   
+#    ######## Posterior
+#    innerProcessPadding(threadIdxX()#resShmemX
+#                         ,1#resShmemY
+#                         ,threadIdxY()#resShmemZ
+#                         ,4 #primaryZiter
+#                         ,blockBeginingX+threadIdxX()#correctedX
+#                         ,blockBeginingY -1#correctedY
+#                         ,blockBeginingZ+threadIdxY()#correctedZ
+#                         )   
 sync_threads()
 
 ###########################################
 #after all processing we need to establish weather the mask is full  (in case of first iteration also is it empty)
-     #reduction
-     offset = UInt16(1)
-     while(offset <32) 
-         isMaskFull = isMaskFull & shfl_down_sync(FULL_MASK, isMaskFull, offset)  
-         isMaskEmpty = isMaskEmpty & shfl_down_sync(FULL_MASK, isMaskEmpty, offset)  
-         offset<<= 1
-     end
-     @ifX 1  begin 
-        @inbounds  resShmem[2,threadIdxY()+1,6]=isMaskFull
-        @inbounds  resShmem[2,threadIdxY()+1,7]=isMaskEmpty
-     end   
-end
-sync_threads()#now we have partially reduced values marking wheather we have full or empty block
-# we get full reductions
- offset = UInt16(1)
- if(threadIdxY()==1)
-     while(offset <32)
-         @inbounds  resShmem[2,threadIdxX()+1,6] = shfl_down_sync(FULL_MASK,resShmem[2,threadIdxX()+1,6], offset)
-         @inbounds  resShmem[2,threadIdxX()+1,7] = shfl_down_sync(FULL_MASK,resShmem[2,threadIdxX()+1,7], offset)
-     end#while    
-    end#if 
-#now we have in resShmem[2,2,6] boolean marking is data block is full of trues and in resShmem[2,2,7] if there is no true at all
-##########  now we need to update meta data in case we have now empty or full block
-if(threadIdxY()==5 && threadIdxX()==5 && (resShmem[2,2,6] || resShmem[2,2,7]))
-    metaData[currBlockX,currBlockY,currBlockZ,isPassGold+1]=false # we set is inactive 
-end#if   
-if(threadIdxY()==6 && threadIdxX()==6 && (resShmem[2,2,6] || resShmem[2,2,7]))
-    metaData[currBlockX,currBlockY,currBlockZ,isPassGold+3]=true # we set is as full
-end#if
-#so in case it not empty and not full we need to put it into the work queue and increment appropriate counter
-if(threadIdxY()==7&& threadIdxX()==7 && !(resShmem[2,2,6] || resShmem[2,2,7]))
-    mainWorkQueue[atomicallyAddOneInt(mainQuesCounter)+1]=[currBlockX,currBlockY,currBlockZ,UInt8(isPassGold)]    
-end#if
-#######now in case block remains neither full nor empty we add it to the work queue
+    function isMaskStillActive()
 
 
+
+
+
+    # #reduction
+    #         offset = UInt16(1)
+    #         while(offset <32) 
+    #             isMaskFull = isMaskFull & shfl_down_sync(FULL_MASK, isMaskFull, offset)  
+    #             isMaskEmpty = isMaskEmpty & shfl_down_sync(FULL_MASK, isMaskEmpty, offset)  
+    #             offset<<= 1
+    #         end
+    #         @ifX 1  begin 
+    #             @inbounds  resShmem[2,threadIdxY()+1,6]=isMaskFull
+    #             @inbounds  resShmem[2,threadIdxY()+1,7]=isMaskEmpty
+    #         end   
+
+    #     sync_threads()#now we have partially reduced values marking wheather we have full or empty block
+    #     # we get full reductions
+    #     offset = UInt16(1)
+    #     if(threadIdxY()==1)
+    #         while(offset <32)
+    #             @inbounds  resShmem[2,threadIdxX()+1,6] = shfl_down_sync(FULL_MASK,resShmem[2,threadIdxX()+1,6], offset)
+    #             @inbounds  resShmem[2,threadIdxX()+1,7] = shfl_down_sync(FULL_MASK,resShmem[2,threadIdxX()+1,7], offset)
+    #         end#while    
+    #         end#if 
+    #     #now we have in resShmem[2,2,6] boolean marking is data block is full of trues and in resShmem[2,2,7] if there is no true at all
+    #     ##########  now we need to update meta data in case we have now empty or full block
+    #     if(threadIdxY()==5 && threadIdxX()==5 && (resShmem[2,2,6] || resShmem[2,2,7]))
+    #         metaData[currBlockX,currBlockY,currBlockZ,isPassGold+1]=false # we set is inactive 
+    #     end#if   
+    #     if(threadIdxY()==6 && threadIdxX()==6 && (resShmem[2,2,6] || resShmem[2,2,7]))
+    #         metaData[currBlockX,currBlockY,currBlockZ,isPassGold+3]=true # we set is as full
+    #     end#if
+    #     #so in case it not empty and not full we need to put it into the work queue and increment appropriate counter
+    #     if(threadIdxY()==7&& threadIdxX()==7 && !(resShmem[2,2,6] || resShmem[2,2,7]))
+    #         mainWorkQueue[atomicallyAddOneInt(mainQuesCounter)+1]=[currBlockX,currBlockY,currBlockZ,UInt8(isPassGold)]    
+    #     end#if
+    #     #######now in case block remains neither full nor empty we add it to the work queue
+
+
+
+
+
+
+end#isMaskStillActive
 sync_threads()
 
 end#executeDataIter

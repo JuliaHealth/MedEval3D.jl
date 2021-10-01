@@ -26,15 +26,15 @@ using Main.CUDAGpuUtils, Main.HFUtils,Cthulhu
     currBlockX,currBlockY,currBlockZ =UInt8(2),UInt8(2),UInt8(2)
     isPassGold = true;
     metaDataCPU = falses(10,10,10,4); # all neighbouring set to be inactive and not full
-    metadata= CuArray(metaDataCPU);
+    metaData= CuArray(metaDataCPU);
     metadataDims = size(metaData);
     mainQuesCounter=CUDA.zeros(Int32,1);
     mainWorkQueue = CUDA.zeros(Bool,10,4)#simulating place for 10 blocks
     iterationNumber= UInt32(2)
 function testKernelForPaddingAnalysis(analyzedArr, refAray,blockBeginingX,blockBeginingY,blockBeginingZ,resArray,resArraysCounter
-                                    ,isPassGold,currBlockX,currBlockY,currBlockZ,metadata,metadataDims,mainQuesCounter,mainWorkQueue,iterationNumber)
+                                    ,isPassGold,currBlockX,currBlockY,currBlockZ,metaData,metadataDims,mainQuesCounter,mainWorkQueue,iterationNumber)
         resShmem =  @cuStaticSharedMem(Bool,(34,34,34))#+2 in order to get the one padding 
-        ProcessMainData.executeDataIterFirstPassWithPadding(analyzedArr, refAray,blockBeginingX,blockBeginingY,blockBeginingZ,resShmem,resArray,resArraysCounter,currBlockX,currBlockY,currBlockZ,isPassGold,metadata,metadataDims,mainQuesCounter,mainWorkQueue,iterationNumber)
+        ProcessMainData.executeDataIterFirstPassWithPadding(analyzedArr, refAray,blockBeginingX,blockBeginingY,blockBeginingZ,resShmem,resArray,resArraysCounter,currBlockX,currBlockY,currBlockZ,isPassGold,metaData,metadataDims,mainQuesCounter,mainWorkQueue,iterationNumber)
         #clearMainShmem(shmem)
         #now we need to deal with padding in shmem res
         # processAllPaddingPlanes(blockBeginingX,blockBeginingY,blockBeginingZ,resShmem
@@ -47,7 +47,7 @@ end
 
 
 @cuda threads=(32,32) blocks=1 testKernelForPaddingAnalysis(testArrIn,referenceArray,blockBeginingX,blockBeginingY,blockBeginingZ,  resArray,
-  resArraysCounter,isPassGold,currBlockX,currBlockY,currBlockZ,metadata,metadataDims,mainQuesCounter,mainWorkQueue,iterationNumber) 
+  resArraysCounter,isPassGold,currBlockX,currBlockY,currBlockZ,metaData,metadataDims,mainQuesCounter,mainWorkQueue,iterationNumber) 
 resArraysCounter[1]
 
 @device_code_warntype interactive=true @cuda testprocessMaskData(testArrIn,resArray,referenceArray,resArraysCounter)
