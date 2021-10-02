@@ -87,12 +87,12 @@ function getBlockTpFpFn(goldBoolGPU#goldBoolGPU
         end#if 
     end#for
 
-   offset = UInt16(1)
-    while(offset <32) 
-      @inbounds locArr[3]+=shfl_down_sync(FULL_MASK, locArr[3], offset)  
-      @inbounds locArr[2]+=shfl_down_sync(FULL_MASK, locArr[2], offset)  
-      @inbounds locArr[1]+=shfl_down_sync(FULL_MASK, locArr[1], offset)  
-        offset<<= 1
+   offsetIter = UInt16(1)
+    while(offsetIter <32) 
+      @inbounds locArr[3]+=shfl_down_sync(FULL_MASK, locArr[3], offsetIter)  
+      @inbounds locArr[2]+=shfl_down_sync(FULL_MASK, locArr[2], offsetIter)  
+      @inbounds locArr[1]+=shfl_down_sync(FULL_MASK, locArr[1], offsetIter)  
+      offsetIter<<= 1
     end
     #shmemSum[threadIdxX(),3]+=locArr[3]
     if(threadIdxX()==1)
@@ -103,12 +103,12 @@ function getBlockTpFpFn(goldBoolGPU#goldBoolGPU
 
     sync_threads()
     if(threadIdxY()==1)
-      offsetB = UInt16(1)
-      while(offsetB <32) 
-        @inbounds shmemSum[threadIdxX(),3]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),3], offsetB)  
-        @inbounds shmemSum[threadIdxX(),2]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),2], offsetB)  
-        @inbounds shmemSum[threadIdxX(),1]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),1], offsetB)  
-        offsetB<<= 1
+      offsetIter = UInt16(1)
+      while(offsetIter <32) 
+        @inbounds shmemSum[threadIdxX(),3]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),3], offsetIter)  
+        @inbounds shmemSum[threadIdxX(),2]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),2], offsetIter)  
+        @inbounds shmemSum[threadIdxX(),1]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),1], offsetIter)  
+        offsetIter<<= 1
       end
     end  
 #now we have needed values in  shmemSum[1,2] shmemSum[1,3] and shmemSum[1,1]
