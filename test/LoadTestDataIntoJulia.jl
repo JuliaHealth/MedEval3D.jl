@@ -1,6 +1,6 @@
 
 #module LoadTestDataIntoJulia
-using Revise, Parameters, Logging
+using Revise, Parameters, Logging, Test
 using CUDA
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
@@ -14,6 +14,7 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\InformationTheorhetic\\Inform
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\volume\\VolumeMetric.jl")
 
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernels\\TpfpfnKernel.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernels\\InterClassCorrKernel.jl")
 
 using Main.BasicPreds, Main.CUDAGpuUtils 
 using Main.MainOverlap, Main.TpfpfnKernel
@@ -81,7 +82,8 @@ function getDataAndEvaluationFromPymia(examplemhaDat)
                 
     #             ]
     metrics = [pymMetr.CohenKappaCoefficient()
-                ,pymMetr.AdjustedRandIndex()                  
+                ,pymMetr.AdjustedRandIndex() 
+                ,pymMetr.InterclassCorrelation()
                 ]
 
     evaluator = pymEval.SegmentationEvaluator(metrics, labels)
@@ -130,21 +132,95 @@ argsB = TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn
                             ,UInt8(1)
                             ,conf
                             ,totalNumberOfVoxels)
-tp[1]==206422
+@test tp[1]==206422
 #tn[1]==6684530
-fp[1]==0
-fn[1]==218185
+@test fp[1]==0
+@test fn[1]==218185
 
 #numbers below taken from pymia
 
-isapprox(metricsTuplGlobal[4][1],0.654; atol = 0.1) #4) dice
-isapprox(metricsTuplGlobal[5][1],0.486; atol = 0.1) #5) jaccard
-isapprox(metricsTuplGlobal[6][1],0.000; atol = 0.1) #6) gce
-isapprox(metricsTuplGlobal[7][1],1.163; atol = 0.1) #7) randInd  - false
-isapprox(metricsTuplGlobal[8][1],0.969; atol = 0.1) #8) cohen kappa - false
-isapprox(metricsTuplGlobal[9][1],0.654; atol = 0.1) #9) volume metric
-isapprox(metricsTuplGlobal[10][1],0.130; atol = 0.1) #10) mutual information
-isapprox(metricsTuplGlobal[11][1],0.256; atol = 0.1) #11) variation of information
+@test isapprox(metricsTuplGlobal[4][1],0.654; atol = 0.1) #4) dice
+@test isapprox(metricsTuplGlobal[5][1],0.486; atol = 0.1) #5) jaccard
+@test isapprox(metricsTuplGlobal[6][1],0.000; atol = 0.1) #6) gce
+@test isapprox(metricsTuplGlobal[7][1],0.618699; atol = 0.1) #7) randInd  - false
+@test isapprox(metricsTuplGlobal[8][1],0.640; atol = 0.1) #8) cohen kappa - false
+@test isapprox(metricsTuplGlobal[9][1],0.654; atol = 0.1) #9) volume metric
+@test isapprox(metricsTuplGlobal[10][1],0.130; atol = 0.1) #10) mutual information
+@test isapprox(metricsTuplGlobal[11][1],0.256; atol = 0.1) #11) variation of information
+
+
+################## icc
+sumOfGold= CuArray([0]);
+sumOfSegm= CuArray([0]);
+
+sswTotal= CUDA.zeros(1);
+ssbTotal= CUDA.zeros(1);
+
+meanOfGoldPerSlice = CuArray(zeros(Float32,sizz[3]));
+meanOfSegmPerSlice = CuArray(zeros(Float32,sizz[3]));
+iccPerSlice = CuArray(zeros(Float32,sizz[3]));
+numberToLooFor= UInt8(1)
+# arrGoldB = vec(CUDA.ones(UInt8,sizz));
+# arrAlgoB =  vec(CUDA.ones(UInt8,sizz));
+
+globalICC= InterClassCorrKernel.calculateInterclassCorr(arrGold,arrAlgo
+                                ,sizz
+                                ,sumOfGold
+                                ,sumOfSegm
+                                ,meanOfGoldPerSlice
+                                ,meanOfSegmPerSlice
+                                ,sswTotal
+                                ,ssbTotal
+                                ,iccPerSlice
+                                ,numberToLooFor)
+
+@test isapprox(globalICC,0.6381813122385622; atol = 0.1)
+
+
+goldS,segmAlgo 
+
+goldSB = map(el->el== numberToLooFor ,vec(goldS));
+segmAlgoB = map(el->el== numberToLooFor ,vec(segmAlgo));
+
+mean_f = mean(goldSB)
+mean_m = mean(segmAlgoB)
+numberElements = length(segmAlgoB)
+
+sumOfGold[1]/ (sizz[1]*sizz[2]*sizz[3]   )
+# [ Info: grandMean 0.044381547296106404
+# [ Info: numberOfVoxels 7109137
+# 0.38722002506256104
+
+
+		 ssw = 0
+		 ssb = 0
+		 grandmean = (mean_f + mean_m)/2
+         icc=0
+                 
+for i in 1:(numberElements)
+		
+			 val_f = goldSB[i];
+			 val_m = segmAlgoB[i];
+			 m = (val_f + val_m)/2;
+			ssw += (val_f - m)^2;
+			ssw += (val_m - m)^2;
+			ssb += (m - grandmean)^2;
+end#for
+ssw
+ssb
+
+isapprox(sswTotal[1] ,ssw; atol = 2)
+isapprox(ssbTotal[1] ,ssb; atol = 2)
+
+
+
+ssw = ssw/numberElements;
+ssb = ssb/(numberElements-1) * 2;
+icc = (ssb - ssw)/(ssb + ssw);
+
+icc
+
+
 
 
 

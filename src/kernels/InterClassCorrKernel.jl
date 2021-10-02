@@ -5,205 +5,191 @@ module InterClassCorrKernel
 
 using Main.BasicPreds, Main.CUDAGpuUtils, CUDA
 using Main.MainOverlap, Main.TpfpfnKernel
+export calculateInterclassCorr
+
+"""
+calculates slicewise and global interclass correlation metric
+"""
+function calculateInterclassCorr(flatGold
+                                ,flatSegm
+                                ,mainArrayDims
+                                ,sumOfGold
+                                ,sumOfSegm
+                                ,meanOfGoldPerSlice
+                                ,meanOfSegmPerSlice
+                                ,sswTotal
+                                ,ssbTotal
+                                ,iccPerSlice
+                                ,numberToLooFor)::Float64
+
+pixelNumberPerSlice= mainArrayDims[1]*mainArrayDims[2]
+loopNumb= cld(pixelNumberPerSlice,1024)
+
+#first we need to calculate means
+@cuda threads=(32,32) blocks=mainArrayDims[3]  kernel_InterClassCorr_means(flatGold,flatSegm
+  ,loopNumb  ,sumOfGold,sumOfSegm ,meanOfGoldPerSlice
+  ,meanOfSegmPerSlice ,pixelNumberPerSlice,numberToLooFor )
+
+  numberOfVoxels = mainArrayDims[1]*mainArrayDims[2]*mainArrayDims[3]
+  grandMean= ( (sumOfGold[1]/numberOfVoxels) + (sumOfSegm[1]/numberOfVoxels ))/2
+
+
+@cuda threads=(32,32) blocks=mainArrayDims[3]  kernel_InterClassCorr(flatGold  ,flatSegm
+     ,loopNumb,pixelNumberPerSlice
+     ,meanOfGoldPerSlice  ,meanOfSegmPerSlice
+     ,sswTotal ,ssbTotal  ,iccPerSlice     ,grandMean,numberToLooFor  )
+
+     ssw = sswTotal[1]/numberOfVoxels;
+     ssb = ssbTotal[1]/(numberOfVoxels-1) * 2;
+    
+  return (ssb - ssw)/(ssb + ssw);
+  
+end
+
 
 """
 adapted from https://github.com/JuliaGPU/CUDA.jl/blob/afe81794038dddbda49639c8c26469496543d831/src/mapreduce.jl
 goldBoolGPU - array holding data of gold standard bollean array
 segmBoolGPU - boolean array with the data we want to compare with gold standard
-ic - holding single value for global intercalss correlation
+ic - holding single value for global interclass correlation
 intermediateRes- array holding slice wise results for ic
 loopNumb - number of times the single lane needs to loop in order to get all needed data
 sliceEdgeLength - length of edge of the slice we need to square this number to get number of pixels in a slice
 amountOfWarps - how many warps we can stick in the block
 """
 
-function kernel_InterClassCorr(flatGold
+function kernel_InterClassCorr_means(flatGold
                                ,flatSegm
                                 ,loopNumb::Int64
-                                ,indexCorr::Int64
-                                ,slicePixelNumb::Int64
-                                ,totalVoxelNumb::Int64
                                 ,sumOfGold
                                 ,sumOfSegm
-                                ,sumOfGoldPartials
-                                ,sumOfSegmPartials
-                                ,sswPartials
-                                ,sswTotal
-                                ,ssbPartialsperSlice
-                                ,SsbTotalGlobal
-                                ,slicesPerBlockMatrix
-                                ,maxSlicesPerBlock::Int64)
-   wid, lane = fldmod1(threadIdxX(),32)
-   grid_handle = this_grid()
+                                ,meanOfGoldPerSlice
+                                ,meanOfSegmPerSlice
+                                ,pixelNumberPerSlice
+                                ,numberToLooFor )
+    #offset for lloking for values in source arrays 
+    offset = (pixelNumberPerSlice*(blockIdx().x-1))
+   #for storing results from warp reductions
+   shmemSum = @cuStaticSharedMem(UInt16, (33,2))   #thread local values that are meant to store some results - like means ... 
+   offsetIter = UInt8(1)
 
-      #shared memory for  stroing intermidiate data per lane  
-      shmem = @cuStaticSharedMem(Float16, (257,3))
-      #for storing results from warp reductions
-      shmemSum = @cuStaticSharedMem(Float32, (33,3))
- ####### first we need to get the global mean of all images and of each slice  
-    for blockRef in 1:maxSlicesPerBlock
-        sliceNumb= slicesPerBlockMatrix[blockIdx().x,blockRef]
-        if(sliceNumb>-1)
-            i = ((threadIdxX()-1)* indexCorr) + (slicePixelNumb*(sliceNumb-1))+1# used as a basis to get data we want from global memory
-            # at the begining of analyzing each slice we need to set shared memory to 0 
-            shmem[threadIdxX(), 1]=0
-            shmem[threadIdxX(), 2]=0
-            shmemSum[wid,1]=0
-            shmemSum[wid,2]=0
-            # simple adding to the shared memory in order to  be able to calculate mean later
-            @unroll for k in 0:loopNumb
-                incr_shmem_forMean(threadIdxX(),flatGold[i+k],flatSegm[i+k],shmem)
-            end#for 
-            #reducing across the warp
-            firstReduce(shmem,shmemSum,wid,threadIdxX(),lane)
-            sync_threads()
-            getSecondBlockReduce( 1,1,wid,sumOfGoldPartials,sumOfGold,shmemSum,sliceNumb,lane)
-            getSecondBlockReduce( 2,2,wid,sumOfSegmPartials,sumOfSegm,shmemSum,sliceNumb,lane)
-        end#if    
-    end#for
-    sync_grid(grid_handle)
-    ######now sum of elements both  slice wise and global should be available and would make it easy to calculate mean
-    for blockRef in 1:maxSlicesPerBlock
-        sliceNumb= slicesPerBlockMatrix[blockIdx().x,blockRef]
-        if(sliceNumb>-1)
-            i = ((threadIdxX()-1)* indexCorr) + (slicePixelNumb*(sliceNumb-1))+1# used as a basis to get data we want from global memory
-            # at the begining of analyzing each slice we need to set shared memory to 0 
-            shmem[threadIdxX(), 1]=0
-            shmem[threadIdxX(), 2]=0
-            shmem[threadIdxX(), 3]=0
-            shmemSum[wid,1]=0
-            shmemSum[wid,2]=0
-            shmemSum[wid,3]=0
-            
-            #loading  slice and global mean
-            if(threadIdxX()==1)
-            shmemSum[33,1]=  (sumOfGoldPartials[sliceNumb] +sumOfSegmPartials[sliceNumb])/slicePixelNumb     #slice mean
-            end
-            if(threadIdxX()==2)
-                shmemSum[33,2]= (sumOfGold[1]+sumOfSegm[1])/totalVoxelNumb #global mean   
-            end
-            sync_threads()
+   locValA = UInt32(0)
+   locValB = UInt32(0)
+        #reset shared memory
+        @ifY 1 shmemSum[threadIdxX(),1]=0 ;   @ifY 2 shmemSum[threadIdxX(),2]=0
+        sync_threads()
 
-            # simple adding to the shared memory in order to  be able to calculate mean later
-            @unroll for k in 0:loopNumb
-                incr_shmem_forRes(threadIdxX(),flatGold[i+k],flatSegm[i+k],shmem,shmemSum[33,1],shmemSum[33,2] )
-            end#for 
-            #reducing across the warp
-            firstReduce(shmem,shmemSum,wid,threadIdxX(),lane)
-            sync_threads()
-            getSecondBlockReduce( 1,1,wid,sswPartials,sswTotal,shmemSum,sliceNumb,lane)
-            getSecondBlockReduceNoAtomic( 2,2,wid,ssbPartialsperSlice,shmemSum,sliceNumb,lane)
-            getSecondBlockReduceNoPerSlice( 3,3,wid,SsbTotalGlobal,shmemSum,sliceNumb,lane)
+        #first we add 1 for each spot we have true - so we will get sum  - and from sum we can get mean
+        @unroll for k in 0:loopNumb
+            if(threadIdxX()+(threadIdxY()-1)*32+k*1024 <=pixelNumberPerSlice)
+            ind =offset+ threadIdxX()+(threadIdxY()-1)*32+k*1024
+            locValA += flatGold[ind]==numberToLooFor  
+            locValB += flatSegm[ind]==numberToLooFor
+            end#if 
+        end#for
         
-        end#if    
-    end#for
 
-    # ####### now we have ssw and ssb calculated both global and per slice
-    # sync_grid(grid_handle)
+            #now we will have sum of all entries in given slice that comply to our predicate
+            #next we need to reduce values
+            offsetIter = UInt8(1)
+            while(offsetIter <32) 
+                @inbounds locValA+=shfl_down_sync(FULL_MASK, locValA, offsetIter)  
+                @inbounds locValB+=shfl_down_sync(FULL_MASK, locValB, offsetIter)  
+                offsetIter<<= 1
+            end
+        # now we have sums in first threads of the warp we need to pass it to shared memory
+        if(threadIdxX()==1)
 
-    # ssw = ssw/numberElements 
-    # ssb = ssb/(numberElements-1) * 2 
-    # icc = (ssb - ssw)/(ssb + ssw) 
+            @inbounds shmemSum[threadIdxY(),1]+=locValA
+            @inbounds shmemSum[threadIdxY(),2]+=locValB
+        end
+        sync_threads()
+        #finally reduce from shared memory
+        if(threadIdxY()==1)
+            offsetIter = UInt8(1)
+            while(offsetIter <32) 
+                @inbounds shmemSum[threadIdxX(),1]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),1], offsetIter)  
+                @inbounds shmemSum[threadIdxX(),2]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),2], offsetIter)  
+            offsetIter<<= 1
+            end
+        end  
+sync_threads()
+       
+      #now in   shmemSum[1,1] we should have sum of values complying with our predicate in gold mask and in shmemSum[1,2] values of other mask
+      #we need to add now those to the globals  
+      @ifXY 1 1  @inbounds @atomic sumOfGold[]+= shmemSum[1,1]
+      @ifXY 1 2  @inbounds @atomic sumOfSegm[]+= shmemSum[1,2]
+      @ifXY 1 3  @inbounds meanOfGoldPerSlice[blockIdxX()]=(shmemSum[1,1]/pixelNumberPerSlice )
+      @ifXY 1 4  @inbounds meanOfSegmPerSlice[blockIdxX()]=(shmemSum[1,2]/pixelNumberPerSlice)
+
     return nothing
 end
 
 
+function kernel_InterClassCorr(flatGold
+    ,flatSegm
+     ,loopNumb::Int64
+     ,pixelNumberPerSlice::Int64
+     ,meanOfGoldPerSlice
+     ,meanOfSegmPerSlice
+     ,sswTotal
+     ,ssbTotal
+     ,iccPerSlice
+     ,grandMean
+     ,numberToLooFor)
+  
+    #offset for lloking for values in source arrays 
+    offset = (pixelNumberPerSlice*(blockIdx().x-1))
+    #for storing results from warp reductions
+    shmemSum = @cuStaticSharedMem(Float32, (33,2))   #thread local values that are meant to store some results - like means ... 
+    @ifY 1 shmemSum[threadIdxX(),1]=0 ;   @ifY 2 shmemSum[threadIdxX(),2]=0 ;@ifY 3 shmemSum[threadIdxX(),2]=0
+    sync_threads()
+    ssw::Float32 = Float32(0.0)
+    ssb::Float32 = Float32(0.0)
+
+    @unroll for k in UInt16(0):loopNumb
+        if(threadIdxX()+(threadIdxY()-1)*32+k*1024 <=pixelNumberPerSlice)
+        ind =offset+ threadIdxX()+(threadIdxY()-1)*32+k*1024   
+        m =  ((flatGold[ind]==numberToLooFor) +(flatSegm[ind]==numberToLooFor))/2  
+        ssw += (((flatGold[ind]==numberToLooFor)- m)^2) +(((flatSegm[ind]==numberToLooFor)- m )^2) 
+        ssb += ((m - grandMean[1])^2)
+        end#if 
+    end#for
+    #now we accumulated ssw and ssb - we need to reduce it
+    offsetIter = UInt8(1)
+    while(offsetIter <32) 
+        @inbounds ssw+=shfl_down_sync(FULL_MASK, ssw, offsetIter)  
+        @inbounds ssb+=shfl_down_sync(FULL_MASK, ssb, offsetIter)  
+        offsetIter<<= 1
+    end
+        # now we have sums in first threads of the warp we need to pass it to shared memory
+        if(threadIdxX()==1)
+            @inbounds shmemSum[threadIdxY(),1]+=ssw
+            @inbounds shmemSum[threadIdxY(),2]+=ssb
+        end
+    sync_threads()
+    #finally reduce from shared memory
+        if(threadIdxY()==1)
+            offsetIter = UInt8(1)
+            while(offsetIter <32) 
+            @inbounds shmemSum[threadIdxX(),1]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),1], offsetIter)  
+            @inbounds shmemSum[threadIdxX(),2]+=shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),2], offsetIter)  
+            offsetIter<<= 1
+            end
+    end  
+    sync_threads()
+      #now in   shmemSum[1,1] we should have ssw and in  shmemSum[1,2] ssb
+      @ifXY 1 1  @inbounds @atomic sswTotal[]+= shmemSum[1,1]
+      @ifXY 1 2  @inbounds @atomic ssbTotal[]+= shmemSum[1,2]
+      @ifXY 1 3  @inbounds iccPerSlice[blockIdxX()]=(shmemSum[1,2] - shmemSum[1,1])/(shmemSum[1,2] + shmemSum[1,1])    
+    # # ####### now we have ssw and ssb calculated both global and per slice
+
+    return nothing
 
 
-
-
-
-
-"""
-add value to the shared memory in the position i, x 
-    where x is 1 for  gold standard mask and 2 for one we test
-"""
-@inline function incr_shmem_forMean( primi::Int64,goldVal,segmVal,shmem )
-    @inbounds shmem[ primi, 1 ]+=goldVal
-    @inbounds shmem[ primi, 2 ]+=segmVal
-    return true
 end
 
 
-"""
-accumulates values needed for calculating intercalss correlation
-"""
-@inline function incr_shmem_forRes( primi::Int64,goldVal,segmVal,shmem, slicemean, globalmean )
-    m = (goldVal + segmVal)/2
-    @inbounds shmem[ primi, 1 ]+=( (goldVal-m)^2 + (segmVal-m)^2 ) 
-    @inbounds shmem[ primi, 2 ]+=(m- slicemean)^2
-    @inbounds shmem[ primi, 3 ]+=(m- globalmean)^2
-    return true
-end
 
-
-
-"""
-reduction across the warp and adding to appropriate spots in the  shared memory
-"""
-function firstReduce(shmem,shmemSum,wid,threadIdx,lane   )
-    @inbounds sumA = reduce_warp(shmem[threadIdx,1],32)
-    @inbounds sumB = reduce_warp(shmem[threadIdx,2],32)
-    @inbounds sumC = reduce_warp(shmem[threadIdx,3],32)
-
-    if(lane==1)
-   @inbounds shmemSum[wid,1]= sumA
-     end  
-    if(lane==2) 
-       @inbounds shmemSum[wid,2]= sumB
-    end     
-    if(lane==3) 
-        @inbounds shmemSum[wid,3]= sumC
-     end     
-end#firstReduce
-
-"""
-sets the final block amount to the  array representing each slice, 
-wid - the warp in a block we want to use
-numb - number associated with constant - used to access shared memory for example
-chosenWid - on which block we want to make a reduction to happen
-intermediateRes - array with intermediate -  slice wise results
-singleREs - the final  constant holding image witde values (usefull for example for debugging)
-shmemSum - shared memory where we get the  results to be reduced now and to which we will also save the output
-blockId - number related to block we are currently in 
-lane - the lane in the warp
-"""
-function getSecondBlockReduce(chosenWid,numb,wid, intermediateRes,singleREs,shmemSum,blockId,lane)
-    if(wid==chosenWid )
-        shmemSum[33,numb] = reduce_warp(shmemSum[lane,numb],32 )
-        
-      #probably we do not need to sync warp as shfl dow do it for us         
-      if(lane==1)
-          @inbounds @atomic singleREs[]+=shmemSum[33,numb]
-      end    
-      if(lane==2)
-        @inbounds intermediateRes[blockId]=shmemSum[33,numb]
-      end    
-  end  
-end#getSecondBlockReduce
-"""
-modifaction without using atomics ...
-"""
-function getSecondBlockReduceNoAtomic(chosenWid,numb,wid, intermediateRes,shmemSum,blockId,lane)
-    if(wid==chosenWid )
-        shmemSum[33,numb] = reduce_warp(shmemSum[lane,numb],32 )
-      if(lane==2)
-        @inbounds intermediateRes[blockId]=shmemSum[33,numb]
-      end    
-  end  
-end#getSecondBlockReduceNoAtomic
-"""
-modifaction without updating per slice data
-"""
-function getSecondBlockReduceNoPerSlice(chosenWid,numb,wid, singleREs,shmemSum,blockId,lane)
-    if(wid==chosenWid )
-        shmemSum[33,numb] = reduce_warp(shmemSum[lane,numb],32 )
-        
-      #probably we do not need to sync warp as shfl dow do it for us         
-      if(lane==1)
-          @inbounds @atomic singleREs[]+=shmemSum[33,numb]
-      end    
-  end  
-end#getSecondBlockReduceNoPerSlice
 
 end#InterClassCorrKernel

@@ -70,11 +70,12 @@ function getBlockTpFpFn(goldBoolGPU#goldBoolGPU
         ,pixelNumberPerSlice#pixelNumberPerSlice
         ,numberToLooFor#numberToLooFor
         ,conf)
-    # we multiply thread id as we are covering now 2 places using one lane - hence after all lanes gone through we will cover 2 blocks - hence second multiply    
-    offset = (pixelNumberPerSlice*(blockIdx().x-1))
+    #offset for lloking for values in source arrays 
+        offset = (pixelNumberPerSlice*(blockIdx().x-1))
     
 #creates shared memory and initializes it to 0
    shmemSum = createAndInitializeShmem(threadIdxX(),threadIdxY())
+   sync_threads()
 # incrementing appropriate number of times 
     locArr= zeros(MVector{3,UInt16})
 
