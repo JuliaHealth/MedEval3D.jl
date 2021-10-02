@@ -309,7 +309,7 @@ InformationTheorhetic.variationOfInformation(tn,tp,fp, fn)
 
 
 
-
+rand(1,3,7)[19]
 
 
 end #module
