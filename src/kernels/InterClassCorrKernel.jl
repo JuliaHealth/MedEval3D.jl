@@ -15,35 +15,30 @@ function calculateInterclassCorr(flatGold
                                 ,mainArrayDims
                                 ,sumOfGold
                                 ,sumOfSegm
-                                ,meanOfGoldPerSlice
-                                ,meanOfSegmPerSlice
                                 ,sswTotal
                                 ,ssbTotal
                                 ,iccPerSlice
-                                ,numberToLooFor)::Float64
+                                ,numberToLooFor
+                                ,maxBlocksPerKernel)::Float64
 
-pixelNumberPerSlice= mainArrayDims[1]*mainArrayDims[2]
-loopNumb= cld(pixelNumberPerSlice,1024)
-
+pixelNumberPerBlock = cld(mainArrayDims[1]*mainArrayDims[2]*mainArrayDims[3],maxBlocksPerKernel)-1 # some single pixels at the ends may be ignored
+pixelNumberPerSlice = mainArrayDims[1]*mainArrayDims[2]
 #first we need to calculate means
-@cuda threads=(32,32) blocks=mainArrayDims[3]  kernel_InterClassCorr_means(flatGold,flatSegm
-  ,loopNumb  ,sumOfGold,sumOfSegm ,meanOfGoldPerSlice
-  ,meanOfSegmPerSlice ,pixelNumberPerSlice,numberToLooFor )
-
+@cuda threads=(32,32) blocks=maxBlocksPerKernel  kernel_InterClassCorr_means(flatGold,flatSegm
+  ,cld(pixelNumberPerBlock,1024)  ,sumOfGold,sumOfSegm  ,pixelNumberPerBlock,numberToLooFor )
   numberOfVoxels = mainArrayDims[1]*mainArrayDims[2]*mainArrayDims[3]
   grandMean= ( (sumOfGold[1]/numberOfVoxels) + (sumOfSegm[1]/numberOfVoxels ))/2
 
 
 @cuda threads=(32,32) blocks=mainArrayDims[3]  kernel_InterClassCorr(flatGold  ,flatSegm
-     ,loopNumb,pixelNumberPerSlice
-     ,meanOfGoldPerSlice  ,meanOfSegmPerSlice
-     ,sswTotal ,ssbTotal  ,iccPerSlice     ,grandMean,numberToLooFor  )
+     ,cld(pixelNumberPerSlice,1024),mainArrayDims[1]*mainArrayDims[2]
+     ,sswTotal ,ssbTotal  ,iccPerSlice     ,grandMean,numberToLooFor,numberOfVoxels  )
 
      ssw = sswTotal[1]/numberOfVoxels;
      ssb = ssbTotal[1]/(numberOfVoxels-1) * 2;
     
-  return (ssb - ssw)/(ssb + ssw);
-  
+ return (ssb - ssw)/(ssb + ssw);
+ 
 end
 
 
@@ -63,8 +58,6 @@ function kernel_InterClassCorr_means(flatGold
                                 ,loopNumb::Int64
                                 ,sumOfGold
                                 ,sumOfSegm
-                                ,meanOfGoldPerSlice
-                                ,meanOfSegmPerSlice
                                 ,pixelNumberPerSlice
                                 ,numberToLooFor )
     #offset for lloking for values in source arrays 
@@ -119,8 +112,6 @@ sync_threads()
       #we need to add now those to the globals  
       @ifXY 1 1  @inbounds @atomic sumOfGold[]+= shmemSum[1,1]
       @ifXY 1 2  @inbounds @atomic sumOfSegm[]+= shmemSum[1,2]
-      @ifXY 1 3  @inbounds meanOfGoldPerSlice[blockIdxX()]=(shmemSum[1,1]/pixelNumberPerSlice )
-      @ifXY 1 4  @inbounds meanOfSegmPerSlice[blockIdxX()]=(shmemSum[1,2]/pixelNumberPerSlice)
 
     return nothing
 end
@@ -130,13 +121,13 @@ function kernel_InterClassCorr(flatGold
     ,flatSegm
      ,loopNumb::Int64
      ,pixelNumberPerSlice::Int64
-     ,meanOfGoldPerSlice
-     ,meanOfSegmPerSlice
      ,sswTotal
      ,ssbTotal
      ,iccPerSlice
      ,grandMean
-     ,numberToLooFor)
+     ,numberToLooFor
+     ,numberOfVoxels
+     )
   
     #offset for lloking for values in source arrays 
     offset = (pixelNumberPerSlice*(blockIdx().x-1))
@@ -181,10 +172,15 @@ function kernel_InterClassCorr(flatGold
       #now in   shmemSum[1,1] we should have ssw and in  shmemSum[1,2] ssb
       @ifXY 1 1  @inbounds @atomic sswTotal[]+= shmemSum[1,1]
       @ifXY 1 2  @inbounds @atomic ssbTotal[]+= shmemSum[1,2]
-      @ifXY 1 3  @inbounds iccPerSlice[blockIdxX()]=(shmemSum[1,2] - shmemSum[1,1])/(shmemSum[1,2] + shmemSum[1,1])    
+      @ifXY 1 3  begin
+        sswInner = shmemSum[1,2]/numberOfVoxels;
+        ssbInner = shmemSum[1,1]/(numberOfVoxels-1) * 2
+        @inbounds iccPerSlice[blockIdxX()]=(ssb - ssw)/(ssb + ssw)
+      end  
     # # ####### now we have ssw and ssb calculated both global and per slice
 
     return nothing
+
 
 
 end

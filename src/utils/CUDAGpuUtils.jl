@@ -325,7 +325,7 @@ matrix will be n x m  where
     numberOfBlocksPerMultprocessor- how many block can be run in a single SM
     """
 function assignWorkToCooperativeBlocks(slicesNumb, numberOfBlocksPerMultprocessor=1 )
-   numberOfBlocks = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT)*1
+   numberOfBlocks = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT)*numberOfBlocksPerMultprocessor
    maxSlicesPerBlock = Int64(ceil(slicesNumb/numberOfBlocks))
    sliceAssignMatrix = ones(Int8,numberOfBlocks, maxSlicesPerBlock ).-2
    # first filling first 4 columns

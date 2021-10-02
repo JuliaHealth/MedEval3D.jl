@@ -156,23 +156,21 @@ sumOfSegm= CuArray([0]);
 sswTotal= CUDA.zeros(1);
 ssbTotal= CUDA.zeros(1);
 
-meanOfGoldPerSlice = CuArray(zeros(Float32,sizz[3]));
-meanOfSegmPerSlice = CuArray(zeros(Float32,sizz[3]));
 iccPerSlice = CuArray(zeros(Float32,sizz[3]));
 numberToLooFor= UInt8(1)
 # arrGoldB = vec(CUDA.ones(UInt8,sizz));
 # arrAlgoB =  vec(CUDA.ones(UInt8,sizz));
+maxNumberOfBlocks = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT)*1
 
 globalICC= InterClassCorrKernel.calculateInterclassCorr(arrGold,arrAlgo
                                 ,sizz
                                 ,sumOfGold
                                 ,sumOfSegm
-                                ,meanOfGoldPerSlice
-                                ,meanOfSegmPerSlice
                                 ,sswTotal
                                 ,ssbTotal
                                 ,iccPerSlice
-                                ,numberToLooFor)
+                                ,numberToLooFor
+                                ,maxNumberOfBlocks)
 
 @test isapprox(globalICC,0.6381813122385622; atol = 0.1)
 
