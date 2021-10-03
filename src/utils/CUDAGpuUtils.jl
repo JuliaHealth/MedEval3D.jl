@@ -4,9 +4,7 @@ module CUDAGpuUtils
 using CUDA, StaticArrays
 
 export atomicallySetValueTrreeDim,atomicallyAddOneInt,clearLocArrdefineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc,reduce_warp_max,reduce_warp_min,reduce_warp_min,reduce_warp_or,reduce_warp_and,blockIdxZ,blockIdxY,blockIdxX,blockDimZ, blockDimY, blockDimX, threadIdxX, threadIdxY, threadIdxZ
-export @unroll, @ifX, @ifY, @ifXY
-
-
+export @unroll, @ifX, @ifY, @ifXY, @widL, @wid, @lan
 
 """
 atomically add to given 1 length array 1
@@ -55,9 +53,36 @@ macro ifXY(x,y, ex)
         end))
 
 end
+"""
+convinience macro that will execute only if it has given wid and lane 
+"""
+macro widL(innerWid,innerLane, ex)
+    return esc(:(if wid==$innerWid && lane==$innerLane
+        $ex
+    end))
+
+end
 
 
 
+"""
+convinience macro that will execute only if it has given wid 
+"""
+macro wid(innerWid, ex)
+    return esc(:(if wid==$innerWid 
+        $ex
+    end))
+
+end
+"""
+convinience macro that will execute only if it has given lane 
+"""
+macro lan(innerWid,innerLane, ex)
+    return esc(:(if lane==$innerLane
+        $ex
+    end))
+
+end
 
 
 """

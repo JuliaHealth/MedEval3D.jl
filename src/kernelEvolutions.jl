@@ -376,3 +376,6 @@ function primitiveAtomicKernel(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGP
 # end
 
 
+
+
+
