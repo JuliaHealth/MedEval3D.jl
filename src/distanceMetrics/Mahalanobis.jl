@@ -18,17 +18,21 @@ calculates Mahalanobis distance between two segmentations
 https://github.com/JuliaGPU/GemmKernels.jl/blob/40c1dacb2ff2d24d7d392fc784c389e5e7fd8307/src/kernel.jl
 
 example of WMMA https://github.com/JuliaGPU/CUDA.jl/blob/800b7b89c4c19b9b98a7d150a813a0e3d0e18be5/examples/wmma/high-level.jl
-"""
-module MahalanobisDist
-
 look into https://math.stackexchange.com/questions/4240707/mahalanobis-distance-between-two-3-dimensional-boolean-arrays
-
-
-
 
 
 taken from https://github.com/JuliaGPU/GemmKernels.jl/blob/40c1dacb2ff2d24d7d392fc784c389e5e7fd8307/src/kernel.jl
 - probably how to load element by element to fragment
+
+"""
+module MahalanobisDist
+
+
+
+
+
+
+
 
     # ld.global(0 : block_shape.K)
     @unroll for (i, warp_tile) = enumerate(parallellise(block_tile.MK, Tile(conf.mem_a_warp), warpId, conf.warps_per_block, conf.is_a_col_major))
