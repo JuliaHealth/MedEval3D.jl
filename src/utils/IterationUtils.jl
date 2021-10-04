@@ -35,7 +35,7 @@ maxDimA, maxDimB - maximum values available in source array
 loopDimA, loopDimB - how many times we should iterate in those dimensions
 
 """
-macro iterDimFixed()
+macro iterDimFixed(chosenDim, dimValue,maxDimA, maxDimB,loopDimA, loopDimB  )
 
 end#iterDimFixed
 
