@@ -102,6 +102,7 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
     # CUDA.@cuprint "locBool $(locBool)  locArr $(locArr) \n  "
     processMaskData( locBool, zIter, resShmem)
 end#for 
+        --------- big part of what below can be skipped if we have the block with already all results analyzed - we know it from block private counter
 sync_threads() #we should have in resShmem what we need 
          ----------- also all in source shmem
 ########## check data aprat from padding
