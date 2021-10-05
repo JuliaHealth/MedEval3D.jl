@@ -78,6 +78,9 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
                                 ,blockBeginingY,blockBeginingZ,resShmem,resArray,resArraysCounter
                                 ,currBlockX,currBlockY,currBlockZ,isPassGold,metaData,metadataDims
                                 ,mainQuesCounter,mainWorkQueue,iterationNumber,debugArr)
+    
+    ----------- need second shared memory to find the direction ...
+    
     locArr::UInt32 = UInt32(0)
     isMaskFull::Bool= true
     isMaskEmpty::Bool = true
@@ -90,6 +93,9 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
 
     ############## upload data
   ############## upload data
+    
+    ----------- need to add in 3 dim iter a possibility to customize the way how we define offsets in x,y,z so instead of grid or block dim we need to have ability to do it separately as extra arguments
+        
   @unroll for zIter::UInt8 in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
     locBool::Bool = @inbounds analyzedArr[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
     locArr|= locBool << (zIter-1)
@@ -97,8 +103,11 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
     processMaskData( locBool, zIter, resShmem)
 end#for 
 sync_threads() #we should have in resShmem what we need 
+         ----------- also all in source shmem
 ########## check data aprat from padding
+        ----------- generalize this loop  to arbitrary thread block - although we just make the data block size compatible with thread block size calculated by occupancy API, there will be only small problem with padding in such situation
 @unroll for zIter in 1:32# most outer loop is responsible for z dimension
+            
     locVal::Bool = @inbounds  (locArr>>(zIter-1) & 1)
     shmemVal::Bool = @inbounds resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1]
     # CUDA.@cuprint "locVal $(locVal)  shmemVal $(shmemVal) \n  "
@@ -107,15 +116,22 @@ sync_threads() #we should have in resShmem what we need
     isMaskEmpty = ~locValOrShmem & isMaskEmpty
 
     #CUDA.@cuprint "locVal $(locVal)  shmemVal $(shmemVal) \n  "
-    if(!locVal && shmemVal)
+    if(!locVal && shmemVal)       
+                
         # setting value in global memory
         @inbounds  analyzedArr[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]= true
         # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
         isInReferencaArr::Bool= @inbounds referenceArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
         if(isInReferencaArr)
+                   ----------- we add sourceVal - from new shared memory... and on the basis of it we establish direction from which we updated this position we add this to the res information                          
+                    
             #CUDA.@cuprint "isInReferencaArr $(isInReferencaArr) \n  "
+         ----------- results now are stored in a matrix where first 3 entries are x,y,z coordinates entry 4 is in which iteration we covered it and entry 5 from which direction - this will be used if needed        
+        
             @inbounds  resArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]=UInt16(1)
             #CUDA.atomic_inc!(pointer(resArraysCounter), Int32(1))              
+           ----------- res counter is not block private - and lives in this block metadata        
+            
             atomicallyAddOneInt(resArraysCounter)
         end#if
     end#if
@@ -129,6 +145,8 @@ sync_threads() #we should have in resShmem what we need
         # first we check weather next block is viable for processing
         @unroll for zIter in 1:6
 
+          ----------- what is crucial those actions will be happening on diffrent threads hence when we will reduce it we will know results from all        
+     
             #we will iterate over all padding planes below way to calculate the next block in all dimensions not counting oblique directions
             @ifXY 1 zIter isMaskOkForProcessing = ((currBlockX+UInt8(zIter==1)-UInt8(zIter==2))>0)
             @ifXY 2 zIter @inbounds isMaskOkForProcessing = (currBlockX+UInt8(zIter==1)-UInt8(zIter==2))<=metadataDims[1]
@@ -140,7 +158,8 @@ sync_threads() #we should have in resShmem what we need
                                                             ,(currBlockY+UInt8(zIter==3)-UInt8(zIter==4))
                                                             ,(currBlockZ+UInt8(zIter==5)-UInt8(zIter==6)),isPassGold+3]#then we need to check weather mask is already full - in this case we can not activate it 
             #now we check are all true 
-         
+                 ----------- this can be done by one of the reduction macros    
+
            offset = UInt8(1)
             @ifY zIter begin 
                 while(offset <UInt8(8)) 
@@ -153,10 +172,15 @@ sync_threads() #we should have in resShmem what we need
          end#for zIter   
          sync_threads()#now we should know wheather we are intrested in blocks around
        
+   
+            
+            
         # ################################################################################################################################ 
         #checking is there anything in the padding plane - so we basically do (most of reductions)
         #values stroing in local registers is there anything in padding associated # becouse we will store it in one int we can pass it at one move of registers
         locArr=0 #reset for reuse
+               ----------- this was created for cubic 32x32x32 block where one plane of threads can analyze all paddings 
+                   ----------- as in variable size thread blocks some of threads when processing padding will have nothing to do we can think so it will work in this time on the  isMaskForProcessing from above
         locArr|= resShmem[ 34 ,threadIdxX() , threadIdxY() ] << 1 #RIGHT
         locArr|= resShmem[1 ,threadIdxX() , threadIdxY()] << 2 #LEFT
         locArr|= resShmem[threadIdxX() ,34 ,threadIdxY() ] << 3 #ANTERIOR
@@ -164,7 +188,7 @@ sync_threads() #we should have in resShmem what we need
         locArr|= resShmem[ threadIdxX() , threadIdxY() ,1] << 5 #TOP
         locArr|= resShmem[ threadIdxX() , threadIdxY() ,34] << 6 #BOTTOM
 
-        
+   ----------- this reduction can be done probably together with reduction from step above        
                 #we need to reduce now  the values  of padding vals to establish weather there is any true there if yes we put the neighbour block to be active 
                     #reduction                   
                     offset = UInt8(1)
@@ -233,7 +257,7 @@ sync_threads() #we should have in resShmem what we need
             
             # when we set new result from padding we need to take into account possibility that neighbour block already did it
             # hence when we set atomic we check the old value if old value was 0 all is good if not we  do not increse  the rescounter       
-
+   ----------- now we have block private results so this  need to be utilized on the neighbouring bblocks still  we need to keep data races consideration living
             if(resArray[correctedX,correctedY,correctedZ]==0)
                resArray[correctedX,correctedY,correctedZ]=UInt16(iterationNumber)
                atomicallyAddOneInt(resArraysCounter)
@@ -326,7 +350,7 @@ sync_threads()
 
 
 
-
+   ----------- this can be done nearly completely be reduction macros also in order to reduce number of reductions we can consider fusing it with step above
     # #reduction
     #         offset = UInt16(1)
     #         while(offset <32) 
