@@ -16,17 +16,21 @@ refAray -array we are referencing (we do not dilatate it only check against it )
 iterationNumber - at what iteration of dilatation we are - so how many dilatations we already performed
 blockBeginingX,blockBeginingY,blockBeginingZ - coordinates where our block is begining - will be used as offset by our threads
 isMaskFull,isMaskEmpty - enables later checking is mask is empty full or neither
-resShmem - shared memory 34x34x34 bit array
+resShmem - shared memory bit array of the same dimensions as data block but plus 2 
+sourceShmem - bit array of the same dimensions as data block 
 locArr - local bit array of thread
 resArray- 3 dimensional array where we put results
 """
-function executeDataIterFirstPass(analyzedArr, referenceArray,blockBeginingX,blockBeginingY,blockBeginingZ,resShmem,resArray,resArraysCounter)
+function executeDataIterFirstPass(analyzedArr, referenceArray,blockBeginingX,blockBeginingY,blockBeginingZ,resShmem,sourceShmem,resArray,resArraysCounter)
     locArr = Int32(0)
     isMaskFull= true
     isMaskEmpty = true
     #locArr.x |= true << UInt8(2)
 
     ############## upload data
+    ---- to iteration3d we can get a function from macro to a generalized function and then produce multiple macros that will be chosen  based on multiple dispatch
+    @iter3d 
+    
     @unroll for zIter::UInt8 in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
         locBool::Bool = @inbounds analyzedArr[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
         locArr|= locBool << (zIter-1)
