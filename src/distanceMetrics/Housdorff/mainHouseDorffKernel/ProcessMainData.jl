@@ -9,73 +9,73 @@ using  StaticArrays,Main.CUDAGpuUtils ,Main.HFUtils, CUDA, Main.ProcessPadding
 export executeDataIterFirstPass,executeDataIterOtherPasses,processMaskData,executeDataIterFirstPassWithPadding
 
 
-"""
-loads and do the main processing of data in arrays of intrest (padding of shmem will be analyzed separately)
-analyzedArr - array we are currently dilatating
-refAray -array we are referencing (we do not dilatate it only check against it )
-iterationNumber - at what iteration of dilatation we are - so how many dilatations we already performed
-blockBeginingX,blockBeginingY,blockBeginingZ - coordinates where our block is begining - will be used as offset by our threads
-isMaskFull,isMaskEmpty - enables later checking is mask is empty full or neither
-resShmem - shared memory bit array of the same dimensions as data block but plus 2 
-sourceShmem - bit array of the same dimensions as data block 
-locArr - local bit array of thread
-resArray- 3 dimensional array where we put results
-loopX,loopY,loopZ - how many times main loops need to be invoked in order for the thread block to cover all of  data block
-dataBlockDims - size of data block - so max x y and z possible index in those dimensions
-"""
-function executeDataIterFirstPass(analyzedArr, referenceArray,blockBeginingX,blockBeginingY,blockBeginingZ,resShmem,sourceShmem,resArray,resArraysCounter, loopX,loopY,loopZ, dataBlockDims)
-    locArr = Int32(0)
-    isMaskFull= true
-    isMaskEmpty = true
-    #locArr.x |= true << UInt8(2)
+# """
+# loads and do the main processing of data in arrays of intrest (padding of shmem will be analyzed separately)
+# analyzedArr - array we are currently dilatating
+# refAray -array we are referencing (we do not dilatate it only check against it )
+# iterationNumber - at what iteration of dilatation we are - so how many dilatations we already performed
+# blockBeginingX,blockBeginingY,blockBeginingZ - coordinates where our block is begining - will be used as offset by our threads
+# isMaskFull,isMaskEmpty - enables later checking is mask is empty full or neither
+# resShmem - shared memory bit array of the same dimensions as data block but plus 2 
+# sourceShmem - bit array of the same dimensions as data block 
+# locArr - local bit array of thread
+# resArray- 3 dimensional array where we put results
+# loopX,loopY,loopZ - how many times main loops need to be invoked in order for the thread block to cover all of  data block
+# dataBlockDims - size of data block - so max x y and z possible index in those dimensions
+# """
+# function executeDataIterFirstPass(analyzedArr, referenceArray,blockBeginingX,blockBeginingY,blockBeginingZ,resShmem,sourceShmem,resArray,resArraysCounter, loopX,loopY,loopZ, dataBlockDims)
+#     locArr = Int32(0)
+#     isMaskFull= true
+#     isMaskEmpty = true
+#     #locArr.x |= true << UInt8(2)
 
-    ############## upload data
-    ---- to iteration3d we can get a function from macro to a generalized function and then produce multiple macros that will be chosen  based on multiple dispatch
-         same will get the macro iter3d with val so value will also be available  also we need to   we can also specify bounds safe and not safe variant - what will reduce number of ifs
-                    - also we can consider 
-    ###step 1            
-    @iter3dWithVal  dataBlockDims loopX loopY loopZ blockBeginingX blockBeginingY blockBeginingZ analyzedArr begin
-        #val is given by macro as value of this x,y,z 
-        locArr|= val << (zIter-1)
-        processMaskData( val, zIter, resShmem) 
-        #zIter given in macro as we are iterating in this spot
-        sourceShmem[threadIdxX(), threadIdxY(), zIter]                
-    end
-    syncthreads()
+#     ############## upload data
+#     ---- to iteration3d we can get a function from macro to a generalized function and then produce multiple macros that will be chosen  based on multiple dispatch
+#          same will get the macro iter3d with val so value will also be available  also we need to   we can also specify bounds safe and not safe variant - what will reduce number of ifs
+#                     - also we can consider 
+#     ###step 1            
+#     @iter3dWithVal  dataBlockDims loopX loopY loopZ blockBeginingX blockBeginingY blockBeginingZ analyzedArr begin
+#         #val is given by macro as value of this x,y,z 
+#         locArr|= val << (zIter-1)
+#         processMaskData( val, zIter, resShmem) 
+#         #zIter given in macro as we are iterating in this spot
+#         sourceShmem[threadIdxX(), threadIdxY(), zIter]                
+#     end
+#     syncthreads()
                     
-    ##step 2  
-    ########## check data aprat from padding
-    @iter3dWithVal  dataBlockDims loopX loopY loopZ blockBeginingX blockBeginingY blockBeginingZ analyzedArr begin
-        locVal::Bool = @inbounds  (locArr>>(zIter-1) & 1)
-        resShemVal::Bool = @inbounds resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1]             
-    end
+#     ##step 2  
+#     ########## check data aprat from padding
+#     @iter3dWithVal  dataBlockDims loopX loopY loopZ blockBeginingX blockBeginingY blockBeginingZ analyzedArr begin
+#         locVal::Bool = @inbounds  (locArr>>(zIter-1) & 1)
+#         resShemVal::Bool = @inbounds resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1]             
+#     end
                     
    
-    ########## check data aprat from padding
-    @unroll for zIter::UInt8 in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
-        locVal::Bool = @inbounds  (locArr>>(zIter-1) & 1)
-        shmemVal::Bool = @inbounds resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1]
-        # CUDA.@cuprint "locVal $(locVal)  shmemVal $(shmemVal) \n  "
-        locValOrShmem = (locVal | shmemVal)
-        isMaskFull= locValOrShmem & isMaskFull
-        isMaskEmpty = ~locValOrShmem & isMaskEmpty
+#     ########## check data aprat from padding
+#     @unroll for zIter::UInt8 in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
+#         locVal::Bool = @inbounds  (locArr>>(zIter-1) & 1)
+#         shmemVal::Bool = @inbounds resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1]
+#         # CUDA.@cuprint "locVal $(locVal)  shmemVal $(shmemVal) \n  "
+#         locValOrShmem = (locVal | shmemVal)
+#         isMaskFull= locValOrShmem & isMaskFull
+#         isMaskEmpty = ~locValOrShmem & isMaskEmpty
 
-        #CUDA.@cuprint "locVal $(locVal)  shmemVal $(shmemVal) \n  "
-        if(!locVal && shmemVal)
-            # setting value in global memory
-            @inbounds  analyzedArr[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]= true
-            # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
-            isInReferencaArr::Bool= @inbounds referenceArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
-            if(isInReferencaArr)
-                #CUDA.@cuprint "isInReferencaArr $(isInReferencaArr) \n  "
-                @inbounds  resArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]=UInt16(1)
-                #CUDA.atomic_inc!(pointer(resArraysCounter), Int32(1))              
-                atomicallyAddOneInt(resArraysCounter)
-            end#if
-        end#if
-      end#for
+#         #CUDA.@cuprint "locVal $(locVal)  shmemVal $(shmemVal) \n  "
+#         if(!locVal && shmemVal)
+#             # setting value in global memory
+#             @inbounds  analyzedArr[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]= true
+#             # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
+#             isInReferencaArr::Bool= @inbounds referenceArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
+#             if(isInReferencaArr)
+#                 #CUDA.@cuprint "isInReferencaArr $(isInReferencaArr) \n  "
+#                 @inbounds  resArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]=UInt16(1)
+#                 #CUDA.atomic_inc!(pointer(resArraysCounter), Int32(1))              
+#                 atomicallyAddOneInt(resArraysCounter)
+#             end#if
+#         end#if
+#       end#for
 
-end#executeDataIter
+# end#executeDataIter
 
 
 
@@ -99,44 +99,46 @@ macro loadMainValues()
  validates data is of our intrest               
 """                
 macro validateData()
-    @iter3dWithVal  dataBlockDims loopX loopY loopZ blockBeginingX blockBeginingY blockBeginingZ analyzedArr begin
+    @iter3dW  dataBlockDims loopX loopY loopZ blockBeginingX blockBeginingY blockBeginingZ resShemVal begin
         locVal::Bool = @inbounds  (locArr>>(zIter-1) & 1)
         resShemVal::Bool = @inbounds resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1]             
-
         locValOrShmem = (locVal | resShemVal)
+        #those needed to establish weather data block will remain active
         isMaskFull= locValOrShmem & isMaskFull
         isMaskEmpty = ~locValOrShmem & isMaskEmpty
-
-        #CUDA.@cuprint "locVal $(locVal)  shmemVal $(shmemVal) \n  "
         if(!locVal && resShemVal)       
-
             # setting value in global memory
-            @inbounds  analyzedArr[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]= true
+            @inbounds  analyzedArr[x,y,z]= true
             # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
-            isInReferencaArr::Bool= @inbounds referenceArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
-            if(isInReferencaArr)
-                       ----------- we add sourceVal - from new shared memory... and on the basis of it we establish direction from which we updated this position we add this to the res information                          
+            isInReferenceArr::Bool= @inbounds referenceArray[x,y,z]
+            if(isInReferenceArr)
+             ----------- we add sourceVal - from new shared memory... and on the basis of it we establish direction from which we updated this position we add this to the res information                          
 
-                #CUDA.@cuprint "isInReferencaArr $(isInReferencaArr) \n  "
              ----------- results now are stored in a matrix where first 3 entries are x,y,z coordinates entry 4 is in which iteration we covered it and entry 5 from which direction - this will be used if needed        
+                #privateResCounter privateResArray are holding in metadata blocks results and counter how many results were already added 
+                #in each thread block we will have separate rescounter, and res array for goldboolpass and other pass
+               direction=  @ifverr zzz  getDir(sourceShmem) | 0    
+               @append  privateResArray privateResCounter  [x,y,z,iterationnumber, direction]      
 
-                @inbounds  resArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]=UInt16(1)
-                #CUDA.atomic_inc!(pointer(resArraysCounter), Int32(1))              
-               ----------- res counter is not block private - and lives in this block metadata        
 
-                atomicallyAddOneInt(resArraysCounter)
             end#if
         end#if
      end#3d iter          
  end  #validateData                  
 
 
+    """
+    now in case 
+    """
+    
+    
+    
 ####to 3d iter data 
       ---- to iteration3d we can get a function from macro to a generalized function and then produce multiple macros that will be chosen  based on multiple dispatch
          same will get the macro iter3d with val so value will also be available  also we need to   we can also specify bounds safe and not safe variant - what will reduce number of ifs
                     - also we can consider 
     ----------- need to add in 3 dim iter a possibility to customize the way how we define offsets in x,y,z so instead of grid or block dim we need to have ability to do it separately as extra arguments
-
+ifverr - will return only this expression that is compatible with version number supplied
 ###                                    
 
 
