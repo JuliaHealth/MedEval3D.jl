@@ -229,6 +229,8 @@ end
 @unroll for  dim in 1:3, numb in [1,34]              
   @iter3dFixed dim numb if( isPaddingValToBeValidated(dir,analyzedArr, x,y,z ))
      innerValidate(analyzedArr,referenceArray,x,y,z,privateResArray,privateResCounter,iterationnumber,sourceShmem  )
+      --- here we need also to set appropriate value in metadata marking that block in given direction marked as to be acivated from padding     all still need to check is th ere any block at all
+                  so check metadata dims
   end#if       
  end#for
 offset = UInt16(1)
