@@ -105,32 +105,85 @@ macro validateData()
         locValOrShmem = (locVal | resShemVal)
         #those needed to establish weather data block will remain active
         isMaskFull= locValOrShmem & isMaskFull
-        isMaskEmpty = ~locValOrShmem & isMaskEmpty
+        @ifverr zzz isMaskEmpty = ~locValOrShmem & isMaskEmpty
         if(!locVal && resShemVal)       
+              innerValidate(analyzedArr,referenceArray,x,y,z,privateResArray,privateResCounter,iterationnumber,sourceShmem  )
+        end#if
+     end#3d iter 
+    
+    
+ end  #validateData                  
+
+"""
+this will be invoked when we know that we have a true in a spot that was false before this dilatation step and its task is to set to true appropriate spot in global array
+- so proper dilatation
+check weather we have true also in reference array - if so we  need to add this spot to the block result list in case we are invoke it from padding we need to look even futher into the
+next block data to establish could this spot be activated from there
+"""
+  function innerValidate(analyzedArr,referenceArray,x,y,z,privateResArray,privateResCounter,iterationnumber,sourceShmem  )
             # setting value in global memory
             @inbounds  analyzedArr[x,y,z]= true
             # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
-            isInReferenceArr::Bool= @inbounds referenceArray[x,y,z]
-            if(isInReferenceArr)
-             ----------- we add sourceVal - from new shared memory... and on the basis of it we establish direction from which we updated this position we add this to the res information                          
-
-             ----------- results now are stored in a matrix where first 3 entries are x,y,z coordinates entry 4 is in which iteration we covered it and entry 5 from which direction - this will be used if needed        
+    
+            if(@inbounds referenceArray[x,y,z])
+                #results now are stored in a matrix where first 3 entries are x,y,z coordinates entry 4 is in which iteration we covered it and entry 5 from which direction - this will be used if needed        
                 #privateResCounter privateResArray are holding in metadata blocks results and counter how many results were already added 
                 #in each thread block we will have separate rescounter, and res array for goldboolpass and other pass
                direction=  @ifverr zzz  getDir(sourceShmem) | 0    
                @append  privateResArray privateResCounter  [x,y,z,iterationnumber, direction]      
 
-
             end#if
-        end#if
-     end#3d iter          
- end  #validateData                  
+  end#innerValidate 
+     
 
 
-    """
-    now in case 
-    """
+"""
+Help to establish should we validate the voxel - so if ok add to result set, update the main array etc
+  in case we have some true in padding
+  generally we need just to get idea if
+    we already had true in this very spot - if so we ignore it
+    can this spot be reached by other voxels from the block we are reaching into - in other words padding is analyzing the same data as other block is analyzing in its main part
+      hence if the block that is doing it in main part will reach this spot on its own we will ignore value from padding 
+
+  in order to reduce sears direction by 1 it would be also beneficial to know from where we had came - from what direction the block we are spilled into padding 
+"""
+function isPaddingValToBeValidated(dir,analyzedArr, x,y,z )::Bool
+     
+if(dir!=5)  if( @inbounds resShmem[threadIdxX(),threadIdxY(),zIter-1]) return false  end end #up
+if(dir!=6)  if( @inbounds  resShmem[threadIdxX(),threadIdxY(),zIter+1]) return false  end  end #down
     
+if(dir!=1)   if( @inbounds  resShmem[threadIdxX()-1,threadIdxY(),zIter]) return false  end  end #left
+if(dir!=2)   if( @inbounds   resShmem[threadIdxX()+1,threadIdxY(),zIter]) return false  end end  #right
+
+if(dir!=4)   if(  @inbounds  resShmem[threadIdxX(),threadIdxY()+1,zIter]) return false  end  end #front
+if(dir!=3)   if( @inbounds  resShmem[threadIdxX(),threadIdxY()-1,zIter]) return false  end end  #back
+  #will return true only in case there is nothing around 
+  return true
+end
+
+
+
+    """
+    now in case we  want later to establish source of the data - would like to find the true distances  not taking the assumption of isometric voxels
+    we need to store now data from what direction given voxel was activated what will later gratly simplify the task of finding the true distance 
+    we will record first found true voxel from each of six directions 
+                     top 6 
+                    bottom 5  
+                    left 2
+                    right 1 
+                    anterior 3
+                    posterior 4
+    """
+   function getDir(sourceShmem)
+    if( @inbounds resShmem[threadIdxX(),threadIdxY(),zIter-1]) return 6  end  #up
+    if( @inbounds  resShmem[threadIdxX(),threadIdxY(),zIter+1]) return 5  end #down
+    
+    if( @inbounds  resShmem[threadIdxX()-1,threadIdxY(),zIter]) return 2  end #left
+    if( @inbounds   resShmem[threadIdxX()+1,threadIdxY(),zIter]) return 1  end #right
+
+    if(  @inbounds  resShmem[threadIdxX(),threadIdxY()+1,zIter]) return 3  end #front
+     if( @inbounds  resShmem[threadIdxX(),threadIdxY()-1,zIter]) return 4  end #back
+  end#getDir
     
     
 ####to 3d iter data 
@@ -141,11 +194,12 @@ macro validateData()
 ifverr - will return only this expression that is compatible with version number supplied
 ###                                    
 
-
+privateResCounter, blockMaxRes - 
 function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBeginingX
                                 ,blockBeginingY,blockBeginingZ,resShmem,sourceShmem,resArray,resArraysCounter
                                 ,currBlockX,currBlockY,currBlockZ,isPassGold,metaData,metadataDims
-                                ,mainQuesCounter,mainWorkQueue,iterationNumber,debugArr, loopX,loopY,loopZ, dataBlockDims)
+                                ,mainQuesCounter,mainWorkQueue,iterationNumber,debugArr, loopX,loopY,loopZ, dataBlockDims
+                                privateResCounter, blockResCounter)
     
     
     locArr::UInt32 = UInt32(0)
@@ -164,8 +218,10 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
 @loadMainValues
                                         
     syncthreads()
-        --------- big part of what below can be skipped if we have the block with already all results analyzed - we know it from block private counter
-                    
+        ---------  can be skipped if we have the block with already all results analyzed - we know it from block private counter
+if(privateResCounter[1]<blockMaxRes[1])
+   @validateData 
+end                  
     ##step 2  
     ########## check data aprat from padding
   
@@ -174,90 +230,7 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
 
 
 
-        HFUtils.clearMainShmem(resShmem)
-        # first we check weather next block is viable for processing
-        @unroll for zIter in 1:6
-
-          ----------- what is crucial those actions will be happening on diffrent threads hence when we will reduce it we will know results from all        
-     
-            #we will iterate over all padding planes below way to calculate the next block in all dimensions not counting oblique directions
-            @ifXY 1 zIter isMaskOkForProcessing = ((currBlockX+UInt8(zIter==1)-UInt8(zIter==2))>0)
-            @ifXY 2 zIter @inbounds isMaskOkForProcessing = (currBlockX+UInt8(zIter==1)-UInt8(zIter==2))<=metadataDims[1]
-            @ifXY 3 zIter @inbounds isMaskOkForProcessing = (currBlockY+UInt8(zIter==3)-UInt8(zIter==4))>0
-            @ifXY 4 zIter @inbounds isMaskOkForProcessing = (currBlockY+UInt8(zIter==3)-UInt8(zIter==4))<=metadataDims[2]
-            @ifXY 5 zIter @inbounds isMaskOkForProcessing = (currBlockZ+UInt8(zIter==5)-UInt8(zIter==6))>0
-            @ifXY 6 zIter @inbounds isMaskOkForProcessing = (currBlockZ+UInt8(zIter==5)-UInt8(zIter==6))<=metadataDims[3]
-            @ifXY 7 zIter @inbounds isMaskOkForProcessing = !metaData[currBlockX+UInt8(zIter==1)-UInt8(zIter==2)
-                                                            ,(currBlockY+UInt8(zIter==3)-UInt8(zIter==4))
-                                                            ,(currBlockZ+UInt8(zIter==5)-UInt8(zIter==6)),isPassGold+3]#then we need to check weather mask is already full - in this case we can not activate it 
-            #now we check are all true 
-                 ----------- this can be done by one of the reduction macros    
-
-           offset = UInt8(1)
-            @ifY zIter begin 
-                while(offset <UInt8(8)) 
-                    @inbounds isMaskOkForProcessing =  isMaskOkForProcessing & shfl_down_sync(FULL_MASK, isMaskOkForProcessing, offset)
-                    offset<<= 1
-                end #while
-            end# @ifY 
-        #here is the information wheather we want to process next block
-        @ifXY 1 zIter @inbounds resShmem[2,zIter+1,2] = isMaskOkForProcessing
-         end#for zIter   
-         sync_threads()#now we should know wheather we are intrested in blocks around
-       
-   
-            
-            
-        # ################################################################################################################################ 
-        #checking is there anything in the padding plane - so we basically do (most of reductions)
-        #values stroing in local registers is there anything in padding associated # becouse we will store it in one int we can pass it at one move of registers
-        locArr=0 #reset for reuse
-               ----------- this was created for cubic 32x32x32 block where one plane of threads can analyze all paddings 
-                   ----------- as in variable size thread blocks some of threads when processing padding will have nothing to do we can think so it will work in this time on the  isMaskForProcessing from above
-        locArr|= resShmem[ 34 ,threadIdxX() , threadIdxY() ] << 1 #RIGHT
-        locArr|= resShmem[1 ,threadIdxX() , threadIdxY()] << 2 #LEFT
-        locArr|= resShmem[threadIdxX() ,34 ,threadIdxY() ] << 3 #ANTERIOR
-        locArr|=  resShmem[ threadIdxX(),1 , threadIdxY()] << 4 #POSTERIOR
-        locArr|= resShmem[ threadIdxX() , threadIdxY() ,1] << 5 #TOP
-        locArr|= resShmem[ threadIdxX() , threadIdxY() ,34] << 6 #BOTTOM
-
-   ----------- this reduction can be done probably together with reduction from step above        
-                #we need to reduce now  the values  of padding vals to establish weather there is any true there if yes we put the neighbour block to be active 
-                    #reduction                   
-                    offset = UInt8(1)
-                    while(offset <32) 
-                        #we load first value from nearby thread 
-                        shuffled = shfl_down_sync(FULL_MASK, locArr, offset)
-                        #we loop over  bits and updating we are intrested weather there is any positive so we use or
-                        @unroll for zIter::UInt8 in UInt8(1):UInt8(6)
-                            locArr|= @inbounds ((shuffled>>zIter & 1) | @inbounds  (locArr>>zIter & 1) ) <<zIter
-                        end#for    
-                        #isMaskOkForProcessing = (isMaskOkForProcessing | 
-                        offset<<= 1
-                    end
-
-                    @unroll for zIter::UInt8 in UInt8(1):UInt8(6)
-                        @ifX 1  resShmem[zIter+1,threadIdxY()+1,3]=  @inbounds  (locArr>>zIter & 1)
-                        #@ifX 1 CUDA.@cuprint " resShmem[zIter+1,threadIdxX()+1,3]   $(resShmem[zIter+1,threadIdxX()+1,3] )   locArr $(locArr) \n" 
-                    end#for  
-                             
-             sync_threads()#now we have partially reduced values marking wheather we have any true in padding         
-                  #  # we get full reductions
-            @unroll for zIter::UInt8 in UInt8(1):UInt8(6)
-                if(resShmem[2,zIter+1,2] )
-                offset = UInt8(1)
-                if(UInt8(threadIdxY())==zIter)
-                    while(offset <32)                        
-                        @inbounds  resShmem[zIter+1,threadIdxX()+1,3] = (resShmem[zIter+1,threadIdxX()+1,3] | shfl_down_sync(FULL_MASK,resShmem[zIter+1,threadIdxX()+1,3], offset))
-                        offset<<= 1
-                    end#while
-                end#if    
-                end#if                          
-            end#for
-
-            sync_threads()#now we have fully reduced in resShmem[zIter+1,1+1,3]= resShmem[zIter+1,2,3]
-    
-
+ 
      ################################################################################################################################ 
 
 
@@ -277,11 +250,6 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
     correctedY=blockBeginingY +threadIdxY()#correctedY
     correctedZ=blockBeginingZ-1#correctedZ
      
-    #updating metadata
-    if(resShmem[2,primaryZiter+1,2] && resShmem[primaryZiter+1,2,3] )   
-        @ifXY 2 primaryZiter @inbounds  metaData[(currBlockX+(primaryZiter==1)-(primaryZiter==2)),(currBlockY+(primaryZiter==3)-(primaryZiter==4)),(currBlockZ+(primaryZiter==5)-(primaryZiter==6)),isPassGold+1]= true
-    end#if
-    sync_warp()
 
     if(resShmem[2,primaryZiter+1,2] && resShmem[primaryZiter+1,2,3] )        
         #we check for each lane is there a true in respective spot
@@ -318,7 +286,7 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
     # end   
 
 
-
+                  
     ######## TOP
     # innerProcessPadding(threadIdxX()#resShmemX
     #                     ,threadIdxY()#resShmemY
@@ -338,6 +306,8 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
 #                         ,blockBeginingY +threadIdxY()#correctedY
 #                         ,blockBeginingZ+33#correctedZ
 #                         )
+                    
+
 #    ######## LEFT
 #    innerProcessPadding(1#resShmemX
 #                         ,threadIdxX()#resShmemY
