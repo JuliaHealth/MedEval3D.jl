@@ -25,95 +25,63 @@ taken from https://github.com/JuliaGPU/GemmKernels.jl/blob/40c1dacb2ff2d24d7d392
 - probably how to load element by element to fragment
 
 """
-module MahalanobisDist
-
-
-
-
-
-
-
-
-    # ld.global(0 : block_shape.K)
-    @unroll for (i, warp_tile) = enumerate(parallellise(block_tile.MK, Tile(conf.mem_a_warp), warpId, conf.warps_per_block, conf.is_a_col_major))
-        @unroll for (j, thread_tile) = enumerate(parallellise(warp_tile, Tile(conf.mem_a_thread), laneId, 32, conf.is_a_col_major))
-            @inbounds a_fragment[i, j] = Layout.load(conf.global_a_layout, a, translate_base(thread_tile, (M = block_i, K = 0)))
-        end
-    end
-
-
+module Mahalanobis
+export WMMAkernel
+using CUDA, Main.CUDAGpuUtils
 """
-calculating means 
-  - for 2 dimensional case we need just 2 numbers
-  - for 3 dimensional case we need 3
+First we upload means meanx, mean y and mean z to shared memory 
+We defined shared memory for fragmentA , fragmentB and C - A and B we will define on every iteration 
+	fragment C will accumulate all
+boolMatr- We define boolean matrix of size identical to thread block - so each block will have one boolean to write to
+	when it will heat true of predicate it will write to this shared memory matrix	
+so we do on iteration each warp will mark i  
+	some of threads in a warp my have a valid x in their local memory some will not we will know 
+it by analyzing boolMatr
+	first we sync warp - we do it after bounds check so we will not have  kernel blocked indefinitely
+	so we do fast loop through 	indicies 1 to 32 from shared memory 
+	when we will have true in this shared memory we
+		sync warp
+		using shfl operator we get access to x rest of needed variables is available from all threads
+		now sadly we probably need to do big block of ifs to fill the matrix as designed in  https://docs.google.com/document/d/1G5FqjRj7WrDs4LWtBH667_orA8HzGa_JtTQ5Yb8vu8E/edit
+		next we execute 
+		we set all booleans in boolean matrix to 0s
+after we got through the z iteration  if we are intrested in slice wise results 
+	we check weather our accumulated matrix  has sth else than 0s  if yes we can calculate
+		Mahalinobis for this slice 
+after all iterations in a block we add covariance matrix to global memory so it will be accumulated 
+
+dataShmem -  x,y,z and their global means
+ones - 4 by 4 ones array - usefull for intialization of fragmentC
 """
-function calcMean()
-  
-mat #static vector with 3 entries 
-	while ( xxx ){
-			double val =it.Get(); # given value of a voxel
-			if(val>thd){ # accepting voxel as "true" only if it bigger than treshold (applied for fuzzy case)
-				ImageType::IndexType index = it.GetIndex(); # getting index 
-				mat[0] += index[0];
-				mat[1] += index[1];
-				mat[2] += index[2];
-				count++; # to know how many had been above treshold !!
-			}
-			++it;
-		}
-		mat = mat/count;
-  
-  
-  
-  
-end#function
+function WMMAkernel(dataShmem,ones,d_out,fragA,fragB)
+	#  fragA = @cuStaticSharedMem(Float16, (4,4))
+	#  fragB = @cuStaticSharedMem(Float16, (4,4))
+	# fragC = @cuStaticSharedMem(Float16, (4,4))
 
-
-		
-		
-		
-		
-### START
-using Test
-
-using CUDA
-
-a     = rand(Float16, (16, 16))
-b     = rand(Float16, (16, 16))
-c     = rand(Float32, (16, 16))
-
-a_dev = CuArray(a)
-b_dev = CuArray(b)
-c_dev = CuArray(c)
-d_dev = similar(c_dev)
-
-function kernel(a_dev, b_dev, c_dev, d_dev)
-    conf = WMMA.Config{16, 16, 16, Float32}
-
-    a_frag = WMMA.load_a(pointer(a_dev), 16, WMMA.ColMajor, conf)
-    b_frag = WMMA.load_b(pointer(b_dev), 16, WMMA.ColMajor, conf)
-    c_frag = WMMA.load_c(pointer(c_dev), 16, WMMA.ColMajor, conf)
-
-    c_frag = 0.5f0 .* c_frag
-
-    d_frag = WMMA.mma(a_frag, b_frag, c_frag, conf)
-
-    WMMA.store_d(pointer(d_dev), d_frag, 16, WMMA.ColMajor, conf)
-
-    return
-end
-
-@cuda threads=32 kernel(a_dev, b_dev, c_dev, d_dev)
-d = Array(d_dev)
-
-@test all(isapprox.(a * b + 0.5 * c, d; rtol=0.01))
-### END
-		
-		
-		
-		
-		
-		
+	 if(threadIdxX()<17)
+		a =  ((threadIdxX()-1) & (3))+1
+		b = ~((threadIdxX()+3)>>2 & 1)+3
+		c = ((threadIdxX()-1)>>2 )+1
+		fragA[a,c] = dataShmem[b,a]*( ((threadIdxX()>4 && threadIdxX()<13)*-2)+1 )
+	else
+		a = ((threadIdxX()-1) & (3))+1
+		c = (((threadIdxX()-16)-1)>>2 )+1
+		d = ((threadIdxX()-17) >>3)+1
+		fragB[ c,a] = dataShmem[ d,a ] 	
+	end	
+	 conf = WMMA.Config{16, 16, 16, Float16}
+	 a_frag = WMMA.load_a(pointer(fragA), 16, WMMA.ColMajor, conf)
+	 b_frag = WMMA.load_b(pointer(fragB), 16, WMMA.ColMajor, conf)
+	 c_frag = WMMA.load_c(pointer(ones), 16, WMMA.ColMajor, conf)
+	# #  c_frag = 0.5f0 .* c_frag
+	#d_frag = WMMA.mma(a_frag, b_frag, c_frag, conf)
+	d_frag = WMMA.mma(a_frag, b_frag, c_frag, conf)
+	d_frag = WMMA.mma(a_frag, b_frag, c_frag, conf)
+	WMMA.store_d(pointer(d_out), d_frag, 16, WMMA.ColMajor, conf)
+	 
+		 return
+	end
+	 
 		
 
 end#module

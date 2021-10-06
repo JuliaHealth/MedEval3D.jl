@@ -10,17 +10,44 @@ we need also to supply functions of iterating the 3 dimensional data but with ch
   so for example if we want to analyze top padding from shared memory we will set the dimension 3 at 1
 """
 module IterationUtils
-export iter3d
+export @iter3d
 
 """
 full 3d iteration 
 arrDims - we will get maxX maxY maxZ from tuple with dimensions of the array analyzed
-loopX, loopY,loopZ - how many iterations should be completed while iterating over given dimension
-minX, minY and minZ - this are assumed to be 1 if not we can supply them in the macro
+loopXdim, loopYdim,loopZdim - how many iterations should be completed while iterating over given dimension
+ex - expression we want to invoke it will have x,y z
 """
-macro iter3d(arrDims::Tuple{UInt32,UInt32,UInt32}, loopX::UInt32, loopY::UInt32,loopZ::UInt32,minX::UInt32 =UInt32(0), minY::UInt32 =UInt32(0), minZ::UInt32 =UInt32(0)  )
-  
+macro iter3d(arrDims, loopXdim, loopYdim,loopZdim,ex  )
+  return esc(quote
+  @unroll for zdim::UInt32 in 0:$loopZdim
+    z::UInt32 = (zdim*gridDim().x) + blockIdxX()#multiply by blocks to avoid situation that a single block of threads would have no work to do
+    if( (z<= $arrDims[3]) )    
+        @unroll for ydim::UInt32 in  0:$loopYdim
+            y::UInt32 = ((ydim* blockDimY()) +threadIdxY())
+              if( (y<=$arrDims[2])  )
+                @unroll for xdim::UInt32 in 0:$loopXdim
+                    x::UInt32=(xdim* blockDimX()) +threadIdxX()
+                    if((x <=$arrDims[1]))
+                      $ex
+                    end#if x
+               end#for x dim 
+          end#if y
+        end#for  yLoops 
+    end#if z   
+end#for z dim
+end 
+)
+
 end#iter3d
+
+
+
+# mainArr- array from which we want to get values
+# minX::UInt32 =UInt32(0), minY::UInt32 =UInt32(0), minZ::UInt32 =UInt32(0)
+# minX, minY and minZ - this are assumed to be 1 if not we can supply them in the macro
+
+
 
 """
 iteration through 3 dimensional data but  with one dimension fixed - ie we will analyze plane or part of the plane where value of given dimension is as we supply it 

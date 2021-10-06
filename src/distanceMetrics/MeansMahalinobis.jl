@@ -1,7 +1,7 @@
 
 
 module MeansMahalinobis
-using Main.BasicPreds, Main.CUDAGpuUtils, CUDA
+using Main.BasicPreds, Main.CUDAGpuUtils, CUDA, Main.IterationUtils, Main.ReductionUtils, Main.MemoryUtils
 """
 IMPORTANT x dim of threadblock needs to be always 32 
 arrToAnalyze - array we analyze 
@@ -115,6 +115,93 @@ function finalReduction(numb,offsetIter,shmemSum)
       end  
 
 end
+
+
+
+
+
+
+
+
+
+
+
+"""
+
+just for testingf
+"""
+
+function meansMahalinobisKernelB(arrToAnalyze
+    ,numberToLooFor
+    ,loopYdim::UInt32
+    ,loopXdim::UInt32
+    ,loopZdim::UInt32
+    ,arrDims::Tuple{UInt32,UInt32,UInt32}
+    ,resList
+    ,resListCounter
+    ,intermediateresCheck
+    ,totalX,totalY,totalZ
+    ,totalCount
+    ,blocks::UInt32
+    ,debugArr
+    ,dynamicMemoryLength
+   )   
+#summing coordinates of all voxels we are intrested in 
+sumX,sumY,sumZ = UInt64(0),UInt64(0),UInt64(0)
+#count how many voxels of intrest there are so we will get means
+count::UInt16 = UInt16(0)
+#for storing results from warp reductions
+shmemSum= @cuStaticSharedMem(UInt32, (32,4))   
+clearSharedMemWarpLong(shmemSum, UInt8(4))
+  
+@iter3d arrDims loopXdim loopYdim  loopZdim if(  @inbounds(arrToAnalyze[x,y,z])  ==numberToLooFor)
+       #updating variables needed to calculate means
+       sumX+=UInt64(x) ;  sumY+=UInt64(y)  ; sumZ+=UInt64(z)   ; count+=UInt16(1)   
+ end#if bool in arr  
+ 
+#we will use count in order not to create new offset iter variable
+offsetIter = UInt16(1)
+
+#tell what variables are to be reduced and by what operation
+@redWitAct(offsetIter,shmemSum,  sumX,+,     sumY,+    ,sumZ,+   ,count,+)
+
+# while(offsetIter <32) 
+# @inbounds sumX+=shfl_down_sync(FULL_MASK, sumX, offsetIter)  
+# @inbounds sumY+=shfl_down_sync(FULL_MASK, sumY, offsetIter)  
+# @inbounds sumZ+=shfl_down_sync(FULL_MASK, sumZ, offsetIter)  
+# @inbounds offsetIter+=shfl_down_sync(FULL_MASK,count, offsetIter)  
+# offsetIter<<= 1
+# end
+if(threadIdxX()==1)
+@inbounds shmemSum[threadIdxY(),1]+=sumX
+@inbounds shmemSum[threadIdxY(),2]+=sumY
+@inbounds shmemSum[threadIdxY(),3]+=sumZ
+@inbounds shmemSum[threadIdxY(),4]+=count
+end
+sync_threads()
+offsetIter = UInt16(1)
+#final reduction
+@unroll for i in 1:4
+finalReduction(i,offsetIter,shmemSum)
+end#for 
+#now we have needed values in  shmemSum[1,1] - sumX  shmemSum[1,2] - sumY shmemSum[1,3] - sumZ and in shmemSum[1,4] - offsetIter
+sync_threads()
+
+#no point in calculating anything if we have 0 
+@ifXY 1 1 if(shmemSum[1,1]>0)   @inbounds @atomic totalX[]+= shmemSum[1,1] end
+@ifXY 2 2 if(shmemSum[1,2]>0)   @inbounds @atomic totalY[]+= shmemSum[1,2] end
+@ifXY 3 3 if(shmemSum[1,3]>0)   @inbounds @atomic totalZ[]+= shmemSum[1,3] end
+@ifXY 4 4 if(shmemSum[1,4]>0)   @inbounds @atomic totalCount[]+= shmemSum[1,4] end
+
+return  
+end
+
+
+
+
+
+
+
 
 
 

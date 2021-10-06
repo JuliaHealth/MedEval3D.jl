@@ -1,0 +1,165 @@
+using Revise, Parameters, Logging, Test
+using CUDA
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Mahalanobis.jl")
+using Cthulhu
+using Main.BasicPreds, Main.CUDAGpuUtils , Main.Mahalanobis, Main.MeansMahalinobis, Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils
+using Cthulhu
+nx=512 ; ny=512 ; nz=317
+#first we initialize the metrics on CPU so we will modify them easier
+goldBoolCPU= zeros(Float32,nx,ny,nz); #mimicks gold standard mask
+
+cartTrueGold =  CartesianIndices(zeros(3,3,5) ).+CartesianIndex(5,5,5);
+goldBoolCPU[cartTrueGold].=Float32(1.0);
+
+numberToLooFor= Float32(1.0);
+goldBoolGPU = CuArray(goldBoolCPU);
+
+Float64(goldBoolCPU[5,5,5])
+
+#we will fill it after we work with launch configuration
+loopXdim = UInt32(1);
+loopYdim = UInt32(1) ;
+loopZdim = UInt32(1) ;
+sizz = size(goldBoolCPU);
+maxX = UInt32(sizz[1])
+maxY = UInt32(sizz[2])
+maxZ = UInt32(sizz[3])
+
+resList= CUDA.zeros(UInt32, length(goldBoolGPU) );
+resListCounter= CUDA.ones(UInt32,1)
+
+intermediateresCheck=100;
+intermidiateResLength=UInt16(1);
+warpNumber= UInt16(1)
+
+totalX= CuArray([0]);
+totalY= CuArray([0]);
+totalZ= CuArray([0]);
+totalCount= CuArray([0]);
+blocks=UInt32(1)
+debugArr = CUDA.zeros(600);
+dynamicMemoryLength= 100
+
+args = (goldBoolGPU,numberToLooFor,loopYdim,loopXdim,loopZdim,maxX, maxY,maxZ
+,resList,resListCounter,intermediateresCheck
+,totalX,totalY,totalZ,totalCount,blocks,debugArr,dynamicMemoryLength)
+
+
+    # calculate the amount of dynamic shared memory for a 2D block size
+    get_shmem(threads) = (sizeof(UInt32)*3*4)
+    
+    function get_threads(threads)
+        threads_x = 32
+        threads_y = cld(threads,threads_x )
+        return (threads_x, threads_y)
+    end
+
+    kernel = @cuda launch=false MeansMahalinobis.meansMahalinobisKernel(args...)
+   
+    config = launch_configuration(kernel.fun, shmem=threads->get_shmem(get_threads(threads)))
+
+   # convert to 2D block size and figure out appropriate grid size
+    threads = get_threads(config.threads)
+    blocks = UInt32(config.blocks)
+    loopXdim = UInt32(cld(maxX, threads[1]))
+    loopYdim = UInt32(cld(maxY, threads[2])) 
+    loopZdim = UInt32(cld(maxZ,blocks )) 
+
+
+    totalX= CuArray([0]);
+    totalY= CuArray([0]);
+    totalZ= CuArray([0]);
+    totalCount= CuArray([0]);
+    dynamicMemoryLength = sum(threads)+intermediateresCheck
+
+    resListCounter= CUDA.zeros(UInt32,1)
+    resList= CUDA.zeros(UInt32, length(goldBoolGPU) );
+
+    args = (goldBoolGPU,numberToLooFor,loopYdim,loopXdim,loopZdim,maxX, maxY,maxZ
+    ,resList,resListCounter,intermediateresCheck
+    ,totalX,totalY,totalZ,totalCount,blocks,debugArr,dynamicMemoryLength)
+
+    @cuda threads=threads blocks=blocks MeansMahalinobis.meansMahalinobisKernel(args...)
+    @test totalCount[1]==45
+    @test totalX[1]== sum(map(ind->ind[1],cartTrueGold))
+    @test totalY[1]== sum(map(ind->ind[2],cartTrueGold))
+    @test totalZ[1]== sum(map(ind->ind[3],cartTrueGold))
+
+using StaticArrays
+using LinearAlgebra
+
+
+ones= CUDA.ones(Float16,4,4)
+fragA= CUDA.ones(Float16,4,4)
+fragB= CUDA.ones(Float16,4,4)
+d_out= CUDA.ones(Float16,4,4)
+dataShmem = CuArray([ 1  2  3 0;
+                      11  22  33  0])
+    @cuda threads=32 WMMAkernel(dataShmem,ones,d_out,fragA,fragB)
+    d = Array(d_out)
+    fragAa= Array(fragA)
+    fragBa= Array(fragB)
+
+    fragAa*fragBa+ zeros(Float16,4,4)
+
+# dataShmem = [ 1  2  3  0;
+#              11  22  33 0 ]
+
+# aFrag = zeros(4,4);
+# bFrag = zeros(4,4);
+
+# for i in 1:16
+#     div,remm = divrem(i-1,4)
+#     # aFrag[fld(div+1,2)+1,rem+1 ] = dataShmem[rem+1,fld(div+1,2)+1 ]
+
+#     a =  ((i-1) & (3))+1
+#     b = ~((i+3)>>2 & 1)+3
+#     c = ((i-1)>>2 )+1
+#     aFrag[a,c] = dataShmem[b,a]*( ((i>4 && i<13)*-2)+1 )
+# @info "i$(i)   a $(a)   b $(b)   c $(c)"
+
+# end    
+# aFrag
+
+# 5>>1
+
+# using  Statistics
+# arr = [1 2 3; 
+#        2 5 6; 
+#        6 7 62; 
+#        24 53 61; 
+#        6 8 11]
+# cov(arr)
+
+
+#     @test all(isapprox.(a * b + 0.5 * c, d; rtol=0.01))    
+
+
+
+
+#     dataShmem = [ 1  2  3  0;
+#     11  22  33 0 ]
+
+# aFrag = zeros(4,4);
+# bFrag = zeros(4,4);
+
+# for i in 17:32
+# div,remm = divrem(i-1,4)
+# # aFrag[fld(div+1,2)+1,rem+1 ] = dataShmem[rem+1,fld(div+1,2)+1 ]
+
+# a =  ((i-1) & (3))+1
+# c = (((i-16)-1)>>2 )+1
+# d = ((i-17) >>3)+1
+# bFrag[ c,a] = dataShmem[ d,a ]
+
+# end    
+
+
+# bFrag
