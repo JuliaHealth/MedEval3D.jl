@@ -20,8 +20,10 @@ resShmem - shared memory bit array of the same dimensions as data block but plus
 sourceShmem - bit array of the same dimensions as data block 
 locArr - local bit array of thread
 resArray- 3 dimensional array where we put results
+loopX,loopY,loopZ - how many times main loops need to be invoked in order for the thread block to cover all of  data block
+dataBlockDims - size of data block - so max x y and z possible index in those dimensions
 """
-function executeDataIterFirstPass(analyzedArr, referenceArray,blockBeginingX,blockBeginingY,blockBeginingZ,resShmem,sourceShmem,resArray,resArraysCounter)
+function executeDataIterFirstPass(analyzedArr, referenceArray,blockBeginingX,blockBeginingY,blockBeginingZ,resShmem,sourceShmem,resArray,resArraysCounter, loopX,loopY,loopZ, dataBlockDims)
     locArr = Int32(0)
     isMaskFull= true
     isMaskEmpty = true
@@ -29,15 +31,26 @@ function executeDataIterFirstPass(analyzedArr, referenceArray,blockBeginingX,blo
 
     ############## upload data
     ---- to iteration3d we can get a function from macro to a generalized function and then produce multiple macros that will be chosen  based on multiple dispatch
-    @iter3d 
-    
-    @unroll for zIter::UInt8 in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
-        locBool::Bool = @inbounds analyzedArr[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
-        locArr|= locBool << (zIter-1)
-        # CUDA.@cuprint "locBool $(locBool)  locArr $(locArr) \n  "
-        processMaskData( locBool, zIter, resShmem)
-    end#for 
-   sync_threads() #we should have in resShmem what we need 
+         same will get the macro iter3d with val so value will also be available  also we need to   we can also specify bounds safe and not safe variant - what will reduce number of ifs
+                    - also we can consider 
+    ###step 1            
+    @iter3dWithVal  dataBlockDims loopX loopY loopZ blockBeginingX blockBeginingY blockBeginingZ analyzedArr begin
+        #val is given by macro as value of this x,y,z 
+        locArr|= val << (zIter-1)
+        processMaskData( val, zIter, resShmem) 
+        #zIter given in macro as we are iterating in this spot
+        sourceShmem[threadIdxX(), threadIdxY(), zIter]                
+    end
+    syncthreads()
+                    
+    ##step 2  
+    ########## check data aprat from padding
+    @iter3dWithVal  dataBlockDims loopX loopY loopZ blockBeginingX blockBeginingY blockBeginingZ analyzedArr begin
+        locVal::Bool = @inbounds  (locArr>>(zIter-1) & 1)
+        resShemVal::Bool = @inbounds resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1]             
+    end
+                    
+   
     ########## check data aprat from padding
     @unroll for zIter::UInt8 in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
         locVal::Bool = @inbounds  (locArr>>(zIter-1) & 1)
@@ -67,23 +80,71 @@ end#executeDataIter
 
 
 
+"""
+   loads main values from analyzed array into shared memory and to locArr - which live in registers             
+"""                
+                
+macro loadMainValues()
+        @iter3dWithVal  dataBlockDims loopX loopY loopZ blockBeginingX blockBeginingY blockBeginingZ analyzedArr begin
+        #val is given by macro as value of this x,y,z 
+        locArr|= val << (zIter-1)
+        processMaskData( val, zIter, resShmem) 
+        #zIter given in macro as we are iterating in this spot
+        sourceShmem[threadIdxX(), threadIdxY(), zIter]                
+    end                
+                end #loadMainValues
+                
+                
+"""
+ validates data is of our intrest               
+"""                
+macro validateData()
+    @iter3dWithVal  dataBlockDims loopX loopY loopZ blockBeginingX blockBeginingY blockBeginingZ analyzedArr begin
+        locVal::Bool = @inbounds  (locArr>>(zIter-1) & 1)
+        resShemVal::Bool = @inbounds resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1]             
+
+        locValOrShmem = (locVal | resShemVal)
+        isMaskFull= locValOrShmem & isMaskFull
+        isMaskEmpty = ~locValOrShmem & isMaskEmpty
+
+        #CUDA.@cuprint "locVal $(locVal)  shmemVal $(shmemVal) \n  "
+        if(!locVal && resShemVal)       
+
+            # setting value in global memory
+            @inbounds  analyzedArr[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]= true
+            # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
+            isInReferencaArr::Bool= @inbounds referenceArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
+            if(isInReferencaArr)
+                       ----------- we add sourceVal - from new shared memory... and on the basis of it we establish direction from which we updated this position we add this to the res information                          
+
+                #CUDA.@cuprint "isInReferencaArr $(isInReferencaArr) \n  "
+             ----------- results now are stored in a matrix where first 3 entries are x,y,z coordinates entry 4 is in which iteration we covered it and entry 5 from which direction - this will be used if needed        
+
+                @inbounds  resArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]=UInt16(1)
+                #CUDA.atomic_inc!(pointer(resArraysCounter), Int32(1))              
+               ----------- res counter is not block private - and lives in this block metadata        
+
+                atomicallyAddOneInt(resArraysCounter)
+            end#if
+        end#if
+     end#3d iter          
+ end  #validateData                  
 
 
+####to 3d iter data 
+      ---- to iteration3d we can get a function from macro to a generalized function and then produce multiple macros that will be chosen  based on multiple dispatch
+         same will get the macro iter3d with val so value will also be available  also we need to   we can also specify bounds safe and not safe variant - what will reduce number of ifs
+                    - also we can consider 
+    ----------- need to add in 3 dim iter a possibility to customize the way how we define offsets in x,y,z so instead of grid or block dim we need to have ability to do it separately as extra arguments
 
-
-
-
-
-
-
+###                                    
 
 
 function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBeginingX
-                                ,blockBeginingY,blockBeginingZ,resShmem,resArray,resArraysCounter
+                                ,blockBeginingY,blockBeginingZ,resShmem,sourceShmem,resArray,resArraysCounter
                                 ,currBlockX,currBlockY,currBlockZ,isPassGold,metaData,metadataDims
-                                ,mainQuesCounter,mainWorkQueue,iterationNumber,debugArr)
+                                ,mainQuesCounter,mainWorkQueue,iterationNumber,debugArr, loopX,loopY,loopZ, dataBlockDims)
     
-    ----------- need second shared memory to find the direction ...
     
     locArr::UInt32 = UInt32(0)
     isMaskFull::Bool= true
@@ -97,50 +158,15 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
 
     ############## upload data
   ############## upload data
-    
-    ----------- need to add in 3 dim iter a possibility to customize the way how we define offsets in x,y,z so instead of grid or block dim we need to have ability to do it separately as extra arguments
-        
-  @unroll for zIter::UInt8 in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
-    locBool::Bool = @inbounds analyzedArr[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
-    locArr|= locBool << (zIter-1)
-    # CUDA.@cuprint "locBool $(locBool)  locArr $(locArr) \n  "
-    processMaskData( locBool, zIter, resShmem)
-end#for 
+        ###step 1            
+@loadMainValues
+                                        
+    syncthreads()
         --------- big part of what below can be skipped if we have the block with already all results analyzed - we know it from block private counter
-sync_threads() #we should have in resShmem what we need 
-         ----------- also all in source shmem
-########## check data aprat from padding
-        ----------- generalize this loop  to arbitrary thread block - although we just make the data block size compatible with thread block size calculated by occupancy API, there will be only small problem with padding in such situation
-@unroll for zIter in 1:32# most outer loop is responsible for z dimension
-            
-    locVal::Bool = @inbounds  (locArr>>(zIter-1) & 1)
-    shmemVal::Bool = @inbounds resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1]
-    # CUDA.@cuprint "locVal $(locVal)  shmemVal $(shmemVal) \n  "
-    locValOrShmem = (locVal | shmemVal)
-    isMaskFull= locValOrShmem & isMaskFull
-    isMaskEmpty = ~locValOrShmem & isMaskEmpty
-
-    #CUDA.@cuprint "locVal $(locVal)  shmemVal $(shmemVal) \n  "
-    if(!locVal && shmemVal)       
-                
-        # setting value in global memory
-        @inbounds  analyzedArr[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]= true
-        # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
-        isInReferencaArr::Bool= @inbounds referenceArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]
-        if(isInReferencaArr)
-                   ----------- we add sourceVal - from new shared memory... and on the basis of it we establish direction from which we updated this position we add this to the res information                          
                     
-            #CUDA.@cuprint "isInReferencaArr $(isInReferencaArr) \n  "
-         ----------- results now are stored in a matrix where first 3 entries are x,y,z coordinates entry 4 is in which iteration we covered it and entry 5 from which direction - this will be used if needed        
-        
-            @inbounds  resArray[(blockBeginingX+threadIdxX()),(blockBeginingY +threadIdxY()),(blockBeginingZ+zIter)]=UInt16(1)
-            #CUDA.atomic_inc!(pointer(resArraysCounter), Int32(1))              
-           ----------- res counter is not block private - and lives in this block metadata        
-            
-            atomicallyAddOneInt(resArraysCounter)
-        end#if
-    end#if
-  end#for
+    ##step 2  
+    ########## check data aprat from padding
+  
      ################################################################################################################################ 
      #processing padding
 
