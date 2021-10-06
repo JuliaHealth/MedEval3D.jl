@@ -1,10 +1,22 @@
+"""
+here we will analyze the matadata and on this basis establish is block should be acrivated or it should reamin active 
+so we got set in each block is it full and also from padding of surrounding blocks is it to be activated
+Hence when conditions are met so it is not full and active or not full and to be activated - we set it to active
+when we know that block is active it is also needed to add it to work queue - we will do it after each iteration 
+        so 1) we check metadata when metadata comply with our predicate described above we atomically increase local shared memory work queue counter
+we synchronize
+        -we proceed if local workqueue counter is greater than 0 
+        2)  we add the local workqueue counter to global keep old value as an offset in shared memory 
+        3) sync threads,  add to the work queue the data from registers of those threads that met the predicate
+"""
+
 module  MetadataAnalyzePass     
 
 
 HFUtils.clearMainShmem(resShmem)
         # first we check weather next block is viable for processing
         @unroll for zIter in 1:6
-
+ 
           ----------- what is crucial those actions will be happening on diffrent threads hence when we will reduce it we will know results from all        
      
             #we will iterate over all padding planes below way to calculate the next block in all dimensions not counting oblique directions
@@ -85,6 +97,16 @@ HFUtils.clearMainShmem(resShmem)
 
             sync_threads()#now we have fully reduced in resShmem[zIter+1,1+1,3]= resShmem[zIter+1,2,3]
     
+                
+                
+                
+                
+                    #updating metadata
+    if(resShmem[2,primaryZiter+1,2] && resShmem[primaryZiter+1,2,3] )   
+        @ifXY 2 primaryZiter @inbounds  metaData[(currBlockX+(primaryZiter==1)-(primaryZiter==2)),(currBlockY+(primaryZiter==3)-(primaryZiter==4)),(currBlockZ+(primaryZiter==5)-(primaryZiter==6)),isPassGold+1]= true
+    end#if
+    sync_warp()
+
 
     
     
