@@ -137,6 +137,7 @@ next block data to establish could this spot be activated from there
      
 
 
+
 """
 Help to establish should we validate the voxel - so if ok add to result set, update the main array etc
   in case we have some true in padding
@@ -207,10 +208,7 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
     isMaskEmpty::Bool = true
     isMaskOkForProcessing::Bool = true
     offset = UInt8(1)
-    # nextBlockX::UInt8 = UInt8(0)
-    # nextBlockY::UInt8 =UInt8(0)
-    # nextBlockZ::UInt8 = UInt8(0)
-    #locArr.x |= true << UInt8(2)
+
 
     ############## upload data
   ############## upload data
@@ -227,175 +225,22 @@ end
   
      ################################################################################################################################ 
      #processing padding
+    --- so here we utilize iter3 with 1 dim fihed 
+@unroll for  dim in 1:3, numb in [1,34]              
+  @iter3dFixed dim numb if( isPaddingValToBeValidated(dir,analyzedArr, x,y,z ))
+     innerValidate(analyzedArr,referenceArray,x,y,z,privateResArray,privateResCounter,iterationnumber,sourceShmem  )
+  end#if       
+ end#for
+offset = UInt16(1)
+@ifverr zzz   @reduce(isMaskFull,&,isMaskEmpty,&)  | @reduce(isMaskFull,&)        
+@ifverr zzz  ---here send to appropriate spots of metadata 
+                      if(threadIdxY()==5 && threadIdxX()==5 && (resShmem[2,2,6] || resShmem[2,2,7]))
+            metaData[currBlockX,currBlockY,currBlockZ,isPassGold+1]=false # we set is inactive 
+        end#if   
+        if(threadIdxY()==6 && threadIdxX()==6 && (resShmem[2,2,6] || resShmem[2,2,7]))
+            metaData[currBlockX,currBlockY,currBlockZ,isPassGold+3]=true # we set is as full
+        end#if
 
-
-
- 
-     ################################################################################################################################ 
-
-
-    #function will be invoked on paddings from all sides
-    # function innerProcessPadding(   resShmemX::UInt8 # x value to find padding value of intrest in shared memory
-    #                                 ,resShmemY::UInt8 # y value to find padding value of intrest in shared memory
-    #                                 ,resShmemZ::UInt8 # z value to find padding value of intrest in shared memory
-    #                                 ,primaryZiter::UInt8 # the same as we analyzed above what blocks should be analyzed
-    #                                 ,correctedX::UInt16 # x value to find padding value of intrest in global memory
-    #                                 ,correctedY::UInt16# y value to find padding value of intrest in global memory
-    #                                 ,correctedZ::UInt16)# z value to find padding value of intrest in global memory
-    resShmemX=threadIdxX()#resShmemX
-    resShmemY=threadIdxY()#resShmemY
-    resShmemZ=1#resShmemZ
-    primaryZiter=6 #primaryZiter
-    correctedX=blockBeginingX+threadIdxX()#correctedX
-    correctedY=blockBeginingY +threadIdxY()#correctedY
-    correctedZ=blockBeginingZ-1#correctedZ
-     
-
-    if(resShmem[2,primaryZiter+1,2] && resShmem[primaryZiter+1,2,3] )        
-        #we check for each lane is there a true in respective spot
-        if(resShmem[resShmemX,resShmemY,resShmemZ])
-            locArr= atomicallyAddOneInt(mainQuesCounter)+1  
-            
-            # when we set new result from padding we need to take into account possibility that neighbour block already did it
-            # hence when we set atomic we check the old value if old value was 0 all is good if not we  do not increse  the rescounter       
-   ----------- now we have block private results so this  need to be utilized on the neighbouring bblocks still  we need to keep data races consideration living
-            if(resArray[correctedX,correctedY,correctedZ]==0)
-               resArray[correctedX,correctedY,correctedZ]=UInt16(iterationNumber)
-               atomicallyAddOneInt(resArraysCounter)
-            end 
- 
-            #updating work queue
-            @inbounds mainWorkQueue[locArr,1]= (currBlockX+(primaryZiter==1)-(primaryZiter==2)) #x,y,z dim of block in metadata
-            @inbounds mainWorkQueue[locArr,2]=currBlockY+(primaryZiter==3)-(primaryZiter==4) #x,y,z dim of block in metadata
-            @inbounds mainWorkQueue[locArr,3]=currBlockZ+(primaryZiter==5)-(primaryZiter==6) #x,y,z dim of block in metadata
-            @inbounds mainWorkQueue[locArr,4]=UInt8(isPassGold) #x,y,z dim of block in metadata
-
-        end #if          
-          
-
-    end#if
-
-        #end#innerProcessPadding
-    
-    ######################################## 
-    #now we will analyze the padding planes one by one using innerProcessPadding
-
-
-    # if(UInt8(threadIdxY())==zIter   &&  (threadIdxX()==2) )
-    #     debugArr[zIter] = resShmem[zIter+1,2,3]  
-    # end   
-
-
-                  
-    ######## TOP
-    # innerProcessPadding(threadIdxX()#resShmemX
-    #                     ,threadIdxY()#resShmemY
-    #                     ,1#resShmemZ
-    #                     ,6 #primaryZiter
-    #                     ,blockBeginingX+threadIdxX()#correctedX
-    #                     ,blockBeginingY +threadIdxY()#correctedY
-    #                     ,blockBeginingZ-1#correctedZ
-    #                     )
-   
-#    ######## BOTTOM
-#    innerProcessPadding(threadIdxX()#resShmemX
-#                         ,threadIdxY()#resShmemY
-#                         ,34#resShmemZ
-#                         ,5 #primaryZiter
-#                         ,blockBeginingX+threadIdxX()#correctedX
-#                         ,blockBeginingY +threadIdxY()#correctedY
-#                         ,blockBeginingZ+33#correctedZ
-#                         )
-                    
-
-#    ######## LEFT
-#    innerProcessPadding(1#resShmemX
-#                         ,threadIdxX()#resShmemY
-#                         ,threadIdxY()#resShmemZ
-#                         ,2 #primaryZiter
-#                         ,blockBeginingX-1#correctedX
-#                         ,blockBeginingY +threadIdxX()#correctedY
-#                         ,blockBeginingZ+threadIdxY()#correctedZ
-#                         )
-#    ######## RIGHT
-#    innerProcessPadding(1#resShmemX
-#                         ,threadIdxX()#resShmemY
-#                         ,threadIdxY()#resShmemZ
-#                         ,1 #primaryZiter
-#                         ,blockBeginingX+33#correctedX
-#                         ,blockBeginingY +threadIdxX()#correctedY
-#                         ,blockBeginingZ+threadIdxY()#correctedZ
-#                         )                        
-#    ######## Anterior
-#    innerProcessPadding(threadIdxX()#resShmemX
-#                         ,34#resShmemY
-#                         ,threadIdxY()#resShmemZ
-#                         ,3 #primaryZiter
-#                         ,blockBeginingX+threadIdxX()#correctedX
-#                         ,blockBeginingY +33#correctedY
-#                         ,blockBeginingZ+threadIdxY()#correctedZ
-#                         )   
-#    ######## Posterior
-#    innerProcessPadding(threadIdxX()#resShmemX
-#                         ,1#resShmemY
-#                         ,threadIdxY()#resShmemZ
-#                         ,4 #primaryZiter
-#                         ,blockBeginingX+threadIdxX()#correctedX
-#                         ,blockBeginingY -1#correctedY
-#                         ,blockBeginingZ+threadIdxY()#correctedZ
-#                         )   
-sync_threads()
-
-###########################################
-#after all processing we need to establish weather the mask is full  (in case of first iteration also is it empty)
-    function isMaskStillActive()
-
-
-
-
-   ----------- this can be done nearly completely be reduction macros also in order to reduce number of reductions we can consider fusing it with step above
-    # #reduction
-    #         offset = UInt16(1)
-    #         while(offset <32) 
-    #             isMaskFull = isMaskFull & shfl_down_sync(FULL_MASK, isMaskFull, offset)  
-    #             isMaskEmpty = isMaskEmpty & shfl_down_sync(FULL_MASK, isMaskEmpty, offset)  
-    #             offset<<= 1
-    #         end
-    #         @ifX 1  begin 
-    #             @inbounds  resShmem[2,threadIdxY()+1,6]=isMaskFull
-    #             @inbounds  resShmem[2,threadIdxY()+1,7]=isMaskEmpty
-    #         end   
-
-    #     sync_threads()#now we have partially reduced values marking wheather we have full or empty block
-    #     # we get full reductions
-    #     offset = UInt16(1)
-    #     if(threadIdxY()==1)
-    #         while(offset <32)
-    #             @inbounds  resShmem[2,threadIdxX()+1,6] = shfl_down_sync(FULL_MASK,resShmem[2,threadIdxX()+1,6], offset)
-    #             @inbounds  resShmem[2,threadIdxX()+1,7] = shfl_down_sync(FULL_MASK,resShmem[2,threadIdxX()+1,7], offset)
-    #         end#while    
-    #         end#if 
-    #     #now we have in resShmem[2,2,6] boolean marking is data block is full of trues and in resShmem[2,2,7] if there is no true at all
-    #     ##########  now we need to update meta data in case we have now empty or full block
-    #     if(threadIdxY()==5 && threadIdxX()==5 && (resShmem[2,2,6] || resShmem[2,2,7]))
-    #         metaData[currBlockX,currBlockY,currBlockZ,isPassGold+1]=false # we set is inactive 
-    #     end#if   
-    #     if(threadIdxY()==6 && threadIdxX()==6 && (resShmem[2,2,6] || resShmem[2,2,7]))
-    #         metaData[currBlockX,currBlockY,currBlockZ,isPassGold+3]=true # we set is as full
-    #     end#if
-    #     #so in case it not empty and not full we need to put it into the work queue and increment appropriate counter
-    #     if(threadIdxY()==7&& threadIdxX()==7 && !(resShmem[2,2,6] || resShmem[2,2,7]))
-    #         mainWorkQueue[atomicallyAddOneInt(mainQuesCounter)+1]=[currBlockX,currBlockY,currBlockZ,UInt8(isPassGold)]    
-    #     end#if
-    #     #######now in case block remains neither full nor empty we add it to the work queue
-
-
-
-
-
-
-end#isMaskStillActive
-sync_threads()
 
 end#executeDataIter
 
