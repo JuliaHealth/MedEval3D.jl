@@ -4,7 +4,7 @@ in order to be able to benchmark each on given data
 """
 module BasicPreds
 using CUDA
-export getBigTestBools,getSmallTestBools
+export getBigTestBools,getSmallTestBools,getExampleKernelArgs
 
 
 function getSmallTestBools()
@@ -139,6 +139,8 @@ function primitiveAtomicKernel(goldBoolGPU::CuDeviceArray{Bool,1, 1}, segmBoolGP
         end
 
 
+
+        
 
  end   
 

@@ -113,103 +113,103 @@ args = (goldBoolGPU,segmBoolGPU,numberToLooFor
 
 
 
-    args = (goldBoolGPU,numberToLooFor,loopYdim,loopXdim,loopZdim,(maxX, maxY,maxZ)
-    ,resList,resListCounter,intermediateresCheck
-    ,totalX,totalY,totalZ,totalCount,blocks,debugArr,dynamicMemoryLength)
+#     args = (goldBoolGPU,numberToLooFor,loopYdim,loopXdim,loopZdim,(maxX, maxY,maxZ)
+#     ,resList,resListCounter,intermediateresCheck
+#     ,totalX,totalY,totalZ,totalCount,blocks,debugArr,dynamicMemoryLength)
     
     
-        # calculate the amount of dynamic shared memory for a 2D block size
-        get_shmem(threads) = (sizeof(UInt32)*3*4)
+#         # calculate the amount of dynamic shared memory for a 2D block size
+#         get_shmem(threads) = (sizeof(UInt32)*3*4)
         
-        function get_threads(threads)
-            threads_x = 32
-            threads_y = cld(threads,threads_x )
-            return (threads_x, threads_y)
-        end
+#         function get_threads(threads)
+#             threads_x = 32
+#             threads_y = cld(threads,threads_x )
+#             return (threads_x, threads_y)
+#         end
     
-        kernel = @cuda launch=false MeansMahalinobis.meansMahalinobisKernelB(args...)
+#         kernel = @cuda launch=false MeansMahalinobis.meansMahalinobisKernelB(args...)
        
-        config = launch_configuration(kernel.fun, shmem=threads->get_shmem(get_threads(threads)))
+#         config = launch_configuration(kernel.fun, shmem=threads->get_shmem(get_threads(threads)))
     
-       # convert to 2D block size and figure out appropriate grid size
-        threads = get_threads(config.threads)
-        blocks = UInt32(config.blocks)
-        loopXdim = UInt32(cld(maxX, threads[1]))
-        loopYdim = UInt32(cld(maxY, threads[2])) 
-        loopZdim = UInt32(cld(maxZ,blocks )) 
-    
-    
+#        # convert to 2D block size and figure out appropriate grid size
+#         threads = get_threads(config.threads)
+#         blocks = UInt32(config.blocks)
+#         loopXdim = UInt32(cld(maxX, threads[1]))
+#         loopYdim = UInt32(cld(maxY, threads[2])) 
+#         loopZdim = UInt32(cld(maxZ,blocks )) 
     
     
-        totalX= CuArray([0]);
-    totalY= CuArray([0]);
-    totalZ= CuArray([0]);
-    totalCount= CuArray([0]);
-        dynamicMemoryLength = sum(threads)+intermediateresCheck
     
-        resListCounter= CUDA.zeros(UInt32,1)
-        resList= CUDA.zeros(UInt32, length(goldBoolGPU) );
     
-        args = (goldBoolGPU,numberToLooFor,loopYdim,loopXdim,loopZdim,(maxX, maxY,maxZ)
-        ,resList,resListCounter,intermediateresCheck
-        ,totalX,totalY,totalZ,totalCount,blocks,debugArr,dynamicMemoryLength)
+#         totalX= CuArray([0]);
+#     totalY= CuArray([0]);
+#     totalZ= CuArray([0]);
+#     totalCount= CuArray([0]);
+#         dynamicMemoryLength = sum(threads)+intermediateresCheck
+    
+#         resListCounter= CUDA.zeros(UInt32,1)
+#         resList= CUDA.zeros(UInt32, length(goldBoolGPU) );
+    
+#         args = (goldBoolGPU,numberToLooFor,loopYdim,loopXdim,loopZdim,(maxX, maxY,maxZ)
+#         ,resList,resListCounter,intermediateresCheck
+#         ,totalX,totalY,totalZ,totalCount,blocks,debugArr,dynamicMemoryLength)
 
-        @cuda threads=threads blocks=blocks MeansMahalinobis.meansMahalinobisKernelB(args...)
-        @test totalCount[1]==45
-        @test totalX[1]== sum(map(ind->ind[1],cartTrueGold))
-        @test totalY[1]== sum(map(ind->ind[2],cartTrueGold))
-        @test totalZ[1]== sum(map(ind->ind[3],cartTrueGold))
+#         @cuda threads=threads blocks=blocks MeansMahalinobis.meansMahalinobisKernelB(args...)
+#         @test totalCount[1]==45
+#         @test totalX[1]== sum(map(ind->ind[1],cartTrueGold))
+#         @test totalY[1]== sum(map(ind->ind[2],cartTrueGold))
+#         @test totalZ[1]== sum(map(ind->ind[3],cartTrueGold))
     
 
         
 
         
-using BenchmarkTools
-BenchmarkTools.DEFAULT_PARAMETERS.samples = 100
-BenchmarkTools.DEFAULT_PARAMETERS.seconds =60
-BenchmarkTools.DEFAULT_PARAMETERS.gcsample = true
+# using BenchmarkTools
+# BenchmarkTools.DEFAULT_PARAMETERS.samples = 100
+# BenchmarkTools.DEFAULT_PARAMETERS.seconds =60
+# BenchmarkTools.DEFAULT_PARAMETERS.gcsample = true
 
 
-function toBenchA()
+# function toBenchA()
   
-    totalX= CuArray([0]);
-    totalY= CuArray([0]);
-    totalZ= CuArray([0]);
-    totalCount= CuArray([0]);
-        dynamicMemoryLength = sum(threads)+intermediateresCheck
+#     totalX= CuArray([0]);
+#     totalY= CuArray([0]);
+#     totalZ= CuArray([0]);
+#     totalCount= CuArray([0]);
+#         dynamicMemoryLength = sum(threads)+intermediateresCheck
     
-        resListCounter= CUDA.zeros(UInt32,1)
-        resList= CUDA.zeros(UInt32, length(goldBoolGPU) );
+#         resListCounter= CUDA.zeros(UInt32,1)
+#         resList= CUDA.zeros(UInt32, length(goldBoolGPU) );
     
-        args = (goldBoolGPU,numberToLooFor,loopYdim,loopXdim,loopZdim,maxX, maxY,maxZ
-        ,resList,resListCounter,intermediateresCheck
-        ,totalX,totalY,totalZ,totalCount,blocks,debugArr,dynamicMemoryLength)
+#         args = (goldBoolGPU,numberToLooFor,loopYdim,loopXdim,loopZdim,maxX, maxY,maxZ
+#         ,resList,resListCounter,intermediateresCheck
+#         ,totalX,totalY,totalZ,totalCount,blocks,debugArr,dynamicMemoryLength)
 
 
-    CUDA.@sync   @cuda threads=threads blocks=blocks MeansMahalinobis.meansMahalinobisKernel(args...)
+#     CUDA.@sync   @cuda threads=threads blocks=blocks MeansMahalinobis.meansMahalinobisKernel(args...)
 
-                        end
+#                         end
 
-function toBenchB()
+# function toBenchB()
   
-    totalX= CuArray([0]);
-    totalY= CuArray([0]);
-    totalZ= CuArray([0]);
-    totalCount= CuArray([0]);
-        dynamicMemoryLength = sum(threads)+intermediateresCheck
+#     totalX= CuArray([0]);
+#     totalY= CuArray([0]);
+#     totalZ= CuArray([0]);
+#     totalCount= CuArray([0]);
+#         dynamicMemoryLength = sum(threads)+intermediateresCheck
     
-        resListCounter= CUDA.zeros(UInt32,1)
-        resList= CUDA.zeros(UInt32, length(goldBoolGPU) );
+#         resListCounter= CUDA.zeros(UInt32,1)
+#         resList= CUDA.zeros(UInt32, length(goldBoolGPU) );
     
-        args = (goldBoolGPU,numberToLooFor,loopYdim,loopXdim,loopZdim,(maxX, maxY,maxZ)
-        ,resList,resListCounter,intermediateresCheck
-        ,totalX,totalY,totalZ,totalCount,blocks,debugArr,dynamicMemoryLength)
+#         args = (goldBoolGPU,numberToLooFor,loopYdim,loopXdim,loopZdim,(maxX, maxY,maxZ)
+#         ,resList,resListCounter,intermediateresCheck
+#         ,totalX,totalY,totalZ,totalCount,blocks,debugArr,dynamicMemoryLength)
 
 
-    CUDA.@sync   @cuda threads=threads blocks=blocks MeansMahalinobis.meansMahalinobisKernelB(args...)
+#     CUDA.@sync   @cuda threads=threads blocks=blocks MeansMahalinobis.meansMahalinobisKernelB(args...)
 
-                        end
+#                         end
 
-bbA = @benchmark toBenchA() 
-bbB = @benchmark toBenchB()
-#bbA = @benchmark toBench()  setup=(goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools())
+# bbA = @benchmark toBenchA() 
+# bbB = @benchmark toBenchB()
+# #bbA = @benchmark toBench()  setup=(goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools())

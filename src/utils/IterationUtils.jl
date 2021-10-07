@@ -10,6 +10,7 @@ we need also to supply functions of iterating the 3 dimensional data but with ch
   so for example if we want to analyze top padding from shared memory we will set the dimension 3 at 1
 """
 module IterationUtils
+using CUDA,Logging
 export @iter3d
 
 """
@@ -18,28 +19,43 @@ arrDims - we will get maxX maxY maxZ from tuple with dimensions of the array ana
 loopXdim, loopYdim,loopZdim - how many iterations should be completed while iterating over given dimension
 ex - expression we want to invoke it will have x,y z
 """
-macro iter3d(arrDims, loopXdim, loopYdim,loopZdim,ex  )
-  return esc(quote
-  @unroll for zdim::UInt32 in 0:$loopZdim
-    z::UInt32 = (zdim*gridDim().x) + blockIdxX()#multiply by blocks to avoid situation that a single block of threads would have no work to do
-    if( (z<= $arrDims[3]) )    
-        @unroll for ydim::UInt32 in  0:$loopYdim
-            y::UInt32 = ((ydim* blockDimY()) +threadIdxY())
-              if( (y<=$arrDims[2])  )
-                @unroll for xdim::UInt32 in 0:$loopXdim
-                    x::UInt32=(xdim* blockDimX()) +threadIdxX()
-                    if((x <=$arrDims[1]))
-                      $ex
-                    end#if x
-               end#for x dim 
-          end#if y
-        end#for  yLoops 
-    end#if z   
-end#for z dim
-end 
-)
-
+macro iter3d(arrDims, loopXdim, loopYdim,loopZdim,ex)
+  zOffset= :((zdim*gridDim().x))
+  zAdd = :(blockIdxX())
+  yOffset= :(ydim* blockDimY())
+  xOffset= :(xdim* blockDimX())
+  mainExp = generalizedIter3d( arrDims, loopXdim, loopYdim,loopZdim,zOffset,zAdd ,yOffset,xOffset,ex) ;
+  
+  
+  return esc(:( $mainExp))
+  
 end#iter3d
+
+"""
+generalized version of iter3d we will specilize it in the macro on the basis of multiple dispatch
+"""
+function generalizedIter3d( arrDims, loopXdim, loopYdim,loopZdim,zOffset,zAdd,yOffset,xOffset,checkZ,checkY,checkX   ,ex  )
+  quote
+    @unroll for zdim::UInt32 in 0:$loopZdim
+      z::UInt32 = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
+      if( (z<= $arrDims[3]) )    
+          @unroll for ydim::UInt32 in  0:$loopYdim
+              y::UInt32 = $yOffset +threadIdxY()
+                if( (y<=$arrDims[2])  )
+                  @unroll for xdim::UInt32 in 0:$loopXdim
+                      x::UInt32= $xOffset +threadIdxX()
+                      if((x <=$arrDims[1]))
+                        $ex
+                      end#if x
+                 end#for x dim 
+            end#if y
+          end#for  yLoops 
+      end#if z   
+  end#for z dim
+  end 
+end#generalizedIter3d
+
+
 
 
 
@@ -68,3 +84,24 @@ end#iterDimFixed
 
 
 end#module
+
+
+# function generalizedIter3d( arrDims, loopXdim, loopYdim,loopZdim,zOffset,zAdd ,ex  )
+#   quote
+#     @unroll for zdim::UInt32 in 0:$loopZdim
+#       z::UInt32 = (zdim*gridDim().x) + blockIdxX()#multiply by blocks to avoid situation that a single block of threads would have no work to do
+#       if( (z<= $arrDims[3]) )    
+#           @unroll for ydim::UInt32 in  0:$loopYdim
+#               y::UInt32 = ((ydim* blockDimY()) +threadIdxY())
+#                 if( (y<=$arrDims[2])  )
+#                   @unroll for xdim::UInt32 in 0:$loopXdim
+#                       x::UInt32=(xdim* blockDimX()) +threadIdxX()
+#                       if((x <=$arrDims[1]))
+#                         $ex
+#                       end#if x
+#                  end#for x dim 
+#             end#if y
+#           end#for  yLoops 
+#       end#if z   
+#   end#for z dim
+#   end 
