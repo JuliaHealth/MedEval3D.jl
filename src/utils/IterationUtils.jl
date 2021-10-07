@@ -23,9 +23,17 @@ macro iter3d(arrDims, loopXdim, loopYdim,loopZdim,ex)
   zOffset= :((zdim*gridDim().x))
   zAdd = :(blockIdxX())
   yOffset= :(ydim* blockDimY())
+  yAdd= :(threadIdxY())
   xOffset= :(xdim* blockDimX())
-  mainExp = generalizedIter3d( arrDims, loopXdim, loopYdim,loopZdim,zOffset,zAdd ,yOffset,xOffset,ex) ;
-  
+  xAdd = :(threadIdxX())
+  xCheck=:(x <=$arrDims[1])
+  yCheck =:(y<=$arrDims[2])
+  zCheck=:(z<= $arrDims[3])
+  additionalActionAfterZ= :()
+  additionalActionAfterY= :()
+  additionalActionAfterX= :()
+  is3d=true
+  mainExp = generalizedItermultiDim(  loopXdim, loopYdim,loopZdim,zOffset,zAdd ,yOffset,yAdd,xOffset,xAdd,xCheck,yCheck,zCheck,additionalActionAfterZ,additionalActionAfterY,additionalActionAfterX,is3d,ex) ;
   
   return esc(:( $mainExp))
   
@@ -33,35 +41,64 @@ end#iter3d
 
 """
 generalized version of iter3d we will specilize it in the macro on the basis of multiple dispatch
+  loopXdim, loopYdim,loopZdim - information how many times we need to loop over given dimension
+  zOffset,zAdd - calculate offset and thread/block dependent add 
+  Offset,xOffset,xAdd, yAdd - offsets for x and y  and what to add to them
+  xCheck,yCheck,zCheck - checks performed just after for - and determining wheather to continue
+  additionalActionAfterZ,additionalActionAfterY,additionalActionAfterX  - gives possibility of invoking more actions  
+      - invoked after the checks (checks are avoided to prevent warp stall if warp sync will be invoked)
+  is3d - if true we use 3 dimensional loop if not we iterate only over x and y     
+  ex - main expression around which we build loop    
 """
-function generalizedIter3d( arrDims, loopXdim, loopYdim,loopZdim,zOffset,zAdd,yOffset,xOffset,checkZ,checkY,checkX   ,ex  )
-  quote
+function generalizedItermultiDim(
+   loopXdim, loopYdim,loopZdim
+  ,zOffset,zAdd
+  ,yOffset,yAdd
+  ,xOffset,xAdd
+  ,xCheck,yCheck,zCheck
+  ,additionalActionAfterZ,additionalActionAfterY,additionalActionAfterX ,
+  is3d ,ex  )
+#we will define expressions from deepest to most superficial
+exp1 = quote
+      @unroll for xdim::UInt32 in 0:$loopXdim
+          x::UInt32= $xOffset +threadIdxX()
+          if( $xCheck)
+            $ex
+          end#if x
+        $additionalActionAfterX  
+        end#for x dim
+        end#quote
+
+exp2= quote
+        @unroll for ydim::UInt32 in  0:$loopYdim
+          y::UInt32 = $yOffset +threadIdxY()
+            if($yCheck)
+              $exp1
+        end#if y
+        $additionalActionAfterY
+        end#for  yLoops 
+      end
+
+ exp3= quote
     @unroll for zdim::UInt32 in 0:$loopZdim
       z::UInt32 = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
-      if( (z<= $arrDims[3]) )    
-          @unroll for ydim::UInt32 in  0:$loopYdim
-              y::UInt32 = $yOffset +threadIdxY()
-                if( (y<=$arrDims[2])  )
-                  @unroll for xdim::UInt32 in 0:$loopXdim
-                      x::UInt32= $xOffset +threadIdxX()
-                      if((x <=$arrDims[1]))
-                        $ex
-                      end#if x
-                 end#for x dim 
-            end#if y
-          end#for  yLoops 
-      end#if z   
+      if($zCheck)    
+        $exp2
+      end#if z 
+      $additionalActionAfterZ  
   end#for z dim
   end 
+#if it is 3d we will return x,y,z iterations if not only x and y 
+if(is3d)
+  return exp3
+else
+  return exp2
+
+end
+
+
 end#generalizedIter3d
 
-
-
-
-
-# mainArr- array from which we want to get values
-# minX::UInt32 =UInt32(0), minY::UInt32 =UInt32(0), minZ::UInt32 =UInt32(0)
-# minX, minY and minZ - this are assumed to be 1 if not we can supply them in the macro
 
 
 
@@ -105,3 +142,26 @@ end#module
 #       end#if z   
 #   end#for z dim
 #   end 
+
+
+
+# function generalizedIter3dFullChecks( arrDims, loopXdim, loopYdim,loopZdim,zOffset,zAdd,yOffset,xOffset,ex  )
+#   quote
+#     @unroll for zdim::UInt32 in 0:$loopZdim
+#       z::UInt32 = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
+#       if( (z<= $arrDims[3]) )    
+#           @unroll for ydim::UInt32 in  0:$loopYdim
+#               y::UInt32 = $yOffset +threadIdxY()
+#                 if( (y<=$arrDims[2])  )
+#                   @unroll for xdim::UInt32 in 0:$loopXdim
+#                       x::UInt32= $xOffset +threadIdxX()
+#                       if((x <=$arrDims[1]))
+#                         $ex
+#                       end#if x
+#                  end#for x dim 
+#             end#if y
+#           end#for  yLoops 
+#       end#if z   
+#   end#for z dim
+#   end 
+# end#generalizedIter3d

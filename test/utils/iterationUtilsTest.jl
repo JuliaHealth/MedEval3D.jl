@@ -49,7 +49,7 @@ end
 
 
 
-@testset "iter3d" begin
+# @testset "iter3d" begin
 
     args = getExampleKernelArgs()
     goldBoolGPU,segmBoolGPU,numberToLooFor,loopYdim,loopXdim,loopZdim,maxes,totalCountGold,totalCountSegm= args
@@ -92,4 +92,4 @@ end
     @test totalCountSegm[1]==150*150*150
 
 
-end#testset
+# end#testset
