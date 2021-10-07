@@ -3,8 +3,8 @@ It holds macos and functions usefull for reductions of 3 dimensional data
 
 """
 module ReductionUtils
-using Main.CUDAGpuUtils
-export @redWitAct
+using Main.CUDAGpuUtils, CUDA
+export @redWitAct, @addAtomic
 """
 adapted from https://discourse.julialang.org/t/macro-magic-looping-over-varargs-printing-values-and-symbols/3025
 
@@ -29,52 +29,82 @@ so in the end we will have fully reducd values in shared memory in first entries
   """
 macro redWitAct(offsetIter,shmem, varActTuples...)
 
-    # tmp = []
-    # push!(tmp, quote $while($offsetIter <32)  end)
-    # # e1 = Expr(:call, while , 3, 4)
-    # for i in 0:cld(length(varActTuples),2)-1
-    #     offSet = i*2
-    #     el1 = varActTuples[offSet+1]
-    #     op = varActTuples[offSet+2]
-    #     #push!(tmp, :(print($op($el1, 2 ))   ))
-    #     push!(tmp, :(@inbounds $el1=$op($el1,shfl_down_sync(FULL_MASK, $el1, offsetIter))  ))
-    # end#for
+firstPart =   reduceWitActFirstPart(offsetIter,shmem, varActTuples...)
+secondPart =   reduceWitActSecondPart(offsetIter,shmem, varActTuples...)
+thirdPart =   reduceWitActThirdPart(offsetIter,shmem, varActTuples...)
 
-    # push!(tmp, :(end))
-
-return esc(quote
-  while($offsetIter <32) 
-    $offsetIter<<= 1
-  end
-
-end)
-# return esc(quote
-#   while($offsetIter <32) 
-#     Expr(:block, $tmp...)
-#     $offsetIter<<= 1
-#   end
-
-# end)
-    # return esc(
-    # tmp[1]
-  
-    #  )
-    # while(offsetIter <32) 
-    #   @inbounds sumX+=shfl_down_sync(FULL_MASK, sumX, offsetIter)  
-    # offsetIter<<= 1
-    #   end
-    #   if(threadIdxX()==1)
-    #   @inbounds shmemSum[threadIdxY(),1]+=sumX
-    #   @inbounds shmemSum[threadIdxY(),2]+=sumY
-    #   @inbounds shmemSum[threadIdxY(),3]+=sumZ
-    #   @inbounds shmemSum[threadIdxY(),4]+=count
-    #   end
-    #   sync_threads()
-
-
-
+  return esc(:( while($offsetIter <32) 
+        $firstPart
+        $offsetIter<<= 1
+    end;
+    if(threadIdxX()==1)
+    $secondPart
+    end;
+    sync_threads();
+    $offsetIter=1;
+    $thirdPart
+    ))
 
 end#reduceWitAction
+"""
+First stage of reductions where local variables are added from registers to registers
+"""
+function reduceWitActFirstPart(offsetIter,shmem, varActTuples...)
+  tmp = []
+  for i in 0:cld(length(varActTuples),2)-1
+      offSet = i*2
+      el1 = varActTuples[offSet+1]
+      op = varActTuples[offSet+2]
+      push!(tmp, :(@inbounds $el1=$op($el1,shfl_down_sync(FULL_MASK, $el1, $offsetIter))  ))
+  end#for
+  return Expr(:block,tmp...)
+end
+"""
+second stage of reduction where set the values from the first lane in warp to shared memory
+important I keep the convention to have 2 dimensional thread blocks where x dimension is 32 
+- it makes warp opertations simpler
+"""
+function reduceWitActSecondPart(offsetIter,shmem, varActTuples...)
+  tmp = []
+  index = 0
+  for i in 0:cld(length(varActTuples),2)-1
+      index+=1
+      offSet = i*2
+      el1 = varActTuples[offSet+1]
+      op = varActTuples[offSet+2]
+      push!(tmp, :(@inbounds $shmem[threadIdxY(),$index]= $el1))
+  end#for
+  return Expr(:block,tmp...)
+end
+
+"""
+third stage of reduction in block 
+we will get variables in the same order as was passed in primary macro 
+at this step those are already in the shared memory 
+    - number of those is the same as number of warps
+ using warp reduction we will reduce information from shared memory
+ in order to pralelize the process we will use separate warp for each operation   
+
+"""
+function reduceWitActThirdPart(offsetIter,shmem, varActTuples...)
+  tmp = []
+  index = 0
+  for i in 0:cld(length(varActTuples),2)-1
+      index+=1
+      offSet = i*2
+      el1 = varActTuples[offSet+1]
+      op = varActTuples[offSet+2]
+      push!(tmp, quote
+      if(threadIdxY()==$index)
+        while(offsetIter <32) 
+          @inbounds shmemSum[threadIdxX(),$index]=$op(shmemSum[threadIdxX(),$index],  shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),$index], $offsetIter))  
+          offsetIter<<= 1
+        end
+      end  
+      end)
+  end#for
+  return Expr(:block,tmp...)
+end
 
 
 """
@@ -84,16 +114,50 @@ so we will add atomically to the first variable shmemSum[1,1] to second shmemSum
 we will check also is the value we want to send is not zero - if it is we will not send it to global variable 
 !!!!!! important we assume we will ave at least as many warps as variables we want to send
 """
-macro sendAtomic(shmemSum, vars)
+macro addAtomic(shmemSum, vars...)
 
-  tmp = []
-  index = 0
-  for varr in vars
-    index+=1
-      push!(tmp, :( @ifXY $(index) $(index) if(shmemSum[1,$(index)]>0)   @inbounds @atomic $varr[]+= shmemSum[1,$(index)] end    ))
-  end#for
+  mainPArt = sendAtomicHelperAndAdd(shmemSum, vars...)
+
+  return esc(:($mainPArt  ))
 
 end#sendAtomic
+
+"""
+we get information about reduction  from shared memory - we know which entry from order we get the
+data in vars  - are variables - ussually in global memory to which we want to push the value
+"""
+function sendAtomicHelperAndAdd(shmemSum, vars...)
+  tmp = []
+  for index in 1:length(vars)
+      varr = vars[index]
+      push!(tmp, quote
+      @ifXY $index $index if(shmemSum[1,$index]>0)   @inbounds @atomic $varr[]+=$shmemSum[1,$(index)]  end   
+       
+      end)
+  end#for
+  return Expr(:block,tmp...)
+
+
+
+
+
+
+
+
+
+  for index in 1:length(varActTuples)
+    varr= vars[index]
+      push!(tmp, quote
+     @ifXY $index $index if(shmemSum[1,$index]>0)   @inbounds @atomic $varr[]= $shmemSum[1,$(index)] end   
+  
+      end)
+  end#for
+  return Expr(:block,tmp...)
+end
+
+
+
+
 
 """
 given counter and array it will atomically inrease counter value and on the basis of old will 

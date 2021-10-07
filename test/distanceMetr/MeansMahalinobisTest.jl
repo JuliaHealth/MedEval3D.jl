@@ -156,3 +156,24 @@ totalCount= CuArray([0]);
         @test totalY[1]== sum(map(ind->ind[2],cartTrueGold))
         @test totalZ[1]== sum(map(ind->ind[3],cartTrueGold))
     
+
+        a=2
+        b=3
+        offIt = 1 
+        @redWitAct(offIt,1,a,+,b,-)
+       dump( @redWitAct(offIt,1,a,+,b,-))
+
+
+
+
+
+
+        dump( @redWitAct(offIt,1,a,+,b,-) )
+
+        a = quote
+            while 3 < 4
+            1+1
+            end
+            end
+     
+dump(a)

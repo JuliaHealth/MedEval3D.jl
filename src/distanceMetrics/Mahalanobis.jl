@@ -73,9 +73,6 @@ function WMMAkernel(dataShmem,ones,d_out,fragA,fragB)
 	 a_frag = WMMA.load_a(pointer(fragA), 16, WMMA.ColMajor, conf)
 	 b_frag = WMMA.load_b(pointer(fragB), 16, WMMA.ColMajor, conf)
 	 c_frag = WMMA.load_c(pointer(ones), 16, WMMA.ColMajor, conf)
-	# #  c_frag = 0.5f0 .* c_frag
-	#d_frag = WMMA.mma(a_frag, b_frag, c_frag, conf)
-	d_frag = WMMA.mma(a_frag, b_frag, c_frag, conf)
 	d_frag = WMMA.mma(a_frag, b_frag, c_frag, conf)
 	WMMA.store_d(pointer(d_out), d_frag, 16, WMMA.ColMajor, conf)
 	 

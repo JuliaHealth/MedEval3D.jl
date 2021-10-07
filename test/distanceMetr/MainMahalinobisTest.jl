@@ -107,8 +107,36 @@ dataShmem = CuArray([ 1  2  3 0;
     fragAa= Array(fragA)
     fragBa= Array(fragB)
 
-    fragAa*fragBa+ zeros(Float16,4,4)
+    fragAa*fragBa+ Base.ones(Float16,4,4)
 
+
+fragA = CuArray(Float16.([ 1.0 -11.0  -1.0   11.0;
+  2.0 -22.0  -2.0   22.0;
+  3.0 -33.0  -3.0   33.0;
+  0.0  0.0    0.0   0.0
+]))
+
+fragB = CuArray(Float16.([1.0 2.0 3.0 0.0;
+ 1.0 2.0 3.0 0.0;
+ 11.0 22.0 33.0 0.0;
+ 11.0 22.0 33.0 0.0
+]))
+
+Array(fragA*fragB+fragC)
+
+fragC = CUDA.ones(Float16,4,4)
+d_out= CUDA.ones(Float16,4,4)
+
+function testKernel(fragA,fragB,fragC, d_out)
+    conf = WMMA.Config{16, 16, 16, Float16}
+    a_frag = WMMA.load_a(pointer(fragA), 16, WMMA.ColMajor, conf)
+    b_frag = WMMA.load_b(pointer(fragB), 16, WMMA.ColMajor, conf)
+    c_frag = WMMA.load_c(pointer(fragC), 16, WMMA.ColMajor, conf)
+   d_frag = WMMA.mma(a_frag, b_frag, c_frag, conf)
+   WMMA.store_d(pointer(d_out), d_frag, 16, WMMA.ColMajor, conf)
+end
+@cuda threads=32 blocks=1 testKernel(fragA,fragB,fragC, d_out)
+Array(d_out)
 # dataShmem = [ 1  2  3  0;
 #              11  22  33 0 ]
 
