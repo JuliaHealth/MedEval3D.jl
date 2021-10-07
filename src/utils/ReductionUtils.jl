@@ -139,12 +139,6 @@ function sendAtomicHelperAndAdd(shmemSum, vars...)
 
 
 
-
-
-
-
-
-
   for index in 1:length(varActTuples)
     varr= vars[index]
       push!(tmp, quote
