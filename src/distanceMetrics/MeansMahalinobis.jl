@@ -73,7 +73,10 @@ function meansMahalinobisKernel(goldArr,segmArr
     ,arrDims::Tuple{UInt32,UInt32,UInt32}
     ,totalXGold,totalYGold,totalZGold,totalCountGold
     ,totalXSegm,totalYSegm,totalZSegm,totalCountSegm
-    ,countPerZGold,countPerZSegm,covariancesSliceWise,covarianceGlobal,mahalanobisResGlobal, mahalanobisResSliceWise   )
+    ,countPerZGold,countPerZSegm,covariancesSliceWise
+    ,varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
+    ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
+    ,mahalanobisResGlobal, mahalanobisResSliceWise   )
 
     grid_handle = this_grid()
     # keeping counter of old z value - in order to be able to get slicewise z counter
@@ -123,13 +126,7 @@ function meansMahalinobisKernel(goldArr,segmArr
     meanxyz= @cuStaticSharedMem(Float64, (3))
     #for storing intermediate results in shared memory
     #1)variance x    2)cov xy     3)cov xz     4)var y    5)cov yz      6)var z 
-    intermedieteResVarX= @cuStaticSharedMem(Float64, (1))
-    intermedieteResCovxy= @cuStaticSharedMem(Float64, (1))
-    intermedieteResCovxz= @cuStaticSharedMem(Float64, (1))
-    intermedieteResVarY= @cuStaticSharedMem(Float64, (1))
-    intermedieteResCovyz= @cuStaticSharedMem(Float64, (1))
-    intermedieteResVarZ= @cuStaticSharedMem(Float64, (1))
-
+    intermedieteRes= @cuStaticSharedMem(Float64, (6))
 
     @ifXY 1 1  meanxyz[1]= totalXGold[1]/totalCountGold[1]
     @ifXY 1 2  meanxyz[2]= totalYGold[1]/totalCountGold[1]
@@ -161,10 +158,11 @@ function meansMahalinobisKernel(goldArr,segmArr
        @inbounds shmemSum[threadIdxY(),1]+= sumX
        @inbounds shmemSum[threadIdxY(),2]+= sumY
        @inbounds shmemSum[threadIdxY(),3]+= sumZ
-       @inbounds shmemSum[threadIdxY(),4]+= count
        #putting  variance y and covariance yz manually to shared memory multiply appropriate amount of time
-       @inbounds shmemSum[threadIdxY(),5]+= count*(y-meanxyz[2])^2#variance y
-       @inbounds shmemSum[threadIdxY(),6]+= count*((y-meanxyz[2])*(z-meanxyz[3]))#covariance yz
+       @inbounds shmemSum[threadIdxY(),4]+= count*(y-meanxyz[2])^2#variance y
+       @inbounds shmemSum[threadIdxY(),5]+= count*((y-meanxyz[2])*(z-meanxyz[3]))#covariance yz
+       @inbounds shmemSum[threadIdxY(),6]+= count
+
    end;
    #reset as values are already saved in shmemsum
    sumX,sumY,sumZ ,count= Float32(0.0),Float32(0.0),Float32(0.0),Float32(0.0)
@@ -174,22 +172,35 @@ function meansMahalinobisKernel(goldArr,segmArr
     #z additional fun
     begin
         sync_threads()
-        #we do the last step of reductions to get all of the values into first spots of shared memory
-        @redOnlyStepThree(offsetIter,shmemSum, +,+,+  ,+,+,+)
-        #we will use it later to get slicewise results and in the end we will send those to global memory
-       
-        shmemSum, intermedieteResVarX,intermedieteResCovxy,intermedieteResCovxz,intermedieteResVarY,intermedieteResCovyz,intermedieteResVarZ
-                
-        #now we need to add slicewise results 
-        covariancesSliceWise[shmemSum[1,1] ]
-     
-     
-        #clear shared memory
-        clearSharedMemWarpLong(shmemSum, UInt8(6), Float32(0.0))
+        #no point in analyzing if it is empty
+        if(shmemSum[1,1]>0)
+            #we do the last step of reductions to get all of the values into first spots of shared memory
+            @redOnlyStepThree(offsetIter,shmemSum, +,+,+  ,+,+,+)
+            sync_threads()
+            #we will use it later to get slicewise results and in the end we will send those to global memory
+            @ifY 1 @unroll for i in 1:5
+                @ifX i intermedieteRes[i]+=shmemSum[1,i]
+            end 
+            @ifXY 1 6 intermedieteRes[6]+=((z- meanxyz[3])^2)
 
+            @ifY 2 @unroll for i in 1:5
+                @ifX i covariancesSliceWise[z,i]+=shmemSum[1,i]
+            end 
+            @ifXY 2 6 covariancesSliceWise[z,6]+= ((z- meanxyz[3])^2)  
+        
+            #clear shared memory
+            clearSharedMemWarpLong(shmemSum, UInt8(6), Float32(0.0))
+        end#if covariance non empty
     end  )# iterations loop
+    sync_threads()
+    #at this point we should have all variances and covariances in intermedieteRes and we can send it to global results
+    @ifXY 1 1 if(intermedieteRes[1]>0)  @inbounds @atomic varianceXGlobalGold[]+=intermedieteRes[1]  end 
+    @ifXY 2 1 if(intermedieteRes[2]>0)  @inbounds @atomic covarianceXYGlobalGold[]+=intermedieteRes[2]  end 
+    @ifXY 3 1 if(intermedieteRes[3]>0)  @inbounds @atomic covarianceXZGlobalGold[]+=intermedieteRes[3]  end 
+    @ifXY 4 1 if(intermedieteRes[4]>0)  @inbounds @atomic varianceYGlobalGold[]+=intermedieteRes[4]  end 
+    @ifXY 5 1 if(intermedieteRes[5]>0)  @inbounds @atomic covarianceYZGlobalGold[]+=intermedieteRes[5]  end 
+    @ifXY 6 1 if(intermedieteRes[6]>0)  @inbounds @atomic varianceZGlobalGold[]+=intermedieteRes[6]  end 
 
-    end
 
     return  
     end#meansMahalinobisKernel

@@ -73,7 +73,7 @@ macro redOnlyStepOne(offsetIter,shmem, varActTuples...)
   """
   modification of redWitAct - where we reduce only across shared memory
    """
-  macro redOnlyStepThree(offsetIter,shmem, actions)
+  macro redOnlyStepThree(offsetIter,shmem, actions...)
   
     thirdPart =   reduceWitActThirdPartOnly(offsetIter,shmem, actions)
 
