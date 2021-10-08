@@ -153,44 +153,49 @@ function meansMahalinobisKernel(goldArr,segmArr
     # of course if count is 0 we can ignore this step
     begin
    #we put reduced values into share memory 
-   @redOnlyStepOne(offsetIter,shmemSum,  sumX,+,     sumY,+    ,sumZ,+   ,count,+)
-   if(threadIdxX()==1 && count>0)
-       @inbounds shmemSum[threadIdxY(),1]+= sumX
-       @inbounds shmemSum[threadIdxY(),2]+= sumY
-       @inbounds shmemSum[threadIdxY(),3]+= sumZ
-       #putting  variance y and covariance yz manually to shared memory multiply appropriate amount of time
-       @inbounds shmemSum[threadIdxY(),4]+= count*(y-meanxyz[2])^2#variance y
-       @inbounds shmemSum[threadIdxY(),5]+= count*((y-meanxyz[2])*(z-meanxyz[3]))#covariance yz
-       @inbounds shmemSum[threadIdxY(),6]+= count
+sync_threads()
+  @redOnlyStepOne(offsetIter,shmemSum,  sumX,+,     sumY,+    ,sumZ,+   ,count,+);
 
-   end;
-   #reset as values are already saved in shmemsum
-   sumX,sumY,sumZ ,count= Float32(0.0),Float32(0.0),Float32(0.0),Float32(0.0)
-   sync_warp()
+  @ifXY 1 1 if(sumX>0.0) CUDA.@cuprint "sumX $(sumX) \n" end
+
+#    if(threadIdxX()==UInt32(1) && count>Float32(0.0))
+#        @inbounds shmemSum[threadIdxY(),1]+= sumX
+#        @inbounds shmemSum[threadIdxY(),2]+= sumY
+#        @inbounds shmemSum[threadIdxY(),3]+= sumZ
+#        #putting  variance y and covariance yz manually to shared memory multiply appropriate amount of time
+#        @inbounds shmemSum[threadIdxY(),4]+= count*(y-meanxyz[2])^2#variance y
+#        @inbounds shmemSum[threadIdxY(),5]+= count*((y-meanxyz[2])*(z-meanxyz[3]))#covariance yz
+#        @inbounds shmemSum[threadIdxY(),6]+= count
+
+#    end;
+#    #reset as values are already saved in shmemsum
+#    sumX,sumY,sumZ ,count= Float32(0.0),Float32(0.0),Float32(0.0),Float32(0.0)
+#    sync_warp()
 
     end,
     #z additional fun
     begin
-        sync_threads()
-        #no point in analyzing if it is empty
-        if(shmemSum[1,1]>0)
-            #we do the last step of reductions to get all of the values into first spots of shared memory
-            @redOnlyStepThree(offsetIter,shmemSum, +,+,+  ,+,+,+)
-            sync_threads()
-            #we will use it later to get slicewise results and in the end we will send those to global memory
-            @ifY 1 @unroll for i in 1:5
-                @ifX i intermedieteRes[i]+=shmemSum[1,i]
-            end 
-            @ifXY 1 6 intermedieteRes[6]+=((z- meanxyz[3])^2)
+        # sync_threads()
+        # #no point in analyzing if it is empty
+        # if(shmemSum[1,1]>0)
+        #     #we do the last step of reductions to get all of the values into first spots of shared memory
+        #     @redOnlyStepThree(offsetIter,shmemSum, +,+,+  ,+,+,+)
+        #     sync_threads()
+        #     #we will use it later to get slicewise results and in the end we will send those to global memory
+        #     @ifY 1 @unroll for i in 1:5
+        #         #@ifX i CUDA.@cuprint "shmemSum[1,$(i)] $(shmemSum[1,i]) intermedieteRes[$(i)] $(intermedieteRes[i]) \n"
+        #         @ifX i intermedieteRes[i]+=shmemSum[1,i]
+        #     end 
+        #     @ifXY 1 6 intermedieteRes[6]+=((z- meanxyz[3])^2)
 
-            @ifY 2 @unroll for i in 1:5
-                @ifX i covariancesSliceWise[z,i]+=shmemSum[1,i]
-            end 
-            @ifXY 2 6 covariancesSliceWise[z,6]+= ((z- meanxyz[3])^2)  
+        #     @ifY 2 @unroll for i in 1:5
+        #         @ifX i covariancesSliceWise[z,i]+=shmemSum[1,i]
+        #     end 
+        #     @ifXY 2 6 covariancesSliceWise[z,6]+= ((z- meanxyz[3])^2)  
         
-            #clear shared memory
-            clearSharedMemWarpLong(shmemSum, UInt8(6), Float32(0.0))
-        end#if covariance non empty
+        #     #clear shared memory
+        #     clearSharedMemWarpLong(shmemSum, UInt8(6), Float32(0.0))
+        # end#if covariance non empty
     end  )# iterations loop
     sync_threads()
     #at this point we should have all variances and covariances in intermedieteRes and we can send it to global results

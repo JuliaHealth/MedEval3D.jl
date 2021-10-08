@@ -53,8 +53,6 @@ macro iter3dAdditionalxyzActsAndZcheck(arrDims, loopXdim, loopYdim,loopZdim
   xAdd = :(threadIdxX())
   xCheck=:(x <=$arrDims[1])
   yCheck =:(y<=$arrDims[2])
-  additionalActionAfterY= :()
-  additionalActionAfterX= :()
   is3d=true
   mainExp = generalizedItermultiDim(  loopXdim, loopYdim,loopZdim,zOffset,zAdd ,yOffset,yAdd,xOffset,xAdd,xCheck,yCheck,zCheck,additionalActionAfterZ,additionalActionAfterY,additionalActionAfterX,is3d,ex) ;
   
