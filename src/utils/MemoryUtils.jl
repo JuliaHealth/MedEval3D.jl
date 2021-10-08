@@ -17,4 +17,12 @@ sync_threads()
 end#clearSharedMemWarpLong
 
 
+function clearSharedMemWarpLong(shmem, ydim::UInt8 , value)
+    @unroll for i::UInt8 in UInt8(1):UInt8(ydim)
+        @ifY i shmem[threadIdxX(),i]=value
+    end#for 
+    sync_threads()
+    end#clearSharedMemWarpLong
+    
+
 end#MemoryUtils

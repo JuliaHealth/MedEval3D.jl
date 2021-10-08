@@ -36,18 +36,29 @@ sizz = size(goldBoolCPU);maxX = UInt32(sizz[1]);maxY = UInt32(sizz[2]);maxZ = UI
 totalXGold= CuArray([0.0]);
 totalYGold= CuArray([0.0]);
 totalZGold= CuArray([0.0]);
-totalCountGold= CuArray([0.0]);
+totalCountGold= CuArray([0]);
 #segm
 totalXSegm= CuArray([0.0]);
 totalYSegm= CuArray([0.0]);
 totalZSegm= CuArray([0.0]);
-totalCountSegm= CuArray([0.0]);
+totalCountSegm= CuArray([0]);
+totalCountGold
+#countPerZGold= CUDA.zeros(Float32,sizz[3]+1);
+#countPerZSegm= CUDA.zeros(Float32,sizz[3]+1);
+countPerZGold= CUDA.zeros(Float32,500);
+countPerZSegm= CUDA.zeros(Float32,500);
+
+covariancesSliceWise= CUDA.zeros(Float32,12,1);
+covarianceGlobal= CUDA.zeros(Float32,12,1);
+
+mahalanobisResGlobal= CUDA.zeros(1);
+mahalanobisResSliceWise= CUDA.zeros(sizz[3]);
 
 args = (goldBoolGPU,segmBoolGPU,numberToLooFor
 ,loopYdim,loopXdim,loopZdim
 ,(maxX, maxY,maxZ)
 ,totalXGold,totalYGold,totalZGold,totalCountGold
-,totalXSegm,totalYSegm,totalZSegm,totalCountSegm)
+,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,countPerZGold, countPerZSegm,covariancesSliceWise,covarianceGlobal,mahalanobisResGlobal, mahalanobisResSliceWise)
 
 
     # calculate the amount of dynamic shared memory for a 2D block size
@@ -70,26 +81,30 @@ args = (goldBoolGPU,segmBoolGPU,numberToLooFor
     loopYdim = UInt32(cld(maxY, threads[2])) 
     loopZdim = UInt32(cld(maxZ,blocks )) 
 
+    Int64(blocks*loopZdim+blo)
 
+covariancesSliceWise= CUDA.zeros(Float32,12,sizz[3]+1);
 
 #gold
-totalXGold= CuArray([0]);
-totalYGold= CuArray([0]);
-totalZGold= CuArray([0]);
+totalXGold= CuArray([0.0]);
+totalYGold= CuArray([0.0]);
+totalZGold= CuArray([0.0]);
 totalCountGold= CuArray([0]);
 #segm
-totalXSegm= CuArray([0]);
-totalYSegm= CuArray([0]);
-totalZSegm= CuArray([0]);
+totalXSegm= CuArray([0.0]);
+totalYSegm= CuArray([0.0]);
+totalZSegm= CuArray([0.0]);
 totalCountSegm= CuArray([0]);
 
 args = (goldBoolGPU,segmBoolGPU,numberToLooFor
 ,loopYdim,loopXdim,loopZdim
 ,(maxX, maxY,maxZ)
 ,totalXGold,totalYGold,totalZGold,totalCountGold
-,totalXSegm,totalYSegm,totalZSegm,totalCountSegm)
-    @cuda threads=threads blocks=blocks MeansMahalinobis.meansMahalinobisKernel(args...)
-    @test totalCountGold[1]==45
+,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,countPerZGold, countPerZSegm,covariancesSliceWise,covarianceGlobal,mahalanobisResGlobal, mahalanobisResSliceWise)
+
+    @cuda cooperative=true threads=threads blocks=blocks MeansMahalinobis.meansMahalinobisKernel(args...)
+
+    @test totalCountGold[1]==length(cartTrueGold)
     @test totalXGold[1]== sum(map(ind->ind[1],cartTrueGold))
     @test totalYGold[1]== sum(map(ind->ind[2],cartTrueGold))
     @test totalZGold[1]== sum(map(ind->ind[3],cartTrueGold))
@@ -97,7 +112,18 @@ args = (goldBoolGPU,segmBoolGPU,numberToLooFor
     @test totalXSegm[1]== sum(map(ind->ind[1],cartTrueSegm))
     @test totalYSegm[1]== sum(map(ind->ind[2],cartTrueSegm))
     @test totalZSegm[1]== sum(map(ind->ind[3],cartTrueSegm))
+    @test totalCountSegm[1]== length(cartTrueSegm)
+    @test sum(countPerZGold)==45
+    @test countPerZSegm[100+1]==150*150
+    @test countPerZGold[5+1]==9
 
+
+    totalCountSegm[1]- 7436394
+    Int64(totalXSegm[1]-sum(map(ind->ind[1],cartTrueSegm)))
+    #slice 5 in gold should have 9 trues
+
+
+    countPerZSegm= CUDA.zeros(Float32,sizz[3]+1);
 
 
     # @device_code_warntype interactive=true @cuda MeansMahalinobis.meansMahalinobisKernel(args...)

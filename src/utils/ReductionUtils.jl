@@ -4,7 +4,7 @@ It holds macos and functions usefull for reductions of 3 dimensional data
 """
 module ReductionUtils
 using Main.CUDAGpuUtils, CUDA
-export @redWitAct, @addAtomic
+export @redWitAct, @addAtomic,@addNonAtomic, @redOnlyStepOne,@redOnlyStepThree
 """
 adapted from https://discourse.julialang.org/t/macro-magic-looping-over-varargs-printing-values-and-symbols/3025
 
@@ -33,7 +33,9 @@ firstPart =   reduceWitActFirstPart(offsetIter,shmem, varActTuples...)
 secondPart =   reduceWitActSecondPart(offsetIter,shmem, varActTuples...)
 thirdPart =   reduceWitActThirdPart(offsetIter,shmem, varActTuples...)
 
-  return esc(:( while($offsetIter <32) 
+  return esc(:(
+    $offsetIter=1;  
+  while($offsetIter <32) 
         $firstPart
         $offsetIter<<= 1
     end;
@@ -46,6 +48,44 @@ thirdPart =   reduceWitActThirdPart(offsetIter,shmem, varActTuples...)
     ))
 
 end#reduceWitAction
+
+"""
+modification of redWitAct - where we reduce only across the warp and save it to shmem
+- so at the end of this step
+      we will get reduced values from each of the warp in the first lane of the warp
+"""
+macro redOnlyStepOne(offsetIter,shmem, varActTuples...)
+  firstPart =   reduceWitActFirstPart(offsetIter,shmem, varActTuples...)
+
+  
+    return esc(:(
+      $offsetIter=1;  
+    while($offsetIter <32) 
+          $firstPart
+          $offsetIter<<= 1
+      end;
+
+          ))
+  
+  end#reduceWitAction
+
+
+  """
+  modification of redWitAct - where we reduce only across shared memory
+   """
+  macro redOnlyStepThree(offsetIter,shmem, actions)
+  
+    thirdPart =   reduceWitActThirdPartOnly(offsetIter,shmem, actions)
+
+      return esc(:(
+        $offsetIter=1;
+        $thirdPart
+            ))
+    
+    end#reduceWitAction
+
+
+
 """
 First stage of reductions where local variables are added from registers to registers
 """
@@ -97,7 +137,7 @@ function reduceWitActThirdPart(offsetIter,shmem, varActTuples...)
       push!(tmp, quote
       if(threadIdxY()==$index)
         while(offsetIter <32) 
-          @inbounds shmemSum[threadIdxX(),$index]=$op(shmemSum[threadIdxX(),$index],  shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),$index], $offsetIter))  
+          @inbounds $shmem[threadIdxX(),$index]=$op($shmem[threadIdxX(),$index],  shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),$index], $offsetIter))  
           offsetIter<<= 1
         end
       end  
@@ -105,6 +145,25 @@ function reduceWitActThirdPart(offsetIter,shmem, varActTuples...)
   end#for
   return Expr(:block,tmp...)
 end
+"""
+modification where we pass only actions - as we know from indicies what need to be done
+"""
+function reduceWitActThirdPartOnly(offsetIter,shmem, actions)
+  tmp = []
+  for index in 1:length(actions)
+      op = actions[index]
+      push!(tmp, quote
+      if(threadIdxY()==$index)
+        while(offsetIter <32) 
+          @inbounds $shmem[threadIdxX(),$index]=$op($shmem[threadIdxX(),$index],  shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),$index], $offsetIter))  
+          offsetIter<<= 1
+        end
+      end  
+      end)
+  end#for
+  return Expr(:block,tmp...)
+end
+
 
 
 """
@@ -148,6 +207,55 @@ function sendAtomicHelperAndAdd(shmemSum, vars...)
   end#for
   return Expr(:block,tmp...)
 end
+
+
+
+
+
+
+
+"""
+modification of above where we do the addition in nonatomic fashion
+"""
+macro addNonAtomic(shmemSum, vars...)
+
+  mainPArt = sendNonAtomicHelperAndAdd(shmemSum, vars...)
+
+  return esc(:($mainPArt  ))
+
+end#sendAtomic
+
+"""
+we get information about reduction  from shared memory - we know which entry from order we get the
+data in vars  - are variables - ussually in global memory to which we want to push the value
+"""
+function sendNonAtomicHelperAndAdd(shmemSum, vars...)
+  tmp = []
+  for index in 1:length(vars)
+      varr = vars[index]
+      push!(tmp, quote
+      @ifXY $index $index if(shmemSum[1,$index]>0)   @inbounds $varr[1]+=$shmemSum[1,$(index)]  end   
+       
+      end)
+  end#for
+  return Expr(:block,tmp...)
+
+
+
+  for index in 1:length(varActTuples)
+    varr= vars[index]
+      push!(tmp, quote
+     @ifXY $index $index if(shmemSum[1,$index]>0)   @inbounds @atomic $varr[]= $shmemSum[1,$(index)] end   
+  
+      end)
+  end#for
+  return Expr(:block,tmp...)
+end
+
+
+
+
+
 
 
 

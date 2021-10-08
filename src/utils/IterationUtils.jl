@@ -11,7 +11,7 @@ we need also to supply functions of iterating the 3 dimensional data but with ch
 """
 module IterationUtils
 using CUDA,Logging
-export @iter3d
+export @iter3d, @iter3dAdditionalxyzActsAndZcheck, @iter3dAdditionalxyzActs, @iter3dAdditionalzActs
 
 """
 full 3d iteration 
@@ -40,9 +40,32 @@ macro iter3d(arrDims, loopXdim, loopYdim,loopZdim,ex)
 end#iter3d
 
 """
+modification of iter3d loop  where wa allow additional action after z check
+"""
+macro iter3dAdditionalxyzActsAndZcheck(arrDims, loopXdim, loopYdim,loopZdim
+  ,zCheck
+  ,ex,additionalActionAfterX,additionalActionAfterY,additionalActionAfterZ)
+  zOffset= :((zdim*gridDim().x))
+  zAdd = :(blockIdxX())
+  yOffset= :(ydim* blockDimY())
+  yAdd= :(threadIdxY())
+  xOffset= :(xdim* blockDimX())
+  xAdd = :(threadIdxX())
+  xCheck=:(x <=$arrDims[1])
+  yCheck =:(y<=$arrDims[2])
+  additionalActionAfterY= :()
+  additionalActionAfterX= :()
+  is3d=true
+  mainExp = generalizedItermultiDim(  loopXdim, loopYdim,loopZdim,zOffset,zAdd ,yOffset,yAdd,xOffset,xAdd,xCheck,yCheck,zCheck,additionalActionAfterZ,additionalActionAfterY,additionalActionAfterX,is3d,ex) ;
+  
+  return esc(:( $mainExp))
+end#iter3dAdditionalxyzActs
+
+
+"""
 modification of iter3d loop  where wa allow additional actions to be performed after each loop check
 """
-macro iter3dAdditionalxyzActs(arrDims, loopXdim, loopYdim,loopZdim,ex,additionalActionAfterX, additionalActionAfterY,additionalActionAfterZ)
+macro iter3dAdditionalzActs(arrDims, loopXdim, loopYdim,loopZdim,ex,additionalActionAfterZ)
   zOffset= :((zdim*gridDim().x))
   zAdd = :(blockIdxX())
   yOffset= :(ydim* blockDimY())
@@ -52,11 +75,14 @@ macro iter3dAdditionalxyzActs(arrDims, loopXdim, loopYdim,loopZdim,ex,additional
   xCheck=:(x <=$arrDims[1])
   yCheck =:(y<=$arrDims[2])
   zCheck=:(z<= $arrDims[3])
+  additionalActionAfterY= :()
+  additionalActionAfterX= :()
   is3d=true
   mainExp = generalizedItermultiDim(  loopXdim, loopYdim,loopZdim,zOffset,zAdd ,yOffset,yAdd,xOffset,xAdd,xCheck,yCheck,zCheck,additionalActionAfterZ,additionalActionAfterY,additionalActionAfterX,is3d,ex) ;
   
   return esc(:( $mainExp))
 end#iter3dAdditionalxyzActs
+
 
 
 
