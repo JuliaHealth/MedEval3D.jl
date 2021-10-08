@@ -40,6 +40,27 @@ macro iter3d(arrDims, loopXdim, loopYdim,loopZdim,ex)
 end#iter3d
 
 """
+modification of iter3d loop  where wa allow additional actions to be performed after each loop check
+"""
+macro iter3dAdditionalxyzActs(arrDims, loopXdim, loopYdim,loopZdim,ex,additionalActionAfterX, additionalActionAfterY,additionalActionAfterZ)
+  zOffset= :((zdim*gridDim().x))
+  zAdd = :(blockIdxX())
+  yOffset= :(ydim* blockDimY())
+  yAdd= :(threadIdxY())
+  xOffset= :(xdim* blockDimX())
+  xAdd = :(threadIdxX())
+  xCheck=:(x <=$arrDims[1])
+  yCheck =:(y<=$arrDims[2])
+  zCheck=:(z<= $arrDims[3])
+  is3d=true
+  mainExp = generalizedItermultiDim(  loopXdim, loopYdim,loopZdim,zOffset,zAdd ,yOffset,yAdd,xOffset,xAdd,xCheck,yCheck,zCheck,additionalActionAfterZ,additionalActionAfterY,additionalActionAfterX,is3d,ex) ;
+  
+  return esc(:( $mainExp))
+end#iter3dAdditionalxyzActs
+
+
+
+"""
 generalized version of iter3d we will specilize it in the macro on the basis of multiple dispatch
   loopXdim, loopYdim,loopZdim - information how many times we need to loop over given dimension
   zOffset,zAdd - calculate offset and thread/block dependent add 

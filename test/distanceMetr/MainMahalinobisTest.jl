@@ -178,16 +178,13 @@ Array(d_out)
 # aFrag = zeros(4,4);
 # bFrag = zeros(4,4);
 
-# for i in 17:32
-# div,remm = divrem(i-1,4)
-# # aFrag[fld(div+1,2)+1,rem+1 ] = dataShmem[rem+1,fld(div+1,2)+1 ]
-
-# a =  ((i-1) & (3))+1
-# c = (((i-16)-1)>>2 )+1
-# d = ((i-17) >>3)+1
-# bFrag[ c,a] = dataShmem[ d,a ]
-
-# end    
+for i in 1:32
+    
+    a =  ((i-1) >>3)
+    b = ((i-1)>>4 )+1
+    c = ((i-1) & (2^4 - 1))+1
+  @info "i $(i) a $(a)  b $(b) c $(c) "
+end    
 
 
 # bFrag

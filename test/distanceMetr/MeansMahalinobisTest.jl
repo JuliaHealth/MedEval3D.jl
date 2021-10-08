@@ -33,15 +33,15 @@ segmBoolGPU = CuArray(segmBoolCPU);
 loopXdim = UInt32(1);loopYdim = UInt32(1) ;loopZdim = UInt32(1) ;
 sizz = size(goldBoolCPU);maxX = UInt32(sizz[1]);maxY = UInt32(sizz[2]);maxZ = UInt32(sizz[3])
 #gold
-totalXGold= CuArray([0]);
-totalYGold= CuArray([0]);
-totalZGold= CuArray([0]);
-totalCountGold= CuArray([0]);
+totalXGold= CuArray([0.0]);
+totalYGold= CuArray([0.0]);
+totalZGold= CuArray([0.0]);
+totalCountGold= CuArray([0.0]);
 #segm
-totalXSegm= CuArray([0]);
-totalYSegm= CuArray([0]);
-totalZSegm= CuArray([0]);
-totalCountSegm= CuArray([0]);
+totalXSegm= CuArray([0.0]);
+totalYSegm= CuArray([0.0]);
+totalZSegm= CuArray([0.0]);
+totalCountSegm= CuArray([0.0]);
 
 args = (goldBoolGPU,segmBoolGPU,numberToLooFor
 ,loopYdim,loopXdim,loopZdim
