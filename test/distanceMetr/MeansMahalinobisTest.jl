@@ -16,10 +16,14 @@ nx=512 ; ny=512 ; nz=317
 goldBoolCPU= zeros(Float32,nx,ny,nz); #mimicks gold standard mask
 segmBoolCPU= zeros(Float32,nx,ny,nz); #mimicks other  mask
 
-cartTrueGold =  CartesianIndices(zeros(3,3,5) ).+CartesianIndex(5,5,5);
+#cartTrueGold =  collect(vec(CartesianIndices(zeros(11,4,16) ).+CartesianIndex(70,71,78)))
+cartTrueGold =  unique(vcat(collect(vec(CartesianIndices(zeros(8,15,5) ).+CartesianIndex(5,5,5)))
+         ,collect(vec(CartesianIndices(zeros(14,19,25) ).+CartesianIndex(100,99,88)))
+         ,collect(vec(CartesianIndices(zeros(81,87,84) ).+CartesianIndex(100,99,210)))
+         )) ;
 goldBoolCPU[cartTrueGold].=Float32(1.0);
 
-cartTrueSegm =  CartesianIndices(zeros(150,150,150) ).+CartesianIndex(100,100,100);
+cartTrueSegm =  CartesianIndices(zeros(34,235,76) ).+CartesianIndex(100,100,100);
 
 segmBoolCPU[cartTrueSegm].=Float32(1.0);
 
@@ -52,18 +56,21 @@ totalCountGold
 countPerZGold= CUDA.zeros(Float32,500);
 countPerZSegm= CUDA.zeros(Float32,500);
 
-covariancesSliceWise= CUDA.zeros(Float32,12,1);
+#covariancesSliceWise= CUDA.zeros(Float32,12,sizz[3]+1);
+covariancesSliceWiseGold= CUDA.zeros(Float32,6,500);
+covariancesSliceWiseSegm= CUDA.zeros(Float32,6,500);
 covarianceGlobal= CUDA.zeros(Float32,12,1);
 
 mahalanobisResGlobal= CUDA.zeros(1);
-mahalanobisResSliceWise= CUDA.zeros(sizz[3]);
+mahalanobisResSliceWise= CUDA.zeros(500);
+#mahalanobisResSliceWise= CUDA.zeros(sizz[3]);
 
 args = (goldBoolGPU,segmBoolGPU,numberToLooFor
 ,loopYdim,loopXdim,loopZdim
 ,(maxX, maxY,maxZ)
 ,totalXGold,totalYGold,totalZGold,totalCountGold
 ,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,countPerZGold
-, countPerZSegm,covariancesSliceWise,
+, countPerZSegm,covariancesSliceWiseGold, covariancesSliceWiseSegm,
 varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
     ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
     ,mahalanobisResGlobal, mahalanobisResSliceWise)
@@ -91,7 +98,9 @@ varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGloba
 
     Int64(blocks*loopZdim+blo)
 
-covariancesSliceWise= CUDA.zeros(Float32,12,sizz[3]+1);
+#covariancesSliceWise= CUDA.zeros(Float32,12,sizz[3]+1);
+covariancesSliceWiseGold= CUDA.zeros(Float32,6,500);
+covariancesSliceWiseSegm= CUDA.zeros(Float32,6,500);
 
 #gold
 totalXGold= CuArray([0.0]);
@@ -104,19 +113,28 @@ totalYSegm= CuArray([0.0]);
 totalZSegm= CuArray([0.0]);
 totalCountSegm= CuArray([0]);
 
+
+
+varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
+varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
+
+
 args = (goldBoolGPU,segmBoolGPU,numberToLooFor
 ,loopYdim,loopXdim,loopZdim
 ,(maxX, maxY,maxZ)
 ,totalXGold,totalYGold,totalZGold,totalCountGold
 ,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,countPerZGold
-, countPerZSegm,covariancesSliceWise,
+, countPerZSegm,covariancesSliceWiseGold, covariancesSliceWiseSegm,
 varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
     ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
     ,mahalanobisResGlobal, mahalanobisResSliceWise)
 
     @cuda cooperative=true threads=threads blocks=blocks MeansMahalinobis.meansMahalinobisKernel(args...)
+  
+ 
 
-    @test totalCountGold[1]==length(cartTrueGold)
+@testset " mahalinobis tests " begin
+      @test totalCountGold[1]==length(cartTrueGold)
     @test totalXGold[1]== sum(map(ind->ind[1],cartTrueGold))
     @test totalYGold[1]== sum(map(ind->ind[2],cartTrueGold))
     @test totalZGold[1]== sum(map(ind->ind[3],cartTrueGold))
@@ -125,11 +143,53 @@ varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGloba
     @test totalYSegm[1]== sum(map(ind->ind[2],cartTrueSegm))
     @test totalZSegm[1]== sum(map(ind->ind[3],cartTrueSegm))
     @test totalCountSegm[1]== length(cartTrueSegm)
-    @test sum(countPerZGold)==45
-    @test countPerZSegm[100+1]==150*150
-    @test countPerZGold[5+1]==9
+    @test sum(countPerZGold)==length(cartTrueGold)
+    @test sum(countPerZSegm)==length(cartTrueSegm)
+    #@test countPerZSegm[100+1]==150*150
+    @test countPerZGold[5+1]==8*15
 
-    varianceXGlobalGold[1]
+    meanX = totalXGold[1]/totalCountGold[1]
+    meanY = totalYGold[1]/totalCountGold[1]
+    meanZ = totalZGold[1]/totalCountGold[1]
+    @test isapprox(varianceXGlobalGold[1],sum(map(ind->( ind[1] -meanX )^2 ,cartTrueGold)); atol = 50)
+
+    @test isapprox(covarianceXYGlobalGold[1],sum(map(ind->(( ind[1] -meanX )*( ind[2] -meanY )) ,cartTrueGold)); atol = 50)
+    @test isapprox(covarianceXZGlobalGold[1],sum(map(ind->(( ind[1] -meanX )*( ind[3] -meanZ )) ,cartTrueGold)); atol = 50)
+    
+   Int64(round( covarianceXZGlobalGold[1]- sum(map(ind->(( ind[1] -meanX )*( ind[3] -meanZ )) ,cartTrueGold))))
+
+    @test isapprox(varianceYGlobalGold[1],sum(map(ind->(( ind[2] -meanY )^2) ,cartTrueGold)); atol = 50)
+
+    @test isapprox(varianceZGlobalGold[1], sum(map(ind->(( ind[3] -meanZ )^2) ,cartTrueGold)); atol = 50) 
+    
+    @test isapprox(covarianceYZGlobalGold[1],sum(map(ind->(( ind[2] -meanY )*(ind[3] -meanZ  )) ,cartTrueGold)); atol = 50)
+      
+    meanX = totalXSegm[1]/totalCountSegm[1]
+    @test isapprox(varianceXGlobalSegm[1],sum(map(ind->( ind[1] -meanX )^2 ,cartTrueSegm)); atol = 50)
+
+    meanY = totalYSegm[1]/totalCountSegm[1]
+    @test isapprox(covarianceXYGlobalSegm[1],sum(map(ind->(( ind[1] -meanX )*( ind[2] -meanY )) ,cartTrueSegm)); atol = 50)
+    meanZ = totalZSegm[1]/totalCountSegm[1]
+    @test isapprox(covarianceXZGlobalSegm[1],sum(map(ind->(( ind[1] -meanX )*( ind[3] -meanZ )) ,cartTrueSegm)); atol =50)
+    
+    @test isapprox(varianceYGlobalSegm[1],sum(map(ind->(( ind[2] -meanY )^2) ,cartTrueSegm)); atol =50)
+
+    @test isapprox(varianceZGlobalSegm[1],sum(map(ind->(( ind[3] -meanZ )^2) ,cartTrueSegm)); atol = 50)
+    
+    Int64(round(varianceZGlobalSegm[1]-sum(map(ind->(( ind[3] -meanZ )^2) ,cartTrueSegm))))
+    
+    @test isapprox(covarianceYZGlobalSegm[1],sum(map(ind->(( ind[2] -meanY )*(ind[3] -meanZ  )) ,cartTrueSegm)); atol = 50)
+      
+end
+
+
+
+
+
+    
+    # Int64(varianceXGlobalGold[1])-sum(map(ind->( ind[1] -meanX )^2 ,cartTrueGold))
+
+    
 
 
     # @device_code_warntype interactive=true @cuda MeansMahalinobis.meansMahalinobisKernel(args...)

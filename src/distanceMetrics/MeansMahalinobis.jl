@@ -1,5 +1,14 @@
 
 
+"""
+new optimazation idea  - try to put all data in boolean arrays in shared memory  when getting means
+next we would need only to read shared memory - yet first one need to check wheather there would be enough shmem on device
+
+- we can also put the data abount slice wise count in shared memory - together with slicewise covariances
+
+varianceZGlobal - should be reduced atomically in the end with all other variables - not slicewise like now
+"""
+
 module MeansMahalinobis
 using Main.BasicPreds, Main.CUDAGpuUtils, CUDA, Main.IterationUtils, Main.ReductionUtils, Main.MemoryUtils
 export meansMahalinobisKernel
@@ -42,8 +51,114 @@ macro iterateForMeans(countPerZ,arrAnalyzed)
     #tell what variables are to be reduced and by what operation
     @redWitAct(offsetIter,shmemSum,  sumX,+,     sumY,+    ,sumZ,+   ,count,+)
      
-end)
+end)#quote
 end
+
+"""
+reset variables and arrays to be able to calculate the variances and Covariances
+"""
+
+macro resetForVarAndCov(totalX,totalY, totalZ, totalCount)
+    return esc(quote
+        #at this spot we should have all counts of x,y,z and counts - we can get means from it
+        clearSharedMemWarpLong(shmemSum, UInt8(6), Float32(0.0))
+      
+        @ifY 4 @unroll for i in 1:5
+            @ifX i @inbounds intermedieteRes[i]= Float32(0.0)
+        end
+    
+        @ifXY 1 1  meanxyz[1]= $totalX[1]/$totalCount[1]
+        @ifXY 1 2  meanxyz[2]= $totalY[1]/$totalCount[1]
+        @ifXY 1 3  meanxyz[3]= $totalZ[1]/$totalCount[1]
+        #from now one sumX is variance of x ,sumY is covariance xy ,sumZ is covariance xz 
+        sumX,sumY,sumZ ,count= Float32(0.0),Float32(0.0),Float32(0.0),Float32(0.0)
+
+    end)#quote
+end
+
+"""
+calculates variances and covariances needed for calculation of mahalanobis
+
+"""
+macro calculateVariancesAdCov(countPerZ,arrToAnalyze,covariancesSliceWise,varianceXGlobal,covarianceXYGlobal,covarianceXZGlobal,varianceYGlobal,covarianceYZGlobal,varianceZGlobal)
+    return esc(quote
+    @iter3dAdditionalxyzActsAndZcheck(arrDims,loopXdim,loopYdim,loopZdim
+    #z check
+    ,((z<= arrDims[3] && $countPerZ[z]>0.0)), 
+    #inner expression
+    if(  @inbounds($arrToAnalyze[x,y,z])  ==numberToLooFor)
+        #getting variance x and x covariances
+        sumX+=(Float32(x)-meanxyz[1])*(Float32(x)-meanxyz[1])
+        sumY+=((Float32(y)-meanxyz[2])*(Float32(x)-meanxyz[1]))
+        sumZ+=((Float32(z)-meanxyz[3])*(Float32(x)-meanxyz[1]))
+        count+=Float32(1.0)   
+         end,
+    #x additional fun - currently nothing to implement here
+    begin    end,
+    #y additional fun - as we added all x variances and covariances we need now to update y variance and y covariance 
+    #we need to add this the same amount of time as we added the x variables so we use count for it
+    # of course if count is 0 we can ignore this step
+    begin
+   #we put reduced values into share memory 
+    sync_threads()
+  @redOnlyStepOne(offsetIter,shmemSum,  sumX,+,     sumY,+    ,sumZ,+   ,count,+);
+
+   if(threadIdxX()==UInt32(1) && count>Float32(0.0))
+       @inbounds shmemSum[threadIdxY(),1]+= sumX
+       @inbounds shmemSum[threadIdxY(),2]+= sumY
+       @inbounds shmemSum[threadIdxY(),3]+= sumZ
+       #putting  variance y and covariance yz manually to shared memory multiply appropriate amount of time
+       @inbounds shmemSum[threadIdxY(),4]+= count*(y-meanxyz[2])*(y-meanxyz[2])#variance y
+       @inbounds shmemSum[threadIdxY(),5]+= count*((y-meanxyz[2])*(z-meanxyz[3]))#covariance yz
+       @inbounds shmemSum[threadIdxY(),6]+= count
+
+   end;
+   #reset as values are already saved in shmemsum
+   sumX,sumY,sumZ ,count= Float32(0.0),Float32(0.0),Float32(0.0),Float32(0.0)
+   sync_warp()
+  
+    end,
+    #z additional fun
+    begin
+        sync_threads()      
+        #no point in analyzing if it is empty
+        if(z<= arrDims[3] && $countPerZ[z]>0.0)
+            #we do the last step of reductions to get all of the values into first spots of shared memory
+            @redOnlyStepThree(offsetIter,shmemSum, +,+,+  ,+,+,+)
+            sync_threads()
+
+            #we will use it later to get slicewise results and in the end we will send those to global memory
+            @ifY 1 @unroll for i in 1:5                
+                @ifX i intermedieteRes[i]+=shmemSum[1,i]
+            end 
+
+            @ifXY 1 7 @inbounds intermedieteRes[6]+=(((z- meanxyz[3])*(z- meanxyz[3])  )*shmemSum[1,6])
+            
+            @ifXY 1 7 @inbounds @atomic $varianceZGlobal[]+=((z- meanxyz[3])*(z- meanxyz[3])  )*shmemSum[1,6]
+            ###########remove
+            
+            @ifY 2 @unroll for i in 1:5
+                @ifX i @inbounds $covariancesSliceWise[i,z]+=shmemSum[1,i]
+            end 
+                @ifXY 2 6 @inbounds $covariancesSliceWise[6,z]+= ((z- meanxyz[3])*(z- meanxyz[3]))*shmemSum[1,6]
+            sync_threads()
+            #clear shared memory
+            clearSharedMemWarpLong(shmemSum, UInt8(6), Float32(0.0))
+        end#if covariance non empty
+    end  )# iterations loop
+
+    sync_threads()
+
+    #at this point we should have all variances and covariances in intermedieteRes and we can send it to global results
+    @ifXY 1 1  @inbounds @atomic $varianceXGlobal[]+=intermedieteRes[1]  
+    @ifXY 1 2 @inbounds @atomic $covarianceXYGlobal[]+=intermedieteRes[2]  
+    @ifXY 1 3  @inbounds @atomic $covarianceXZGlobal[]+=intermedieteRes[3] 
+    @ifXY 1 4  @inbounds @atomic $varianceYGlobal[]+=intermedieteRes[4]   
+    @ifXY 1 5 @inbounds @atomic $covarianceYZGlobal[]+=intermedieteRes[5]  
+    #@ifXY 1 7  @inbounds @atomic $varianceZGlobal[]+=intermedieteRes[6]  
+
+end)#quote 
+end#calculateVariancesAdCov
 
 
 
@@ -56,11 +171,10 @@ maxX, maxY ,maxZ- maximum possible x and y - used for bound checking
 totalX,totalY,totalZ - holding the results of summation of x,y and z's
 totalCount - total number of non 0 entries
 countPerZ - count of non empty entries per slice - particularly usefull in case it is 0
-covariancesSliceWise - slice wise covariances - needed in case we want slice wise results - a matrix where each row entry is 
+covariancesSliceWiseGold,covariancesSliceWiseSegm  - slice wise covariances - needed in case we want slice wise results - a matrix where each row entry is 
         I)gold standard mask values
         1)variance x    2)cov xy     3)cov xz     4)var y    5)cov yz      6)var z 
-        II) other mask 
-        7)variance x    8)cov xy     9)cov xz     10)var y    11)cov yz      12)var z         
+       
 covarianceGlobal (just one column but entries exactly the same as above)
 mahalanobisResGlobal - global result of Mahalinobis distance
 mahalanobisResSliceWise - global result of Mahalinobis distance
@@ -73,7 +187,7 @@ function meansMahalinobisKernel(goldArr,segmArr
     ,arrDims::Tuple{UInt32,UInt32,UInt32}
     ,totalXGold,totalYGold,totalZGold,totalCountGold
     ,totalXSegm,totalYSegm,totalZSegm,totalCountSegm
-    ,countPerZGold,countPerZSegm,covariancesSliceWise
+    ,countPerZGold,countPerZSegm,covariancesSliceWiseGold, covariancesSliceWiseSegm
     ,varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
     ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
     ,mahalanobisResGlobal, mahalanobisResSliceWise   )
@@ -111,100 +225,35 @@ function meansMahalinobisKernel(goldArr,segmArr
     @ifXY 1 1 oldZVal[1]=0
     sync_threads()
     #iterations
+
     @iterateForMeans(countPerZSegm,segmArr)
 
     @addAtomic(shmemSum,totalXSegm, totalYSegm ,totalZSegm,totalCountSegm)
+
 
     sync_grid(grid_handle)
 ##################### getting covariances
   
 ##first gold mask
-
-    #at this spot we should have all counts of x,y,z and counts - we can get means from it
-    clearSharedMemWarpLong(shmemSum, UInt8(6), Float32(0.0))
+    #first prepare all needed memory
     # we are using shared memory to hold means of 1)x 2)y and 3)z 
-    meanxyz= @cuStaticSharedMem(Float64, (3))
+    meanxyz= @cuStaticSharedMem(Float32, (3))
     #for storing intermediate results in shared memory
     #1)variance x    2)cov xy     3)cov xz     4)var y    5)cov yz      6)var z 
-    intermedieteRes= @cuStaticSharedMem(Float64, (6))
-
-    @ifXY 1 1  meanxyz[1]= totalXGold[1]/totalCountGold[1]
-    @ifXY 1 2  meanxyz[2]= totalYGold[1]/totalCountGold[1]
-    @ifXY 1 3  meanxyz[3]= totalZGold[1]/totalCountGold[1]
-    #from now one sumX is variance of x ,sumY is covariance xy ,sumZ is covariance xz 
-    sumX,sumY,sumZ ,count= Float32(0.0),Float32(0.0),Float32(0.0),Float32(0.0)
+    intermedieteRes= @cuStaticSharedMem(Float32, (6))
+    #reset required memory
+    @resetForVarAndCov(totalXGold,totalYGold, totalZGold, totalCountGold)
     sync_threads()
-
-    @iter3dAdditionalxyzActsAndZcheck(arrDims,loopXdim,loopYdim,loopZdim
-    #z check
-    ,(z<= arrDims[3] && countPerZGold[z]>0.0),
-    #inner expression
-    if(  @inbounds(goldArr[x,y,z])  ==numberToLooFor)
-        #getting variance x and x covariances
-        sumX+=(Float32(x)-meanxyz[1])^2
-        sumY+=((Float32(y)-meanxyz[2])*(Float32(x)-meanxyz[1]))
-        sumZ+=((Float32(z)-meanxyz[3])*(Float32(x)-meanxyz[1]))
-        count+=Float32(1)   
-    end,
-    #x additional fun - currently nothing to implement here
-    begin    end,
-    #y additional fun - as we added all x variances and covariances we need now to update y variance and y covariance 
-    #we need to add this the same amount of time as we added the x variables so we use count for it
-    # of course if count is 0 we can ignore this step
-    begin
-   #we put reduced values into share memory 
-sync_threads()
-  @redOnlyStepOne(offsetIter,shmemSum,  sumX,+,     sumY,+    ,sumZ,+   ,count,+);
-
-  @ifXY 1 1 if(sumX>0.0) CUDA.@cuprint "sumX $(sumX) \n" end
-
-#    if(threadIdxX()==UInt32(1) && count>Float32(0.0))
-#        @inbounds shmemSum[threadIdxY(),1]+= sumX
-#        @inbounds shmemSum[threadIdxY(),2]+= sumY
-#        @inbounds shmemSum[threadIdxY(),3]+= sumZ
-#        #putting  variance y and covariance yz manually to shared memory multiply appropriate amount of time
-#        @inbounds shmemSum[threadIdxY(),4]+= count*(y-meanxyz[2])^2#variance y
-#        @inbounds shmemSum[threadIdxY(),5]+= count*((y-meanxyz[2])*(z-meanxyz[3]))#covariance yz
-#        @inbounds shmemSum[threadIdxY(),6]+= count
-
-#    end;
-#    #reset as values are already saved in shmemsum
-#    sumX,sumY,sumZ ,count= Float32(0.0),Float32(0.0),Float32(0.0),Float32(0.0)
-#    sync_warp()
-
-    end,
-    #z additional fun
-    begin
-        # sync_threads()
-        # #no point in analyzing if it is empty
-        # if(shmemSum[1,1]>0)
-        #     #we do the last step of reductions to get all of the values into first spots of shared memory
-        #     @redOnlyStepThree(offsetIter,shmemSum, +,+,+  ,+,+,+)
-        #     sync_threads()
-        #     #we will use it later to get slicewise results and in the end we will send those to global memory
-        #     @ifY 1 @unroll for i in 1:5
-        #         #@ifX i CUDA.@cuprint "shmemSum[1,$(i)] $(shmemSum[1,i]) intermedieteRes[$(i)] $(intermedieteRes[i]) \n"
-        #         @ifX i intermedieteRes[i]+=shmemSum[1,i]
-        #     end 
-        #     @ifXY 1 6 intermedieteRes[6]+=((z- meanxyz[3])^2)
-
-        #     @ifY 2 @unroll for i in 1:5
-        #         @ifX i covariancesSliceWise[z,i]+=shmemSum[1,i]
-        #     end 
-        #     @ifXY 2 6 covariancesSliceWise[z,6]+= ((z- meanxyz[3])^2)  
-        
-        #     #clear shared memory
-        #     clearSharedMemWarpLong(shmemSum, UInt8(6), Float32(0.0))
-        # end#if covariance non empty
-    end  )# iterations loop
+    #calculate means and covariances
+    @calculateVariancesAdCov(countPerZGold,goldArr,covariancesSliceWiseGold,varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold)
+    
+    ######### other mask
     sync_threads()
-    #at this point we should have all variances and covariances in intermedieteRes and we can send it to global results
-    @ifXY 1 1 if(intermedieteRes[1]>0)  @inbounds @atomic varianceXGlobalGold[]+=intermedieteRes[1]  end 
-    @ifXY 2 1 if(intermedieteRes[2]>0)  @inbounds @atomic covarianceXYGlobalGold[]+=intermedieteRes[2]  end 
-    @ifXY 3 1 if(intermedieteRes[3]>0)  @inbounds @atomic covarianceXZGlobalGold[]+=intermedieteRes[3]  end 
-    @ifXY 4 1 if(intermedieteRes[4]>0)  @inbounds @atomic varianceYGlobalGold[]+=intermedieteRes[4]  end 
-    @ifXY 5 1 if(intermedieteRes[5]>0)  @inbounds @atomic covarianceYZGlobalGold[]+=intermedieteRes[5]  end 
-    @ifXY 6 1 if(intermedieteRes[6]>0)  @inbounds @atomic varianceZGlobalGold[]+=intermedieteRes[6]  end 
+    @resetForVarAndCov(totalXSegm,totalYSegm,totalZSegm,totalCountSegm)
+    sync_threads()
+    @calculateVariancesAdCov(countPerZSegm,segmArr,covariancesSliceWiseSegm,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm)
+    
+
 
 
     return  

@@ -1,4 +1,10 @@
 """
+
+new optimazation idea  - try to put all data in boolean arrays in shared memory  when getting means
+next we would need only to read shared memory - yet first one need to check wheather there would be enough shmem on device
+
+
+
 calculating intercalss correlation
 """
 module InterClassCorrKernel

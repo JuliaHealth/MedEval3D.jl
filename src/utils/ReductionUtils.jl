@@ -60,11 +60,11 @@ macro redOnlyStepOne(offsetIter,shmem, varActTuples...)
   
     return esc(:(
       $offsetIter=1;  
-      while($offsetIter <32) 
-            $firstPart
-            CUDA.@cuprint " reducing "
-            $offsetIter<<= 1
-        end;
+    while($offsetIter <32) 
+          $firstPart
+          $offsetIter<<= 1
+      end;
+
           ))
   
   end#reduceWitAction
