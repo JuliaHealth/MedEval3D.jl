@@ -120,10 +120,8 @@ function getBoolCubeKernel(goldBoolGPU3d
         ,maxZres::CuDeviceVector{UInt32, 1}
         ,warpNumber
 ) where T
-    # we multiply thread id as we are covering now 2 places using one lane - hence after all lanes gone through we will cover 2 blocks - hence second multiply    
-   #i = correctedIdx + ((blockIdx().x - 1) *indexCorr) * (blockDimX())# used as a basis to get data we want from global memory
-   wid, lane = getWidAndLane(threadIdxX())
-   anyPositive = zeros(MVector{1,Bool}) # true If any bit will bge positive in this array - we are not afraid of data race as we can set it multiple time to true
+
+   anyPositive = false # true If any bit will bge positive in this array - we are not afraid of data race as we can set it multiple time to true
 #creates shared memory and initializes it to 0
    shmemSum = createAndInitializeShmem(wid,threadIdxX(),lane)
 # incrementing appropriate number of times 
@@ -133,6 +131,46 @@ function getBoolCubeKernel(goldBoolGPU3d
     # in case of min we need to start high
     locArr[3]=10000
     locArr[5]=10000
+    
+    
+    
+    
+    #we need nested x,y,z iterations so we will iterate over the matadata and on its basis over the  data in the main arrays 
+    
+     @iter3dAdditionalzActs(arrDims,loopXdim,loopYdim,loopZdim,
+    #inner expression
+    if(  @inbounds($arrAnalyzed[x,y,z])  ==numberToLooFor)
+        #updating variables needed to calculate means
+        sumX+=Float32(x) ;  sumY+=Float32(y)  ; sumZ+=Float32(z)   ; count+=Float32(1)   
+    end,
+    #after z expression - we get slice wise true counts from it 
+    begin
+        sync_threads()
+        #reducing count only
+        if(z<=arrDims[3])
+            countTemp = count
+            @redWitAct(offsetIter,shmemSum, count,+)
+            #saving to global memory count of this slice
+            @ifXY 1 1 begin 
+                 $countPerZ[z]=(shmemSum[1,1] - oldZVal[1] )
+                oldZVal[1]=shmemSum[1,1]
+            end
+            #clear shared memory only first row was used and sync threads 
+            clearSharedMemWarpLong(shmemSum, UInt8(1), Float32(0.0))
+            count=countTemp#to preserve proper value for total count
+        end#if ar dims
+    end )#if bool in arr  
+
+    #tell what variables are to be reduced and by what operation
+    @redWitAct(offsetIter,shmemSum,  sumX,+,     sumY,+    ,sumZ,+   ,count,+)
+
+
+
+
+    
+    
+    
+    
 
     @unroll for k in 1:loopNumbYdim# k is effectively y dimension
         for kx in 0:loopNumbXdim

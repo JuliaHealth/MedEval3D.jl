@@ -1,8 +1,14 @@
 """
-here we will analyze the matadata and on this basis establish is block should be acrivated or it should reamin active 
-so we got set in each block is it full and also from padding of surrounding blocks is it to be activated
-Hence when conditions are met so it is not full and active or not full and to be activated - we set it to active
-when we know that block is active it is also needed to add it to work queue - we will do it after each iteration 
+3) first metadata pass we add to the metadata offset where each block will put its main results and padding results - so all will be stored in result quueue but in diffrent spots
+    we need to make ques for paddings longer than number of possible results becouse of possible modifications from neighbouring blocks that can happen simultanously
+    we will establish this offsets using atomics- at this pass we will also prepare first work queue with indicies of metadata blocks and booleans indicating is it related to gold pass dilatation step or other pass
+
+5) we do the metadata pass we analyze only those blocks that are in the borders of intrests - max min x y z was specified in step 1 , we check weather block is set to be activated
+ and in case it is not full we will make it active , if the block is set as active we just add it to work queue  that is appropriate to next iteration
+  - we need also to scan  the border result ques if there is any duplicate result - if so we set it to zeros and we reduce the border result counter
+        of course we check it only in case new counter is bigger than old counter 
+
+
         so 1) we check metadata when metadata comply with our predicate described above we atomically increase local shared memory work queue counter
 we synchronize
         -we proceed if local workqueue counter is greater than 0 
@@ -11,6 +17,24 @@ we synchronize
 """
 
 module  MetadataAnalyzePass     
+
+
+"""
+we analyze metadate as described above 
+minX, minY,minZ - minimal values of voulme that holds all of the data that is of intrest to us
+maxX,maxY,maxZ  - maximal values of voulme that holds all of the data that is of intrest to us
+metadata - global memory data structure that we analyze
+"""
+macro analyzeMetadata(minX, minY,minZ, maxX,maxY,maxZ, metadata )
+        # we need to iterate over all metadata blocks with checks so the blocks can not be full outside the area of intrest defined by  minX, minY,minZ and maxX,maxY,maxZ
+        
+        
+        
+end      
+
+
+
+
 
 
 HFUtils.clearMainShmem(resShmem)

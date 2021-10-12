@@ -1,4 +1,36 @@
 """
+Metadata 
+    - number of fp in main and borders and associated counters (counters will be updated at each dilatation step) and old result counters saving information about counter value in previous dilatation step
+    - number of fn in main and borders and associated counters (counters will be updated at each dilatation step) and old result counters saving information about counter value in previous dilatation step
+    - offset where is the results for main and borders for both main and borders
+    - numbers pointing out begining and end of all rusults associated with this block
+    - information is it active  or full or inactive or is it to be activated (this last one set to true if other block set any result through the padding)
+       
+
+1) we iterate through the data of both segm and gold standad array and  proces it - w build up new  3d boolean arrays and we updata data in metadata 
+    we add the number of false positives and false negatives  to each block with division  for each border so top bottom, left and right anterior posterior 
+    - ths data will enable skipping some paddings checks in case of empiness and will enable preserving uniqness in case we will want to set new result from both neighbuing blocks ..
+    - all of it will be just primary metadata that will be processed later
+    - we will also look for in this step for max and min vales of each dimension x,y,z
+2) on cpu we create two result queues that will be 1,5 times longer that fp in one case and fn in the other 
+3) first metadata pass we add to the metadata offset where each block will put its main results and padding results - so all will be stored in result quueue but in diffrent spots
+    we need to make ques for paddings longer than number of possible results becouse of possible modifications from neighbouring blocks that can happen simultanously
+    we will establish this offsets using atomics- at this pass we will also prepare first work queue with indicies of metadata blocks and booleans indicating is it related to gold pass dilatation step or other pass
+4) we do the dilatations in all blocks from work queue and record every time we had stumbled upon newly covered result - in order to later being able to establish precise distance
+    we will record in result list not only coordinates but also direction
+    - results in main part will be put in the part of result list associated with main block and those from paddings to border lists of surrounding blocks
+- block in the end will check is it full if it is it will set such data to metadata and add information that it is inactive
+5) we do the metadata pass we analyze only those blocks that are in the borders of intrests - max min x y z was specified in step 1 , we check weather block is set to be activated
+ and in case it is not full we will make it active , if the block is set as active we just add it to work queue  that is appropriate to next iteration
+  - we need also to scan  the border result ques if there is any duplicate result - if so we set it to zeros and we reduce the border result counter
+        of course we check it only in case new counter is bigger than old counter 
+  concurrently we do some housekeeping so we check weather counters for result are not  indicating that we already finished
+
+
+
+
+
+
 Work will have 3 parts - 3 kernels 
     1) will prepare data - will return source array in boolean format and will give benchmark
     max and min x,y,z of either mask - to describe smallest possible cube holding all necessary data 
