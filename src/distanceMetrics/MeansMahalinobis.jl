@@ -180,9 +180,25 @@ this will enable final calculations of the Mahalanobis distance
 """
 macro getFinalResults()
     return esc(quote
-
+    #first getting total counts to all threads
     sumY= totalCountGold[1]#total count gold
     sumZ= totalCountSegm[1]#total count segm
+
+    #values needed for calculating means 
+    @ifXY 14 1 sumX = totalXGold[1]
+    @ifXY 16 1 sumX = totalYGold[1]
+    @ifXY 18 1 sumX = totalZGold[1]
+    @ifXY 20 1 sumX = totalXSegm[1]
+    @ifXY 22 1 sumX = totalYSegm[1]
+    @ifXY 24 1 sumX = totalZSegm[1]
+    sync_warp()
+    @ifXY 14 1 shmemSum[7,1] = sumX/sumY #mean X gold
+    @ifXY 16 1 shmemSum[8,1] = sumX/sumY #mean Y gold
+    @ifXY 18 1 shmemSum[9,1] = sumX/sumY #mean Z gold
+    @ifXY 20 1 shmemSum[10,1] = sumX/sumZ #mean X segm
+    @ifXY 22 1 shmemSum[11,1] =  sumX/sumZ #mean Y segm
+    @ifXY 24 1 shmemSum[12,1] = sumX/sumZ #mean Z segm
+    sync_threads()# now all blocks should have available means
 
     if(blockIdxX()==1)# this one for global result should be executed only once
         @unroll for numb in 1:1
@@ -197,19 +213,9 @@ macro getFinalResults()
             @ifXY 8 numb shmemSum[16,1] = varianceYGlobalSegm[1]
             @ifXY 10 numb sumX = covarianceYZGlobalGold[1]
             @ifXY 11 numb shmemSum[17,1] = covarianceYZGlobalSegm[1]
-
-
             @ifXY 12 numb sumX = varianceZGlobalGold[1]
             @ifXY 13 numb shmemSum[18,1] = varianceZGlobalSegm[1]
-
-            @ifXY 14 numb sumX = totalXGold[1]
-            @ifXY 16 numb sumX = totalYGold[1]
-            @ifXY 18 numb sumX = totalZGold[1]
-            @ifXY 20 numb sumX = totalXSegm[1]
-            @ifXY 22 numb sumX = totalYSegm[1]
-            @ifXY 24 numb sumX = totalZSegm[1]
-        
-            
+                
             sync_warp()
             #sumX+=shfl_down_sync(active_mask(),sumX,UInt8(1))
 
@@ -219,15 +225,7 @@ macro getFinalResults()
             @ifXY 7 numb shmemSum[4,1] = (sumX+shmemSum[16,1])/(sumY+sumZ) #common variance y
             @ifXY 10 numb shmemSum[5,1] = (sumX+shmemSum[17,1])/(sumY+sumZ) #common covariance yz
             @ifXY 12 numb shmemSum[6,1] = (sumX+shmemSum[18,1])/(sumY+sumZ) #common variance z
-            @ifXY 14 numb shmemSum[7,1] = sumX/sumY #mean X gold
-            @ifXY 16 numb shmemSum[8,1] = sumX/sumY #mean Y gold
-            @ifXY 18 numb shmemSum[9,1] = sumX/sumY #mean Z gold
-            @ifXY 20 numb shmemSum[10,1] = sumX/sumZ #mean X segm
-            @ifXY 22 numb shmemSum[11,1] =  sumX/sumZ #mean Y segm
-            @ifXY 24 numb shmemSum[12,1] = sumX/sumZ #mean Z segm
-
             sync_warp()
-
             @ifXY 1 1 begin
                 # #unrolled 3 by 3 cholesky decomposition 
                 a = CUDA.sqrt(shmemSum[1,1])  #getting varianceX
