@@ -160,6 +160,124 @@ macro calculateVariancesAdCov(countPerZ,arrToAnalyze,covariancesSliceWise,varian
 end)#quote 
 end#calculateVariancesAdCov
 
+"""
+this will enable final calculations of the Mahalanobis distance
+
+#original formula developed on basis of https://stats.stackexchange.com/questions/147210/efficient-fast-mahalanobis-distance-computation/147222#147222?newreg=a68aa51b2f8c45daaece49163105845c
+#unrolled 3 by 3 cholesky decomposition 
+# a = sqrt(varianceX)
+# b = (covarianceXY)/a
+# c = (covarianceXZ)/a
+# e = sqrt(varianceY - b*b)
+# d = (covarianceYZ -(c * b))/e
+# #unrolled forward substitiution
+# ya= x[1]/a 
+# yb = (x[2]-b*ya)/e
+# yc= (x[3]-yb*d-ya* c)/sqrt(varianceZ - c*c -d*d )
+#taking square euclidean distance
+# returnya*ya+yb*yb+yc*yc
+
+"""
+macro getFinalResults()
+    return esc(quote
+
+    sumY= totalCountGold[1]#total count gold
+    sumZ= totalCountSegm[1]#total count segm
+
+    if(blockIdxX()==1)# this one for global result should be executed only once
+        @unroll for numb in 1:1
+            #first we upload to registers variables needed to calculate Mahalinobis
+            @ifXY 1 numb sumX = varianceXGlobalGold[1]
+            @ifXY 2 numb shmemSum[13,1] = varianceXGlobalSegm[1]
+            @ifXY 3 numb sumX = covarianceXYGlobalGold[1]
+            @ifXY 4 numb shmemSum[14,1] = covarianceXYGlobalSegm[1]
+            @ifXY 5 numb sumX = covarianceXZGlobalGold[1]
+            @ifXY 6 numb shmemSum[15,1] = covarianceXZGlobalSegm[1]
+            @ifXY 7 numb sumX = varianceYGlobalGold[1]
+            @ifXY 8 numb shmemSum[16,1] = varianceYGlobalSegm[1]
+            @ifXY 10 numb sumX = covarianceYZGlobalGold[1]
+            @ifXY 11 numb shmemSum[17,1] = covarianceYZGlobalSegm[1]
+
+
+            @ifXY 12 numb sumX = varianceZGlobalGold[1]
+            @ifXY 13 numb shmemSum[18,1] = varianceZGlobalSegm[1]
+
+            @ifXY 14 numb sumX = totalXGold[1]
+            @ifXY 16 numb sumX = totalYGold[1]
+            @ifXY 18 numb sumX = totalZGold[1]
+            @ifXY 20 numb sumX = totalXSegm[1]
+            @ifXY 22 numb sumX = totalYSegm[1]
+            @ifXY 24 numb sumX = totalZSegm[1]
+        
+            
+            sync_warp()
+            #sumX+=shfl_down_sync(active_mask(),sumX,UInt8(1))
+
+            @ifXY 1 numb shmemSum[1,1]= (sumX+shmemSum[13,1])/(sumY+sumZ)  #common variance x
+            @ifXY 3 numb shmemSum[2,1]= (sumX+shmemSum[14,1])/(sumY+sumZ) #common covariance xy
+            @ifXY 5 numb shmemSum[3,1] = (sumX+shmemSum[15,1])/(sumY+sumZ)#common covariance xz
+            @ifXY 7 numb shmemSum[4,1] = (sumX+shmemSum[16,1])/(sumY+sumZ) #common variance y
+            @ifXY 10 numb shmemSum[5,1] = (sumX+shmemSum[17,1])/(sumY+sumZ) #common covariance yz
+            @ifXY 12 numb shmemSum[6,1] = (sumX+shmemSum[18,1])/(sumY+sumZ) #common variance z
+            @ifXY 14 numb shmemSum[7,1] = sumX/sumY #mean X gold
+            @ifXY 16 numb shmemSum[8,1] = sumX/sumY #mean Y gold
+            @ifXY 18 numb shmemSum[9,1] = sumX/sumY #mean Z gold
+            @ifXY 20 numb shmemSum[10,1] = sumX/sumZ #mean X segm
+            @ifXY 22 numb shmemSum[11,1] =  sumX/sumZ #mean Y segm
+            @ifXY 24 numb shmemSum[12,1] = sumX/sumZ #mean Z segm
+
+            sync_warp()
+
+            @ifXY 1 1 begin
+                # #unrolled 3 by 3 cholesky decomposition 
+                a = CUDA.sqrt(shmemSum[1,1])  #getting varianceX
+                b = (shmemSum[2,1])/a #getting covarianceXY
+                c = (shmemSum[3,1])/a  #getting covarianceXZ
+                e = CUDA.sqrt(shmemSum[4,1] - b*b)  #getting varianceY
+                d = (shmemSum[5,1] -(c * b))/e #getting covarianceYZ
+              #unrolled forward substitiution - we reuse the variables to reduce register preassure (hopefully)
+                sumX= (shmemSum[7,1] -shmemSum[10,1]  )   /a 
+                sumY = ( (shmemSum[8,1] -  shmemSum[11,1] )  -b*sumX)/e
+                sumZ= ( (shmemSum[9,1] - shmemSum[12,1]  )  -sumY*d-sumX* c)/CUDA.sqrt(shmemSum[6,1] - c*c -d*d ) #getting  varianceZ
+                #taking square euclidean distance
+                mahalanobisResGlobal[1]= CUDA.sqrt(sumX*sumX+sumY*sumY+sumZ*sumZ)
+            end # @ifXY  numb
+          end#for numb  
+    end# if block
+#### now in case we want the slice wise results we need to loop through the 
+sync_threads()
+#in order to maximize parallelization we will use 6 warps at a time (if needed )
+# and each will use up diffrent row of shared memory so we will loop through slicewise
+#and concurrently update the slicewise results list
+# our data is stored in covariancesSliceWiseGold and  covariancesSliceWiseSegm   
+#1) variance x 2) covariance xy 3) covariance xz 4) variance y 5) covariance yz 6) variance z this applies to both 
+
+@unroll for i in 0:cld(loopZdim,6) 
+    @unroll for j in 1:6
+        #we need to stay in the existing slices 
+        if(i*6+j<arrDims[3])
+        #first we load data from gold 
+            if(threadIdxX()<7 )
+                sumx = covariancesSliceWiseGold[threadIdxX()]
+            #then from segm 
+            elseif(threadIdxX()<13 )
+                shmemSum[12+threadIdxX() ,1] = covariancesSliceWiseGold[threadIdxX()]
+            end #else if  
+
+
+
+
+    end#if
+    end#for
+    sync_warp()
+end#for 
+
+# covariancesSliceWiseGold
+    #covariancesSliceWiseSegm
+
+
+    end)
+end
 
 
 """
@@ -196,9 +314,8 @@ function meansMahalinobisKernel(goldArr,segmArr
     # keeping counter of old z value - in order to be able to get slicewise z counter
     oldZVal= @cuStaticSharedMem(Float32, (1))
     #summing coordinates of all voxels we are intrested in 
-    sumX,sumY,sumZ = Float32(0),Float32(0),Float32(0)
+    sumX,sumY,sumZ,count = Float32(0),Float32(0),Float32(0),Float32(0)
     #count how many voxels of intrest there are so we will get means
-    count = Float32(0)
     #for storing results from warp reductions
     shmemSum= @cuStaticSharedMem(Float32, (32,6))   
     clearSharedMemWarpLong(shmemSum, UInt8(6), Float32(0.0))
@@ -253,20 +370,21 @@ function meansMahalinobisKernel(goldArr,segmArr
     sync_threads()
     @calculateVariancesAdCov(countPerZSegm,segmArr,covariancesSliceWiseSegm,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm)
     
+###################### getting final results
 
 
 
-    return  
-    end#meansMahalinobisKernel
+sync_grid(grid_handle)
+    #preparing space
+    sumX,sumY,sumZ,count = Float32(0),Float32(0),Float32(0),Float32(0)
+    clearSharedMemWarpLong(shmemSum, UInt8(6), Float32(0.0))
+    sync_threads()
+    #calculate final results
+    @getFinalResults()
 
-
-
-
-
-
+end#meansMahalinobisKernel
 
 end#MeansMahalinobis
-
 
 
 

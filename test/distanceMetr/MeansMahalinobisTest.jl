@@ -53,16 +53,16 @@ totalCountSegm= CuArray([0]);
 totalCountGold
 #countPerZGold= CUDA.zeros(Float32,sizz[3]+1);
 #countPerZSegm= CUDA.zeros(Float32,sizz[3]+1);
-countPerZGold= CUDA.zeros(Float32,500);
-countPerZSegm= CUDA.zeros(Float32,500);
+countPerZGold= CUDA.zeros(Float32,sizz[3]+1);
+countPerZSegm= CUDA.zeros(Float32,sizz[3]+1);
 
 #covariancesSliceWise= CUDA.zeros(Float32,12,sizz[3]+1);
-covariancesSliceWiseGold= CUDA.zeros(Float32,6,500);
-covariancesSliceWiseSegm= CUDA.zeros(Float32,6,500);
+covariancesSliceWiseGold= CUDA.zeros(Float32,6,sizz[3]+1);
+covariancesSliceWiseSegm= CUDA.zeros(Float32,6,sizz[3]+1);
 covarianceGlobal= CUDA.zeros(Float32,12,1);
 
 mahalanobisResGlobal= CUDA.zeros(1);
-mahalanobisResSliceWise= CUDA.zeros(500);
+mahalanobisResSliceWise= CUDA.zeros(sizz[3]+1);
 #mahalanobisResSliceWise= CUDA.zeros(sizz[3]);
 
 args = (goldBoolGPU,segmBoolGPU,numberToLooFor
@@ -96,11 +96,9 @@ varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGloba
     loopYdim = UInt32(cld(maxY, threads[2])) 
     loopZdim = UInt32(cld(maxZ,blocks )) 
 
-    Int64(blocks*loopZdim+blo)
-
 #covariancesSliceWise= CUDA.zeros(Float32,12,sizz[3]+1);
-covariancesSliceWiseGold= CUDA.zeros(Float32,6,500);
-covariancesSliceWiseSegm= CUDA.zeros(Float32,6,500);
+covariancesSliceWiseGold= CUDA.zeros(Float32,6,sizz[3]+1);
+covariancesSliceWiseSegm= CUDA.zeros(Float32,6,sizz[3]+1);
 
 #gold
 totalXGold= CuArray([0.0]);
@@ -129,9 +127,48 @@ varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGloba
     ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
     ,mahalanobisResGlobal, mahalanobisResSliceWise)
 
+    
     @cuda cooperative=true threads=threads blocks=blocks MeansMahalinobis.meansMahalinobisKernel(args...)
-  
- 
+    
+    mahalanobisResGlobal[1]
+
+    # totalCountGold[1]
+
+
+
+    # totalCountSegm[1]
+    Int64(round(totalXGold[1]))
+    Int64(round(totalYGold[1]))
+   aa= Int64(round(varianceXGlobalSegm[1]))
+   bb=  Int64(round(varianceXGlobalGold[1]))
+    aa+bb
+    @test totalCountGold[1]==length(cartTrueGold)
+
+    varianceX= (varianceXGlobalGold[1]+ varianceXGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
+    covarianceXY= (covarianceXYGlobalGold[1]+ covarianceXYGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
+    covarianceXZ= (covarianceXZGlobalGold[1]+ covarianceXZGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
+    varianceY= (varianceYGlobalGold[1]+ varianceYGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
+    covarianceYZ= (covarianceYZGlobalGold[1]+ covarianceYZGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
+    varianceZ= (varianceZGlobalGold[1]+ varianceZGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
+    meanX = (totalXGold[1]/totalCountGold[1]) - (totalXSegm[1]/totalCountSegm[1] )
+    meanY = (totalYGold[1]/totalCountGold[1]) - (totalYSegm[1]/totalCountSegm[1] )
+    meanZ = (totalZGold[1]/totalCountGold[1]) - (totalZSegm[1]/totalCountSegm[1] )
+
+
+a = sqrt(varianceX) #18.205059
+b = (covarianceXY)/a
+c = (covarianceXZ)/a
+e = sqrt(varianceY - b*b)
+d = (covarianceYZ -(c * b))/e
+#unrolled forward substitiution
+ya= meanX/a 
+yb = (meanY-b*ya)/e
+yc= (meanZ-yb*d-ya* c)/sqrt(varianceZ - c*c -d*d )
+#taking square euclidean distance
+sqrt(ya*ya+yb*yb+yc*yc)
+
+
+
 
 @testset " mahalinobis tests " begin
       @test totalCountGold[1]==length(cartTrueGold)
@@ -179,17 +216,26 @@ varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGloba
     Int64(round(varianceZGlobalSegm[1]-sum(map(ind->(( ind[3] -meanZ )^2) ,cartTrueSegm))))
     
     @test isapprox(covarianceYZGlobalSegm[1],sum(map(ind->(( ind[2] -meanY )*(ind[3] -meanZ  )) ,cartTrueSegm)); atol = 50)
+    @test isapprox(mahalanobisResGlobal[1],4.660; atol = 0.1)
       
 end
 
+### can be put in getFinalResults macro to check is it working
+            # @ifXY 1 numb CUDA.@cuprint "th 1   res $(sumX/(sumY+sumZ))  correct 331.42417036764425\n "
+        # @ifXY 3 numb CUDA.@cuprint "th 3  res $(sumX/(sumY+sumZ))  correct 14.653258176782604  \n "
+        # @ifXY 5 numb CUDA.@cuprint "th 5  res $(sumX/(sumY+sumZ))  correct  43.483690662640186 \n "
+        # @ifXY 7 numb  CUDA.@cuprint "th 7   res $(sumX/(sumY+sumZ))  correct  2640.6032539591756 \n "
+        # @ifXY 10 numb  CUDA.@cuprint "th 10  res $(sumX/(sumY+sumZ))   correct 43.71496394540232 \n "
+        # @ifXY 12 numb  CUDA.@cuprint "th 12 res $(sumX/(sumY+sumZ)) correct 685.3852392889322  \n "
+        # @ifXY 14 numb  CUDA.@cuprint "th 14   res $(sumX/(sumY))  correct 140.4965 \n "
+        # @ifXY 16 numb  CUDA.@cuprint "th 16   res $(sumX/(sumY))  correct 142.492 \n "
+        # @ifXY 18 numb  CUDA.@cuprint "th 18  res $(sumX/(sumY))   correct  250.57380 \n "
+        # @ifXY 20 numb CUDA.@cuprint "th 20   res $(sumX/(sumZ))  correct 117.5\n "
+        # @ifXY 22 numb  CUDA.@cuprint "th 22  res $(sumX/(sumZ))  correct 218.0 \n "
+        # @ifXY 24 numb  CUDA.@cuprint "th 24   res $(sumX/(sumZ))  correct 138.5 \n "  
 
 
 
-
-    
-    # Int64(varianceXGlobalGold[1])-sum(map(ind->( ind[1] -meanX )^2 ,cartTrueGold))
-
-    
 
 
     # @device_code_warntype interactive=true @cuda MeansMahalinobis.meansMahalinobisKernel(args...)

@@ -4,7 +4,7 @@ It holds macos and functions usefull for reductions of 3 dimensional data
 """
 module ReductionUtils
 using Main.CUDAGpuUtils, CUDA
-export @redWitAct, @addAtomic,@addNonAtomic, @redOnlyStepOne,@redOnlyStepThree
+export @redWitAct, @addAtomic,@addNonAtomic, @redOnlyStepOne,@redOnlyStepThree, @getFromLane
 """
 adapted from https://discourse.julialang.org/t/macro-magic-looping-over-varargs-printing-values-and-symbols/3025
 
@@ -56,8 +56,7 @@ modification of redWitAct - where we reduce only across the warp and save it to 
 """
 macro redOnlyStepOne(offsetIter,shmem, varActTuples...)
   firstPart =   reduceWitActFirstPart(offsetIter,shmem, varActTuples...)
-
-  
+ 
     return esc(:(
       $offsetIter=1;  
     while($offsetIter <32) 
@@ -196,8 +195,6 @@ function sendAtomicHelperAndAdd(shmemSum, vars...)
   end#for
   return Expr(:block,tmp...)
 
-
-
   for index in 1:length(varActTuples)
     varr= vars[index]
       push!(tmp, quote
@@ -252,9 +249,14 @@ function sendNonAtomicHelperAndAdd(shmemSum, vars...)
   return Expr(:block,tmp...)
 end
 
-
-
-
+"""
+get values from given lane  
+variable - which variable we want to get 
+laneNumb - fr4om what lane we want to get this data
+"""
+macro getFromLane(variable, laneNumb )
+  return esc(:(shfl_sync(FULL_MASK,$variable,$laneNumb )))
+end
 
 
 
