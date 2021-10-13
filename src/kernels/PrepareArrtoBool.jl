@@ -136,6 +136,12 @@ function getBoolCubeKernel(goldBoolGPU3d
     maxY= @cuStaticSharedMem(Float32, 1)
     minZ = @cuStaticSharedMem(Float32, 1)
     maxZ= @cuStaticSharedMem(Float32, 1) 
+    
+    
+    
+    
+    
+    
     isAnyPositive = @cuStaticSharedMem(Bool, 1)
     #resetting
     minX[1]= Float32(1110.0)
@@ -158,8 +164,26 @@ function getBoolCubeKernel(goldBoolGPU3d
          @iter3d(xOffset = xOuter*datBdim[1] , yOffset=yOuter*datBdim[2], zOffset=zOuter*datBdim[3],checkAlwaysBorder= true,zadd = zdim ,loppDims = inBlockLoopDims
                          ,ex=begin       boolGold=    goldBoolGPU3d[x,y,z]==numberToLooFor
                                 boolSegm=    segmBoolGPU3d[x,y,z]==numberToLooFor
-                
+                                    
                                 @inbounds locArr[boolGold+ boolSegm+ boolSegm]+=(boolGold  ⊻ boolSegm)
+                                #we need to also collect data about how many fp and fn we have in main part and borders
+                                #important in case of corners we will first analyze z and y dims and z dim on last resort only !
+                                if(xdim ==1) #left
+                                
+                                elseif(xdim == inBlockLoopDims[1] )  # right   
+
+                                elseif(ydim == 0 )  # posterior   
+                        
+                                elseif(ydim == inBlockLoopDims[2] )  # anterior                           
+
+                                elseif(zdim == 0 )  # top   
+                        
+                                elseif(zdim == inBlockLoopDims[3] )  # bottom  
+                                
+                                else #main part
+                        
+                                end   
+                    
                                 #in case some is positive we can go futher with looking for max,min in dims and add to the new reduced boolean arrays waht we are intrested in  
                                 if(boolGold  || boolSegm)
                                         if((boolGold  ⊻ boolSegm))
@@ -173,21 +197,25 @@ function getBoolCubeKernel(goldBoolGPU3d
                                 end#if boolGold  || boolSegm
                             end#ex
                 ) 
+                    IMPORTANT we need to set also the amount of the main part fp and fn by subtracting from totla block count the  border counts
+
             #now we are just after we iterated over a single data block  we need to
 
                 #we save data about border data blocks 
                 sync_threads()
                 #we want to invoke this only once 
+                                IMPORTANT we need to set also the amount of the main part fp and fn by subtracting from totla block count the  border counts
+
                #save the data about number of fp and fn of this block and accumulate also this sum for global sum 
-                @ifXY 4 2 if(isAnyPositive[1]) setMetaDataFpCount(locArr[2], xOuter,yOuter,zOuter) end   
-                @ifXY 2 3 if(isAnyPositive[1]) setMetaDataFnCount(locArr[1], xOuter,yOuter,zOuter) end
-                @ifXY 1 1 if(isAnyPositive[1]) minX[1]= min(minX[1],xOuter) end
-                @ifXY 2 1 if(isAnyPositive[1]) maxX[1]= max(maxX[1],xOuter) end
-                @ifXY 2 3 if(isAnyPositive[1]) minY[1]= min(minY[1],yOuter) end
-                @ifXY 4 4 if(isAnyPositive[1]) maxY[1]= max(maxY[1],yOuter) end
-                @ifXY 5 5 if(isAnyPositive[1]) minZ[1]= min(minZ[1],zOuter) end
-                @ifXY 6 6 if(isAnyPositive[1]) maxZ[1]= max(maxZ[1],zOuter) end
-                @ifXY 7 7 if(isAnyPositive[1]) isAnyPositive[1]= false end #reset     
+                @ifXY 1 2 if(isAnyPositive[1]) setMetaDataFpCount(locArr[2], xOuter,yOuter,zOuter) end   
+                @ifXY 1 3 if(isAnyPositive[1]) setMetaDataFnCount(locArr[1], xOuter,yOuter,zOuter) end
+                @ifXY 1 4 if(isAnyPositive[1]) minX[1]= min(minX[1],xOuter) end
+                @ifXY 1 5 if(isAnyPositive[1]) maxX[1]= max(maxX[1],xOuter) end
+                @ifXY 1 6 if(isAnyPositive[1]) minY[1]= min(minY[1],yOuter) end
+                @ifXY 1 7 if(isAnyPositive[1]) maxY[1]= max(maxY[1],yOuter) end
+                @ifXY 1 8 if(isAnyPositive[1]) minZ[1]= min(minZ[1],zOuter) end
+                @ifXY 1 9 if(isAnyPositive[1]) maxZ[1]= max(maxZ[1],zOuter) end
+                @ifXY 1 10 if(isAnyPositive[1]) isAnyPositive[1]= false end #reset     
                     
                 #consider ceating tuple structure where we will have  number of outer tuples the same as z dim then inner tuples the same as y dim and most inner tuples will have only the entries that are fp or fn - this would make us forced to put results always in correct spots 
                 
