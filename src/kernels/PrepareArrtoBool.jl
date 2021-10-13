@@ -141,7 +141,7 @@ function getBoolCubeKernel(goldBoolGPU3d
     ex = begin
          #inner loop is over the data indicated by metadata
          @iter3d(xOffset = xOuter*datBdim[1] , yOffset=yOuter*datBdim[2], zOffset=zOuter*datBdim[3],checkAlwaysBorder= true,zadd = zdim ,loppDims = inBlockLoopDims
-                                boolGold=    goldBoolGPU3d[x,y,z]==numberToLooFor
+                         ,ex=begin       boolGold=    goldBoolGPU3d[x,y,z]==numberToLooFor
                                 boolSegm=    segmBoolGPU3d[x,y,z]==numberToLooFor
                 
                                 @inbounds locArr[boolGold+ boolSegm+ boolSegm]+=(boolGold  ⊻ boolSegm)
@@ -160,7 +160,12 @@ function getBoolCubeKernel(goldBoolGPU3d
                                     reducedGoldB[x,y,z]=boolGold    
                                     reducedSegmB[x,y,z]=boolSegm 
                                 end#if boolGold  || boolSegm
-                )  
+                            end#ex
+                ) 
+            #now we are just after we iterated over a single data block  we need to
+                #save the data about number of fp and fn of this block and accumulate also this sum for global sum 
+                #consider ceating tuple structure where we will have  number of outer tuples the same as z dim then inner tuples the same as y dim and most inner tuples will have only the entries that are fp or fn - this would make us forced to put results always in correct spots 
+                
         end# outer loop expession  )
     
     
