@@ -36,6 +36,7 @@ macro analyzeMetadataFirstPass(minX, minY,minZ, maxX,maxY,maxZ, metaData )
          #inner loop is over the data indicated by metadata
          metaDataFpcount = getMetaDataFpCount(metaData,x,y,z)
          metaDataFncount = getMetaDataFnCount(metaData,x,y,z)
+            
          #now we want to set offsets        
     
     
