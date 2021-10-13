@@ -126,16 +126,44 @@ function getBoolCubeKernel(goldBoolGPU3d
    shmemSum = createAndInitializeShmem(wid,threadIdxX(),lane)
 # incrementing appropriate number of times 
    
-    #0 - false negative; 1- false positive; 2 -minx; 3 max x; 4 miny; 5 maxy
-    locArr= zeros(MVector{6,UInt16})
-    # in case of min we need to start high
-    locArr[3]=10000
-    locArr[5]=10000
-    
-    
-    
-    
+    #1 - false negative; 2- false positive
+    locArr= (Float32(0.0), Float32(0.0))
+    minX= Float32(1110.0)
+    maxX= Float32(0.0)
+    minY= Float32(1110.0)
+    maxY= Float32(0.0)    
+    minZ= Float32(1110.0)
+    maxZ= Float32(0.0) 
     #we need nested x,y,z iterations so we will iterate over the matadata and on its basis over the  data in the main arrays 
+    #first loop over the metadata 
+    datBdim - indicats dimensions of data blocks
+    @iter3d(xname= xOuter,yName = yOuter, zName= zOuter, loppDims = metadataLoopDims
+    ex = begin
+         #inner loop is over the data indicated by metadata
+         @iter3d(xOffset = xOuter*datBdim[1] , yOffset=yOuter*datBdim[2], zOffset=zOuter*datBdim[3],checkAlwaysBorder= true,zadd = zdim ,loppDims = inBlockLoopDims
+                                boolGold=    goldBoolGPU3d[x,y,z]==numberToLooFor
+                                boolSegm=    segmBoolGPU3d[x,y,z]==numberToLooFor
+                
+                                @inbounds locArr[boolGold+ boolSegm+ boolSegm]+=(boolGold  ⊻ boolSegm)
+                                #in case some is positive we can go futher with looking for max,min in dims and add to the new reduced boolean arrays waht we are intrested in  
+                                if(boolGold  || boolSegm)
+                                #locArr  0 - false negative; 1- false positive; 2 -minx; 3 max x; 4 miny; 5 maxy
+                                    minX = min(minX,xOuter)
+                                    maxX= max(maxX,yOuter)
+                                    minY = min(minY,yOuter)
+                                    maxY= max(maxY,yOuter)
+                                    minZ = min(minZ,zOuter)
+                                    maxZ= max(maxZ,zOuter)    
+                                    #passing data to new arrays needed for running final algorithm
+                                    reducedGoldA[x,y,z]=boolGold    
+                                    reducedSegmA[x,y,z]=boolSegm    
+                                    reducedGoldB[x,y,z]=boolGold    
+                                    reducedSegmB[x,y,z]=boolSegm 
+                                end#if boolGold  || boolSegm
+                )  
+        end# outer loop expession  )
+    
+    
     
      @iter3dAdditionalzActs(arrDims,loopXdim,loopYdim,loopZdim,
     #inner expression
@@ -170,7 +198,7 @@ function getBoolCubeKernel(goldBoolGPU3d
     
     
     
-    
+
 
     @unroll for k in 1:loopNumbYdim# k is effectively y dimension
         for kx in 0:loopNumbXdim
