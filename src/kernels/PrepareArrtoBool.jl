@@ -81,8 +81,7 @@ end#getTpfpfnData
 
 """
 we need to give back number of false positive and false negatives and min,max x,y,x of block containing all data 
-IMPORTANT - in order to avoid bound checking on every iteration we need to keep the dimension of the resulting block be divided by data block cube size for example 32
-IMPORTANT - we assume that x dim can not be bigger than 1024
+IMPORTANT - we require at least 7 in y dim and 32 in x dim of block thread
 adapted from https://github.com/JuliaGPU/CUDA.jl/blob/afe81794038dddbda49639c8c26469496543d831/src/mapreduce.jl
 goldBoolGPU3d - array holding 3 dimensional data of gold standard bollean array
 segmBoolGPU3d - array with 3 dimensional the data we want to compare with gold standard
@@ -122,92 +121,117 @@ function getBoolCubeKernel(goldBoolGPU3d
 ) where T
 
    anyPositive = false # true If any bit will bge positive in this array - we are not afraid of data race as we can set it multiple time to true
-#creates shared memory and initializes it to 0
-   shmemSum = createAndInitializeShmem(wid,threadIdxX(),lane)
-# incrementing appropriate number of times 
+   #creates shared memory and initializes it to 0
+   shmemSum = @cuStaticSharedMem(Float32,(32,2))
+   #incrementing appropriate number of times 
    
-    #0 - false negative; 1- false positive; 2 -minx; 3 max x; 4 miny; 5 maxy
-    locArr= zeros(MVector{6,UInt16})
-    # in case of min we need to start high
-    locArr[3]=10000
-    locArr[5]=10000
     
     
-    
-    
-    #we need nested x,y,z iterations so we will iterate over the matadata and on its basis over the  data in the main arrays 
-    
-     @iter3dAdditionalzActs(arrDims,loopXdim,loopYdim,loopZdim,
-    #inner expression
-    if(  @inbounds($arrAnalyzed[x,y,z])  ==numberToLooFor)
-        #updating variables needed to calculate means
-        sumX+=Float32(x) ;  sumY+=Float32(y)  ; sumZ+=Float32(z)   ; count+=Float32(1)   
-    end,
-    #after z expression - we get slice wise true counts from it 
-    begin
-        sync_threads()
-        #reducing count only
-        if(z<=arrDims[3])
-            countTemp = count
-            @redWitAct(offsetIter,shmemSum, count,+)
-            #saving to global memory count of this slice
-            @ifXY 1 1 begin 
-                 $countPerZ[z]=(shmemSum[1,1] - oldZVal[1] )
-                oldZVal[1]=shmemSum[1,1]
-            end
-            #clear shared memory only first row was used and sync threads 
-            clearSharedMemWarpLong(shmemSum, UInt8(1), Float32(0.0))
-            count=countTemp#to preserve proper value for total count
-        end#if ar dims
-    end )#if bool in arr  
+    #1 - false negative; 2- false positive
+    locArr= (Float32(0.0), Float32(0.0))
 
-    #tell what variables are to be reduced and by what operation
-    @redWitAct(offsetIter,shmemSum,  sumX,+,     sumY,+    ,sumZ,+   ,count,+)
-
-
-
+    minX =@cuStaticSharedMem(Float32, 1)
+    maxX= @cuStaticSharedMem(Float32, 1)
+    minY = @cuStaticSharedMem(Float32, 1)
+    maxY= @cuStaticSharedMem(Float32, 1)
+    minZ = @cuStaticSharedMem(Float32, 1)
+    maxZ= @cuStaticSharedMem(Float32, 1) 
+    
+    
+    
+    
+    
+    
+    isAnyPositive = @cuStaticSharedMem(Bool, 1)
+    #resetting
+    minX[1]= Float32(1110.0)
+    maxX[1]= Float32(0.0)
+    minY[1]= Float32(1110.0)
+    maxY[1]= Float32(0.0)    
+    minZ[1]= Float32(1110.0)
+    maxZ[1]= Float32(0.0) 
+    isAnyPositive[1]= false
+    #in shared memory
 
     
-    
-    
-    
-
-    @unroll for k in 1:loopNumbYdim# k is effectively y dimension
-        for kx in 0:loopNumbXdim
-            if(threadIdxX()+kx*xdim<=xdim)
-                #CUDA.@cuprint " threadIdxX() $(threadIdxX())   kx $(kx)   xdim $(xdim)   threadIdxX()+kx*xdim  $(threadIdxX()+kx*xdim) \n"    
-                #boolTT= goldBoolGPU3d[1, k+1, blockIdx().x]==numberToLooFor
-                incr_locArr(goldBoolGPU3d[threadIdxX()+kx*xdim, k, blockIdx().x]==numberToLooFor
-                            ,segmBoolGPU3d[threadIdxX()+kx*xdim, k, blockIdx().x]==numberToLooFor
-                            ,locArr
-                            ,threadIdxX()+kx*xdim
-                            ,k
-                            ,blockIdx().x
-                            ,reducedGoldA
-                            ,reducedSegmA
-                            ,reducedGoldB
-                            ,reducedSegmB
-                            ,anyPositive)
-            end#if 
-        end#for 
-        
-    end#for
-
-    firstReduce(locArr,shmemSum,wid)
-
-    
-
     sync_threads()
-    #now all data about of intrest should be in  shared memory so we will get all rsults from warp reduction in the shared memory 
-    #locArr  0 - false negative; 1- false positive; 2 -minx; 3 max x; 4 miny; 5 maxy for shmem sum we need to add 1 as shmem is 1 based
+    #we need nested x,y,z iterations so we will iterate over the matadata and on its basis over the  data in the main arrays 
+    #first loop over the metadata 
+    datBdim - indicats dimensions of data blocks
+    @iter3d(xname= xOuter,yName = yOuter, zName= zOuter, loppDims = metadataLoopDims
+    ex = begin
+         #inner loop is over the data indicated by metadata
+         @iter3d(xOffset = xOuter*datBdim[1] , yOffset=yOuter*datBdim[2], zOffset=zOuter*datBdim[3],checkAlwaysBorder= true,zadd = zdim ,loppDims = inBlockLoopDims
+                         ,ex=begin       boolGold=    goldBoolGPU3d[x,y,z]==numberToLooFor
+                                boolSegm=    segmBoolGPU3d[x,y,z]==numberToLooFor
+                                    
+                                @inbounds locArr[boolGold+ boolSegm+ boolSegm]+=(boolGold  ⊻ boolSegm)
+                                #we need to also collect data about how many fp and fn we have in main part and borders
+                                #important in case of corners we will first analyze z and y dims and z dim on last resort only !
+                                if(xdim ==1) #left
+                                
+                                elseif(xdim == inBlockLoopDims[1] )  # right   
 
-    getSecondBlockReduceSum( 1,1,wid,fn,shmemSum,blockIdx().x,lane)
-    getSecondBlockReduceSum( 2,2,wid,fp,shmemSum,blockIdx().x,lane)
+                                elseif(ydim == 0 )  # posterior   
+                        
+                                elseif(ydim == inBlockLoopDims[2] )  # anterior                           
 
-    getSecondBlockReduceMin( 3,3,wid,minxRes,shmemSum,blockIdx().x,lane)
-    getSecondBlockReduceMax( 4,4,wid,maxxRes,shmemSum,blockIdx().x,lane, minZres,maxZres)
-    getSecondBlockReduceMin( 5,5,wid,minyRes,shmemSum,blockIdx().x,lane)
-    getSecondBlockReduceMax( 6,6,wid,maxyRes,shmemSum,blockIdx().x,lane, minZres,maxZres)
+                                elseif(zdim == 0 )  # top   
+                        
+                                elseif(zdim == inBlockLoopDims[3] )  # bottom  
+                                
+                                else #main part
+                        
+                                end   
+                    
+                                #in case some is positive we can go futher with looking for max,min in dims and add to the new reduced boolean arrays waht we are intrested in  
+                                if(boolGold  || boolSegm)
+                                        if((boolGold  ⊻ boolSegm))
+                                            isAnyPositive[1]= true #- we just mark that there was some fp or fn in this block 
+                                        end# if (boolGold  ⊻ boolSegm)
+                                    #passing data to new arrays needed for running final algorithm
+                                    reducedGoldA[x,y,z]=boolGold    
+                                    reducedSegmA[x,y,z]=boolSegm    
+                                    reducedGoldB[x,y,z]=boolGold    
+                                    reducedSegmB[x,y,z]=boolSegm 
+                                end#if boolGold  || boolSegm
+                            end#ex
+                ) 
+                    IMPORTANT we need to set also the amount of the main part fp and fn by subtracting from totla block count the  border counts
+
+            #now we are just after we iterated over a single data block  we need to
+
+                #we save data about border data blocks 
+                sync_threads()
+                #we want to invoke this only once 
+                                IMPORTANT we need to set also the amount of the main part fp and fn by subtracting from totla block count the  border counts
+
+               #save the data about number of fp and fn of this block and accumulate also this sum for global sum 
+                @ifXY 1 2 if(isAnyPositive[1]) setMetaDataFpCount(locArr[2], xOuter,yOuter,zOuter) end   
+                @ifXY 1 3 if(isAnyPositive[1]) setMetaDataFnCount(locArr[1], xOuter,yOuter,zOuter) end
+                @ifXY 1 4 if(isAnyPositive[1]) minX[1]= min(minX[1],xOuter) end
+                @ifXY 1 5 if(isAnyPositive[1]) maxX[1]= max(maxX[1],xOuter) end
+                @ifXY 1 6 if(isAnyPositive[1]) minY[1]= min(minY[1],yOuter) end
+                @ifXY 1 7 if(isAnyPositive[1]) maxY[1]= max(maxY[1],yOuter) end
+                @ifXY 1 8 if(isAnyPositive[1]) minZ[1]= min(minZ[1],zOuter) end
+                @ifXY 1 9 if(isAnyPositive[1]) maxZ[1]= max(maxZ[1],zOuter) end
+                @ifXY 1 10 if(isAnyPositive[1]) isAnyPositive[1]= false end #reset     
+                    
+                #consider ceating tuple structure where we will have  number of outer tuples the same as z dim then inner tuples the same as y dim and most inner tuples will have only the entries that are fp or fn - this would make us forced to put results always in correct spots 
+                
+        end# outer loop expession  )
+    #in order to have global data 
+    @redWitAct(offsetIter,shmemSum,  locArr[1],+,     locArr[2],+   )
+    @addAtomic(shmemSum,fn,fp)
+
+    @ifXY 1 1 atomicMinSet(minxRes[1],minX[1])
+    @ifXY 2 2 atomicMaxSet(maxxRes[1],maxX[1])
+
+    @ifXY 3 3 atomicMinSet(minyRes[1],minY[1])
+    @ifXY 4 4 atomicMaxSet(maxyRes[1],maxY[1])
+
+    @ifXY 5 5 atomicMinSet(minyRes[1],minY[1])
+    @ifXY 6 6 atomicMaxSet(maxzRes[1],maxZ[1])
 
 
    return  

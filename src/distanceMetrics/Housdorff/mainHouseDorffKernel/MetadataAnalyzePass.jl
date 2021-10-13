@@ -1,3 +1,7 @@
+
+For first metadata pass we need already cut the area o boolean arrays that we are intrested in and portion of metadata array that we are intrested in 
+this way indexing will be simpler we will start from 0 and we will reduce memor usage
+
 """
 3) first metadata pass we add to the metadata offset where each block will put its main results and padding results - so all will be stored in result quueue but in diffrent spots
     we need to make ques for paddings longer than number of possible results becouse of possible modifications from neighbouring blocks that can happen simultanously
@@ -25,13 +29,26 @@ minX, minY,minZ - minimal values of voulme that holds all of the data that is of
 maxX,maxY,maxZ  - maximal values of voulme that holds all of the data that is of intrest to us
 metadata - global memory data structure that we analyze
 """
-macro analyzeMetadata(minX, minY,minZ, maxX,maxY,maxZ, metadata )
+macro analyzeMetadataFirstPass(minX, minY,minZ, maxX,maxY,maxZ, metaData )
         # we need to iterate over all metadata blocks with checks so the blocks can not be full outside the area of intrest defined by  minX, minY,minZ and maxX,maxY,maxZ
-        
+   @iter3d( lopDims = metadataLoopDims
+    ex = begin
+         #inner loop is over the data indicated by metadata
+         metaDataFpcount = getMetaDataFpCount(metaData,x,y,z)
+         metaDataFncount = getMetaDataFnCount(metaData,x,y,z)
+            
+         #now we want to set offsets        
+    
+    
+         #consider ceating tuple structure where we will have  number of outer tuples the same as z dim then inner tuples the same as y dim and most inner tuples will have only the entries that are fp or fn - this would make us forced to put results always in correct spots 
+                
+        end# outer loop expession  )
         
         
 end      
 
+
+macro 
 
 
 
