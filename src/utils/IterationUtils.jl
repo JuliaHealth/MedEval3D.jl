@@ -86,6 +86,7 @@ end#iter3dAdditionalxyzActs
 
 """
 generalized version of iter3d we will specilize it in the macro on the basis of multiple dispatch
+  xname,yname,zname - symbols representing the x,y and z that are calculated for currnt position
   loopXdim, loopYdim,loopZdim - information how many times we need to loop over given dimension
   zOffset,zAdd - calculate offset and thread/block dependent add 
   Offset,xOffset,xAdd, yAdd - offsets for x and y  and what to add to them
@@ -95,43 +96,66 @@ generalized version of iter3d we will specilize it in the macro on the basis of 
   is3d - if true we use 3 dimensional loop if not we iterate only over x and y     
   ex - main expression around which we build loop    
 """
-function generalizedItermultiDim(
-   loopXdim, loopYdim,loopZdim
-  ,zOffset,zAdd
-  ,yOffset,yAdd
-  ,xOffset,xAdd
-  ,xCheck,yCheck,zCheck
-  ,additionalActionAfterZ,additionalActionAfterY,additionalActionAfterX ,
-  is3d ,ex  )
+function generalizedItermultiDim(; #we keep all as keyword arguments
+   xname = :x
+   ,yname = :y
+   ,zname = :z    
+   ,loopXdim = 1
+   ,loopYdim= 1
+   ,loopZdim= 1
+  ,zOffset
+   ,zAdd
+  ,yOffset
+  ,yAdd
+  ,xOffset
+   ,xAdd
+  ,xCheck
+   ,yCheck
+   ,zCheck      
+  ,additionalActionAfterZ
+   ,additionalActionAfterY
+   ,additionalActionAfterX 
+   , is3d 
+   ,ex  )
 #we will define expressions from deepest to most superficial
 exp1 = quote
-      @unroll for xdim::UInt32 in 0:$loopXdim
-          x::UInt32= $xOffset +threadIdxX()
-          if( $xCheck)
-            $ex
-          end#if x
-        $additionalActionAfterX  
+      @unroll for xdim::UInt32 in 0:($loopXdim-1) # we subtract one as we are intrsted only for those iterations that will not need to be bound checked
+        $xname::UInt32= $xOffset +threadIdxX()
+         $ex
+          $additionalActionAfterX  
         end#for x dim
+        if( $xCheck)
+            $ex
+        end#if x
+         $additionalActionAfterX  
+       
         end#quote
-
+     
+      
 exp2= quote
-        @unroll for ydim::UInt32 in  0:$loopYdim
-          y::UInt32 = $yOffset +threadIdxY()
-            if($yCheck)
+        @unroll for ydim::UInt32 in  0:($loopYdim-1)  # we subtract one as we are intrsted only for those iterations that will not need to be bound checked
+         $yname::UInt32 = $yOffset +threadIdxY()
+        
+            $exp1
+            $additionalActionAfterY
+        end#for  yLoops 
+
+        if($yCheck)
               $exp1
         end#if y
         $additionalActionAfterY
-        end#for  yLoops 
       end
 
  exp3= quote
-    @unroll for zdim::UInt32 in 0:$loopZdim
-      z::UInt32 = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
-      if($zCheck)    
+    @unroll for zdim::UInt32 in 0:$loopZdim # we subtract one as we are intrsted only for those iterations that will not need to be bound checked
+      $zname::UInt32 = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
+        $exp2
+        $additionalActionAfterZ 
+     end#for z dim
+   if($zCheck)    
         $exp2
       end#if z 
       $additionalActionAfterZ  
-  end#for z dim
   end 
 #if it is 3d we will return x,y,z iterations if not only x and y 
 if(is3d)
