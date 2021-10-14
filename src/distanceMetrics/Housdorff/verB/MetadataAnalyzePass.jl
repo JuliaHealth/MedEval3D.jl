@@ -31,53 +31,84 @@ we analyze metadate as described above
 minX, minY,minZ - minimal indexes of metadata that holds all of the data that is of intrest to us
 maxX,maxY,maxZ  - maximal indexes of metadata that holds all of the data that is of intrest to us
 metaData - global memory data structure that we analyze
+shmemSum - shared memory used primary for reductions 
+globalFpResOffsetCounter, globalFnResOffsetCounter  - counters accessed atomically that points where we want to set the  results from this metadata block
+workQueaueA, workQueaueAcounter
 """
-macro analyzeMetadataFirstPass(minX, minY,minZ, maxX,maxY,maxZ, metaData )
+macro analyzeMetadataFirstPass(minX, minY,minZ, maxX,maxY,maxZ, metaData
+        ,globalFpResOffsetCounter, globalFnResOffsetCounter )
         # we need to iterate over all metadata blocks with checks so the blocks can not be full outside the area of intrest defined by  minX, minY,minZ and maxX,maxY,maxZ
-        @metaDataWarpIter  begin
+        @metaDataWarpIter metaData begin
             #now we upload all data related to amount of data that is of our intrest 
-            @ifXY 1 idY locArr= getMetaLeftFP(metadat)
-            @ifXY 2 idY locArr= getMetaLeftFN(metadat)
-            @ifXY 3 idY locArr=  getMetaRightFP(metadat)
-            @ifXY 4 idY locArr=  getMetaRightFN(metadat)
-            @ifXY 5 idY locArr=  getMetaPosteriorFP(metadat)
-            @ifXY 6 idY locArr=  getMetaPosteriorFN(metadat)
-            @ifXY 7 idY locArr=  getMetaAnteriorFP(metadat)
-            @ifXY 8 idY locArr=   getMetaAnteriorFN(metadat)
-            @ifXY 9 idY locArr=  getMetaTopFP(metadat)
-            @ifXY 10 idY locArr=  getMetaTopFN(metadat)
-            @ifXY 11 idY locArr=  getMetaBottomFP(metadat)
-            @ifXY 12 idY locArr= getMetaBottomFN(metadat)
-            
-            #now we will calculate and writ
+            @unroll for i in 1:16
+                @ifXY i idY locArr= getMetaResFPOrFNcount(i, mataData,linIndex )
+            end#for
+            #now in order to get offsets we need to atomially access the resOffsetCounter - we add to them total fp or fn cout so next blocks will not overwrite the 
+            #area that is scheduled for this particular metadata block
+            @ifXY 17 idY shmemSum[idY,1]=   atomicAdd(globalFpResOffsetCounter,   round(getMetaDataTotalFpCount(metadat) *1,5)  )
+            @ifXY 18 idY shmemSum[idY,2]=   atomicAdd( globalFnResOffsetCounter,  round(getMetaDataTotalFnCount(metadat) *1,5 )  )
+            #as we reduced the metadata size we need now to update x,y,z coordinates 
+            @ifXY 19 reduceMetaDataXYZ(metaData, minX,minY,minZ, linIndex  )
+                    
+            sync_warp()
+            ######  we need to establish is block is active at the first pass block is active simply  when total count of fp and fn is greater than 0 
+            @ifXY 19 if((shmemSum[idY,1]) >0 )  appendToWorkQueue(workQueaueA,workQueaueAcounter, linIndex, false )      end 
+            @ifXY 20 if((shmemSum[idY,2]) >0 )  appendToWorkQueue(workQueaueA,workQueaueAcounter, linIndex, true )      end 
+            @ifXY 21 if((shmemSum[idY,1]+shmemSum[idY,2] ) >0 )  setBlockToActive(metaData,linIndex)     end 
 
-         
-         #gets  count of fp, fn in main part
-         
-         getMetaDataMainFpCount
-         getMetaDataMainFnCount
-            
-         #now we want to set offsets        
+
+           #####3set offsets
+            #now we will calculate and set the result queue offsets for each offset we need to synchronize warps in order to have unique offsets 
+            @unroll for i in 0:7
+                    #set fp
+                    @ifXY i*2+1 idY begin value=shmemSum[idY,1]+ round(locArr*1.4); shmemSum[idY,1]= value ; setMetaResOffsets(i*2+1, mataData,linIndex,value )end
+                    #set fn
+                    @ifXY i*2+2 idY begin value=shmemSum[idY,2]+ round(locArr*1.4); shmemSum[idY,1]= value ; setMetaResOffsets(i*2+2, mataData,linIndex,value )end
+                    sync_warp()
     
-    
-         #consider ceating tuple structure where we will have  number of outer tuples the same as z dim then inner tuples the same as y dim and most inner tuples will have only the entries that are fp or fn - this would make us forced to put results always in correct spots 
-                
+            end#for
+
+
         end# outer loop expession  )
-        
+        clearSharedMemWarpLong(shmemSum, UInt8(2), Float32(0.0))
+        locArr=0
         
 end      
 
+
 """
 this will enable iteration of metadata blocks where each warp will be responsible for single block
-we will use the linear indexing in order to     
+we will use the linear indexing in order to  make it simpler    
 """
 
-macro metaDataWarpIter()
+macro metaDataWarpIter(metaData, ex)
     linIndex - linear index
     idY -  thread id of warp that is responsible for this iteration
     metadat= metaData[x]
 end
 
+
+
+
+"""
+will be invoked in order to iterate over the metadata  after some dilatations were already done - we need to 
+    establish is block to be activated or inactivated or left as is
+    if block is active it needs to be added to work queue 
+    using some spare threads we will also housekeeping like for example switching active work queue etc
+    we will check rescounters of border res ques and compare with old ones - if any will be grater than old we will scan for any repeating results 
+        - it could be the case that neighbouring blocks concurently added the same results - in this case we need to set one of those to 0 and reduce the counter    
+    we will do all by using single warp per metadata block     
+"""
+macro setMEtaDataOtherPasses()
+
+    @metaDataWarpIter metaData begin
+        @ifXY 17 idY 
+
+    end    
+
+    clearSharedMemWarpLong(shmemSum, UInt8(2), Float32(0.0))
+    locArr=0
+end
 
 
 

@@ -18,3 +18,11 @@ function atomicallySetValueTrreeDim(arr,x,y,z,value)
     CUDA.atomic_xchg!(pointer(arr[x,y,z]), UInt32(value))
     #@inbounds @atomic arr[x,y,z]=UInt32(value)
 end
+
+
+"""
+adds atomically number to target and return old value
+"""
+function atomicAdd(target, number)
+
+end
