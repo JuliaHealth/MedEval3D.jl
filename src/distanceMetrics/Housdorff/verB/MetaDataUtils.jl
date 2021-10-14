@@ -3,6 +3,24 @@ sets is active of given block to true
 """
 setBlockToActive(metaData,linIndex)
 
+"""
+true if block is full
+"""
+isBlockFull(metaData, linIndex)
+
+"""
+is block set to be activated
+"""
+isBlockToBeActivated(metaData, linIndex)
+
+"""
+is block currently Active
+"""
+isBlockCurrentlyActive(metaData, linIndex)
+
+
+
+
 
 #first argument metadata second value from shared memory
 setMetaLeftFP
@@ -144,6 +162,31 @@ accordin numb will invoke function that will set  the result offset associated w
 """
 function setMetaResOffsets(numb, mataData,linIndex,value )
 end
+
+
+
+"""
+1)   Left FP  
+2)   Left FN  
+3)   Right FP  
+4)   Right FN  
+5)   Posterior FP  
+6)   Posterior FN  
+7)   Anterior FP  
+8)   Anterior FN  
+9)   Top FP  
+10)   Top FN  
+11)   Bottom FP  
+12)   Bottom FN  
+13)   Data Main Fp  
+14)   Data Main Fn  
+
+will return the diffrence between current counter value and old one for the result set lists associated with 
+    quantities described just above
+"""
+function getCounterDiffrence(numb, mataData,linIndex)
+
+end    
 
 
 

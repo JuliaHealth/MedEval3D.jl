@@ -102,7 +102,33 @@ will be invoked in order to iterate over the metadata  after some dilatations we
 macro setMEtaDataOtherPasses()
 
     @metaDataWarpIter metaData begin
-        @ifXY 17 idY 
+        isMaskOkForProcessing=false
+        #first two threads tell about wheather 
+        @ifXY 1 idY isMaskFull = !isBlockFull(metaData, linIndex)
+        @ifXY 2 idY isMaskFull = isBlockToBeActivated(metaData, linIndex)
+        @ifXY 3 idY isMaskFull = isBlockCurrentlyActive(metaData, linIndex)
+
+        #now we will load the diffrence 
+        @unroll for i in 1:16
+            @ifXY i idY locArr= getCounterDiffrence(numb, mataData,linIndex)
+        end#For
+        #now in some threads we have booleans needed for telling is mask active and in futher sixteen diffrences of counters that will tell us is there a res list that 
+        #increased its  amount of value in last dilatation step if so and  this increase is in some border result list we need to  establish weather we do not have any repeating  results
+        sync_warp()
+        #IMPOTANT check if we can add booleans 
+        @reduceWitActSecondPart(offsetIter,shmemSum,  isMaskFull,+,     locArr,+ )
+        res in second
+        sync_warp()
+        @ifXY 1 idY if(shmemSum[1,1]>0 )
+        shmemSum[1,1]
+        shmemSum[1,2]
+
+        
+        isMaskOkForProcessing
+        #now we will check 
+        #we are reusing isMaskOkForProcessing boolean
+
+        isMaskFull
 
     end    
 
@@ -111,6 +137,8 @@ macro setMEtaDataOtherPasses()
 end
 
 
+isBlockFull(metaData, linIndex)
+isBlockToBeActivated(metaData, linIndex)
 
 
 HFUtils.clearMainShmem(resShmem)
