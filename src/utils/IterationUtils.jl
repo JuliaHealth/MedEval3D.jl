@@ -14,48 +14,36 @@ using CUDA,Logging
 export @iter3d, @iter3dAdditionalxyzActsAndZcheck, @iter3dAdditionalxyzActs, @iter3dAdditionalzActs
 
 """
-full 3d iteration 
-arrDims - we will get maxX maxY maxZ from tuple with dimensions of the array analyzed
-loopXdim, loopYdim,loopZdim - how many iterations should be completed while iterating over given dimension
-ex - expression we want to invoke it will have x,y z
+arrDims- dimensions of main arrya
+loopIterNameX ,loopIterNameY, loopIterNameZ  - variable name that will be used in a left hand side of loop
+xname,yname,zname - symbols representing the x,y and z that are calculated for currnt position
+xDimName,yDimName,zDimName - symbols representing the left hand sides of the loop
+loopDims- information how many times we need to loop over given dimension
+zOffset,zAdd - calculate offset and thread/block dependent add 
+Offset,xOffset,xAdd, yAdd - offsets for x and y  and what to add to them
+xCheck,yCheck,zCheck - checks performed just after for - and determining wheather to continue
+additionalActionAfterZ,additionalActionAfterY,additionalActionAfterX  - gives possibility of invoking more actions  
+    - invoked after the checks (checks are avoided to prevent warp stall if warp sync will be invoked)
+is3d - if true we use 3 dimensional loop if not we iterate only over x and y 
+isFullBoundaryCheckX, isFullBoundaryCheckY, isFullBoundaryCheckZ - indicates wheather we want to check boundaries on all iterations if false it will be done only on last iteration if not stated explicitely to avoid all boundary checks
+nobundaryCheckX, nobundaryCheckY, nobundaryCheckZ - true if we want to avoid completely boundary checks
+
+ex - main expression around which we build loop  
 """
-macro iter3d(arrDims, loopXdim, loopYdim,loopZdim,ex)
-  zOffset= :((zdim*gridDim().x))
-  zAdd = :(blockIdxX())
-  yOffset= :(ydim* blockDimY())
-  yAdd= :(threadIdxY())
-  xOffset= :(xdim* blockDimX())
-  xAdd = :(threadIdxX())
-  xCheck=:(x <=$arrDims[1])
-  yCheck =:(y<=$arrDims[2])
-  zCheck=:(z<= $arrDims[3])
-  additionalActionAfterZ= :()
-  additionalActionAfterY= :()
-  additionalActionAfterX= :()
-  is3d=true
-  mainExp = generalizedItermultiDim(  loopXdim, loopYdim,loopZdim,zOffset,zAdd ,yOffset,yAdd,xOffset,xAdd,xCheck,yCheck,zCheck,additionalActionAfterZ,additionalActionAfterY,additionalActionAfterX,is3d,ex) ;
-  
+macro iter3d(arrDims,loopXdim,loopYdim,loopZdim   ,ex   )
+  mainExp = generalizedItermultiDim(; arrDims=arrDims,loopXdim=5 ,loopYdim=5,loopZdim=5, ex = ex)  
   return esc(:( $mainExp))
-  
-end#iter3d
+  end#iter3d
 
 """
 modification of iter3d loop  where wa allow additional action after z check
 """
-macro iter3dAdditionalxyzActsAndZcheck(arrDims, loopXdim, loopYdim,loopZdim
-  ,zCheck
+macro iter3dAdditionalxyzActsAndZcheck(arrDims,loopXdim,loopYdim,loopZdim,zCheck
   ,ex,additionalActionAfterX,additionalActionAfterY,additionalActionAfterZ)
-  zOffset= :((zdim*gridDim().x))
-  zAdd = :(blockIdxX())
-  yOffset= :(ydim* blockDimY())
-  yAdd= :(threadIdxY())
-  xOffset= :(xdim* blockDimX())
-  xAdd = :(threadIdxX())
-  xCheck=:(x <=$arrDims[1])
-  yCheck =:(y<=$arrDims[2])
-  is3d=true
-  mainExp = generalizedItermultiDim(  loopXdim, loopYdim,loopZdim,zOffset,zAdd ,yOffset,yAdd,xOffset,xAdd,xCheck,yCheck,zCheck,additionalActionAfterZ,additionalActionAfterY,additionalActionAfterX,is3d,ex) ;
-  
+  mainExp = generalizedItermultiDim(; arrDims=arrDims,loopXdim=loopXdim ,loopYdim=loopYdim,loopZdim=loopZdim,zCheck=zCheck, ex=ex
+  ,additionalActionAfterX=additionalActionAfterX ,additionalActionAfterY=additionalActionAfterY
+  ,additionalActionAfterZ=additionalActionAfterZ )  
+
   return esc(:( $mainExp))
 end#iter3dAdditionalxyzActs
 
@@ -63,21 +51,11 @@ end#iter3dAdditionalxyzActs
 """
 modification of iter3d loop  where wa allow additional actions to be performed after each loop check
 """
-macro iter3dAdditionalzActs(arrDims, loopXdim, loopYdim,loopZdim,ex,additionalActionAfterZ)
-  zOffset= :((zdim*gridDim().x))
-  zAdd = :(blockIdxX())
-  yOffset= :(ydim* blockDimY())
-  yAdd= :(threadIdxY())
-  xOffset= :(xdim* blockDimX())
-  xAdd = :(threadIdxX())
-  xCheck=:(x <=$arrDims[1])
-  yCheck =:(y<=$arrDims[2])
-  zCheck=:(z<= $arrDims[3])
-  additionalActionAfterY= :()
-  additionalActionAfterX= :()
-  is3d=true
-  mainExp = generalizedItermultiDim(  loopXdim, loopYdim,loopZdim,zOffset,zAdd ,yOffset,yAdd,xOffset,xAdd,xCheck,yCheck,zCheck,additionalActionAfterZ,additionalActionAfterY,additionalActionAfterX,is3d,ex) ;
-  
+macro iter3dAdditionalzActs(arrDims, loopXdim,loopYdim,loopZdim,ex,additionalActionAfterZ)
+
+  mainExp = generalizedItermultiDim(; arrDims=arrDims,loopXdim=loopXdim ,loopYdim=loopYdim,loopZdim=loopZdim
+  ,additionalActionAfterZ=additionalActionAfterZ, ex = ex )  
+
   return esc(:( $mainExp))
 end#iter3dAdditionalxyzActs
 
@@ -86,88 +64,183 @@ end#iter3dAdditionalxyzActs
 
 """
 generalized version of iter3d we will specilize it in the macro on the basis of multiple dispatch
+  arrDims- dimensions of main arrya
+  loopIterNameX ,loopIterNameY, loopIterNameZ  - variable name that will be used in a left hand side of loop
   xname,yname,zname - symbols representing the x,y and z that are calculated for currnt position
+  xDimName,yDimName,zDimName - symbols representing the left hand sides of the loop
   loopXdim, loopYdim,loopZdim - information how many times we need to loop over given dimension
   zOffset,zAdd - calculate offset and thread/block dependent add 
   Offset,xOffset,xAdd, yAdd - offsets for x and y  and what to add to them
   xCheck,yCheck,zCheck - checks performed just after for - and determining wheather to continue
   additionalActionAfterZ,additionalActionAfterY,additionalActionAfterX  - gives possibility of invoking more actions  
       - invoked after the checks (checks are avoided to prevent warp stall if warp sync will be invoked)
-  is3d - if true we use 3 dimensional loop if not we iterate only over x and y     
+  is3d - if true we use 3 dimensional loop if not we iterate only over x and y 
+  isFullBoundaryCheckX, isFullBoundaryCheckY, isFullBoundaryCheckZ - indicates wheather we want to check boundaries on all iterations if false it will be done only on last iteration if not stated explicitely to avoid all boundary checks
+  nobundaryCheckX, nobundaryCheckY, nobundaryCheckZ - true if we want to avoid completely boundary checks
+  
   ex - main expression around which we build loop    
 """
 function generalizedItermultiDim(; #we keep all as keyword arguments
-   xname = :x
+  arrDims = (UInt32(1),UInt32(1),UInt32(1) )
+   ,xname = :x
    ,yname = :y
-   ,zname = :z    
+   ,zname = :z
+   ,loopIterNameX = :xDim
+   ,loopIterNameY = :yDim
+   ,loopIterNameZ = :zDim    
    ,loopXdim = 1
    ,loopYdim= 1
    ,loopZdim= 1
-  ,zOffset
-   ,zAdd
-  ,yOffset
-  ,yAdd
-  ,xOffset
-   ,xAdd
-  ,xCheck
-   ,yCheck
-   ,zCheck      
-  ,additionalActionAfterZ
-   ,additionalActionAfterY
-   ,additionalActionAfterX 
-   , is3d 
-   ,ex  )
+  ,zOffset= :($loopIterNameZ*gridDim().x)
+   ,zAdd =:(blockIdxX())
+  ,yOffset = :($loopIterNameY* blockDimY())
+  ,yAdd= :(threadIdxY())
+  ,xOffset= :($loopIterNameX * blockDimX())
+   ,xAdd= :(threadIdxX())
+  ,xCheck = :(x <= $arrDims[1])
+  ,yCheck = :(y <= $arrDims[2])
+  ,zCheck = :(z <= $arrDims[3])    
+  ,additionalActionAfterZ= :()
+   ,additionalActionAfterY= :()
+   ,additionalActionAfterX = :()
+   , is3d = true
+   ,ex 
+   ,isFullBoundaryCheckX =false
+   , isFullBoundaryCheckY=false
+   , isFullBoundaryCheckZ=false
+   ,nobundaryCheckX=false
+   , nobundaryCheckY=false
+   , nobundaryCheckZ =false)
 #we will define expressions from deepest to most superficial
-exp1 = quote
-      @unroll for xdim::UInt32 in 0:($loopXdim-1) # we subtract one as we are intrsted only for those iterations that will not need to be bound checked
-        $xname::UInt32= $xOffset +threadIdxX()
-         $ex
-          $additionalActionAfterX  
-        end#for x dim
+
+  # xState = :(x= $xOffset +$xAdd)
+  # yState = :(y= $yOffset +$yAdd)
+  # zState = :(z= $zOffset +$zAdd)
+  # xState = :($xname= $xOffset +$xAdd)
+  # yState = :($yname= $yOffset +$yAdd)
+  # zState = :($zname= $zOffset +$zAdd)
+  
+
+ 
+  exp1 = quote
+    @unroll for xdim::UInt32 in 0:$loopXdim
+        x::UInt32= $xOffset +threadIdxX()
         if( $xCheck)
-            $ex
+          $ex
         end#if x
-         $additionalActionAfterX  
-       
-        end#quote
-     
-      
-exp2= quote
-        @unroll for ydim::UInt32 in  0:($loopYdim-1)  # we subtract one as we are intrsted only for those iterations that will not need to be bound checked
-         $yname::UInt32 = $yOffset +threadIdxY()
-        
+      $additionalActionAfterX  
+      end#for x dim
+    end#quote
+  
+    exp2= quote
+      @unroll for ydim::UInt32 in  0:$loopYdim
+        y::UInt32 = $yOffset +threadIdxY()
+          if($yCheck)
             $exp1
-            $additionalActionAfterY
-        end#for  yLoops 
+          end#if y
+          $additionalActionAfterY
+          end#for  yLoops 
+        end
 
-        if($yCheck)
-              $exp1
-        end#if y
-        $additionalActionAfterY
-      end
+        exp3= quote
+          @unroll for zdim::UInt32 in 0:$loopZdim
+            z::UInt32 = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
+            if($zCheck)          
+              $exp2
+            end#if z 
+            $additionalActionAfterZ  
+        end#for z dim
+        end 
 
- exp3= quote
-    @unroll for zdim::UInt32 in 0:$loopZdim # we subtract one as we are intrsted only for those iterations that will not need to be bound checked
-      $zname::UInt32 = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
-        $exp2
-        $additionalActionAfterZ 
-     end#for z dim
-   if($zCheck)    
-        $exp2
-      end#if z 
-      $additionalActionAfterZ  
-  end 
-#if it is 3d we will return x,y,z iterations if not only x and y 
+
 if(is3d)
   return exp3
-else
-  return exp2
-
-end
-
+end  
+#if 2d 
+return exp2
 
 end#generalizedIter3d
 
+"""
+give loop where we  test only last iteration for boundary conditions
+
+  loopIterName - variable name that will be used in a left hand side of loop
+  loopDim - as many times we will loop starting from 0 
+  offset, addToOffset - variables that are used for calculating varName
+  additionalActionAfter -  the function evaluated outside of the check
+  checkFun - evaluated to check weather we should evaluate ex
+  noCheck - we will not evaluate check expression before evaluating ex
+  allCheck - we will always evaluate check expression before evaluating ex
+  ex - main expression evaluated in the loop
+
+"""
+function getSubLoopPartialCheck(loopIterName,loopDim,defineVariable, additionalActionAfter ,checkFun,noCheck,allCheck,ex )
+
+
+
+  oneCheckEx = quote
+
+    CUDA.@cuprint("     aaaaaaaaaaa  \n")
+    CUDA.@cuprint("     aaaaaaaaaaa  \n")
+    CUDA.@cuprint("     aaaaaaaaaaa  \n")
+    CUDA.@cuprint("     aaaaaaaaaaa  \n")
+
+    @unroll for $loopIterName::UInt32 in  0:($loopDim-1)  # we subtract one as we are intrsted only for those iterations that will not need to be bound checked
+      x=1;y=1;z=1
+      $defineVariable     
+        $ex
+        $additionalActionAfter
+    end#for   
+    if($checkFun)
+          $ex
+    end#if 
+    $additionalActionAfter
+  end
+
+
+  allCheckEx = quote
+
+    CUDA.@cuprint("     bbbbbbbbbb  \n")
+    CUDA.@cuprint("     bbbbbbbbbb  \n")
+    CUDA.@cuprint("     bbbbbbbbbb  \n")
+    CUDA.@cuprint("     bbbbbbbbbb  \n")
+
+
+    @unroll for $loopIterName::UInt32 in  0:($loopDim-1)  # we subtract one as we are intrsted only for those iterations that will not need to be bound checked
+     $defineVariable
+    if($checkFun)
+          $ex
+    end#if 
+    $additionalActionAfter
+    end#for 
+  end
+
+
+  noCheckEx = quote
+
+    CUDA.@cuprint("     ccc  \n")
+    CUDA.@cuprint("     ccc  \n")
+    CUDA.@cuprint("     ccc  \n")
+    CUDA.@cuprint("     ccc  \n")
+
+
+    @unroll for $loopIterName::UInt32 in  0:($loopDim-1)  # we subtract one as we are intrsted only for those iterations that will not need to be bound checked
+     $defineVariable
+        $ex
+        $additionalActionAfter
+    end#for 
+   
+  end
+  #will return diffrent expressions depending on given booleans
+  if(noCheck)
+    return noCheckEx
+  elseif(allCheck)    
+    return allCheckEx
+  else
+    return oneCheckEx
+  end  
+
+end
 
 
 
@@ -233,4 +306,140 @@ end#module
 #       end#if z   
 #   end#for z dim
 #   end 
+# end#generalizedIter3d
+
+
+
+# quote
+#   @unroll for xdim::UInt32 in 0:($loopXdim-1) # we subtract one as we are intrsted only for those iterations that will not need to be bound checked
+#     $xname::UInt32= $xOffset +threadIdxX()
+#      $ex
+#       $additionalActionAfterX  
+#     end#for x dim
+#     if( $xCheck)
+#         $ex
+#     end#if x
+#      $additionalActionAfterX  
+   
+#     end#quote
+ 
+  
+# exp2= quote
+#     @unroll for ydim::UInt32 in  0:($loopYdim-1)  # we subtract one as we are intrsted only for those iterations that will not need to be bound checked
+#      $yname::UInt32 = $yOffset +threadIdxY()
+    
+#         $exp1
+#         $additionalActionAfterY
+#     end#for  yLoops 
+
+#     if($yCheck)
+#           $exp1
+#     end#if y
+#     $additionalActionAfterY
+#   end
+
+# exp3= quote
+# @unroll for zdim::UInt32 in 0:$loopZdim # we subtract one as we are intrsted only for those iterations that will not need to be bound checked
+#   $zname::UInt32 = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
+#     $exp2
+#     $additionalActionAfterZ 
+#  end#for z dim
+# if($zCheck)    
+#     $exp2
+#   end#if z 
+#   $additionalActionAfterZ  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# function generalizedItermultiDim(; #we keep all as keyword arguments
+#   arrDims = (UInt32(1),UInt32(1),UInt32(1) )
+#    ,xname = :x
+#    ,yname = :y
+#    ,zname = :z
+#    ,loopIterNameX = :xDim
+#    ,loopIterNameY = :yDim
+#    ,loopIterNameZ = :zDim    
+#    ,loopXdim = 1
+#    ,loopYdim= 1
+#    ,loopZdim= 1
+#   ,zOffset= :(($loopIterNameZ*gridDim().x))
+#    ,zAdd =:(blockIdxX())
+#   ,yOffset = :($loopIterNameY* blockDimY())
+#   ,yAdd= :(threadIdxY())
+#   ,xOffset= :($loopIterNameX * blockDimX())
+#    ,xAdd= :(threadIdxX())
+#   ,xCheck = :((x <= $arrDims[1]))
+#   ,yCheck = :((y <= $arrDims[2]))
+#   ,zCheck = :((z <= $arrDims[3]))    
+#   ,additionalActionAfterZ= :()
+#    ,additionalActionAfterY= :()
+#    ,additionalActionAfterX = :()
+#    , is3d = true
+#    ,ex 
+#    ,isFullBoundaryCheckX =false
+#    , isFullBoundaryCheckY=false
+#    , isFullBoundaryCheckZ=false
+#    ,nobundaryCheckX=false
+#    , nobundaryCheckY=false
+#    , nobundaryCheckZ =false)
+# #we will define expressions from deepest to most superficial
+
+#   # xState = :(x= $xOffset +$xAdd)
+#   # yState = :(y= $yOffset +$yAdd)
+#   # zState = :(z= $zOffset +$zAdd)
+#   # xState = :($xname= $xOffset +$xAdd)
+#   # yState = :($yname= $yOffset +$yAdd)
+#   # zState = :($zname= $zOffset +$zAdd)
+#   xState = :($xname)
+#   yState = :($yname)
+#   zState = :($zname)
+
+#   xCheck = :(true)
+#   yCheck = :(true)
+#   zCheck = :(true)    
+
+#   exp1 = getSubLoopPartialCheck(loopIterNameX,loopXdim,xState, additionalActionAfterX ,xCheck ,isFullBoundaryCheckX, nobundaryCheckX,ex)
+#   exp2 = getSubLoopPartialCheck(loopIterNameY,loopYdim,yState, additionalActionAfterY ,yCheck ,isFullBoundaryCheckY, nobundaryCheckY,exp1)
+#   exp3 = getSubLoopPartialCheck(loopIterNameZ,loopZdim,zState, additionalActionAfterZ ,zCheck ,isFullBoundaryCheckZ, nobundaryCheckZ,exp2)
+
+#   #if it is 3d we will return x,y,z iterations if not only x and y 
+#   # if(is3d)
+#   #   return exp3
+#   # else
+#   #   return exp2
+#   # end
+
+#   oneCheckEx = quote
+
+#     CUDA.@cuprint("     aaaaaaaaaaa  \n")
+#     CUDA.@cuprint("     aaaaaaaaaaa  \n")
+#     CUDA.@cuprint("     aaaaaaaaaaa  \n")
+#     CUDA.@cuprint("     aaaaaaaaaaa  \n")
+
+#     @unroll for $loopIterNameX::UInt32 in  0:($loopXdim-1)  # we subtract one as we are intrsted only for those iterations that will not need to be bound checked
+#       $xname= $xOffset +$xAdd  
+#         $ex
+#         $additionalActionAfterX
+#     end#for   
+#     if($xCheck)
+#           $ex
+#     end#if 
+#     $additionalActionAfterX
+#   end
+# return oneCheckEx
+
+
 # end#generalizedIter3d

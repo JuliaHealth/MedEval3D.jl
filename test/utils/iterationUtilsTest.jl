@@ -8,9 +8,7 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
 
-using Cthulhu
 using Main.BasicPreds, Main.CUDAGpuUtils , Main.MeansMahalinobis, Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils
-using Cthulhu
 
 
 function getExampleKernelArgs()
@@ -67,17 +65,19 @@ end
         shmemSum= @cuStaticSharedMem(UInt32, (32,2))   
         clearSharedMemWarpLong(shmemSum, UInt8(2))
 
-        @iter3d arrDims loopXdim loopYdim  loopZdim if(  @inbounds(goldArr[x,y,z])  ==numberToLooFor)
+        @iter3d(arrDims,  loopXdim,loopYdim,loopZdim,if(  @inbounds(goldArr[x,y,z])  ==numberToLooFor)
             #updating variables needed to calculate means
             countGold+=UInt32(1)
-        end#if bool in arr  
+            CUDA.@cuprint( "  inn $(x) ")
+        end)#if bool in arr  
         
         sync_threads()
-        
-        @iter3d arrDims loopXdim loopYdim  loopZdim if(  @inbounds(segmArr[x,y,z])  ==numberToLooFor)
+
+        @iter3d(arrDims, loopXdim,loopYdim,loopZdim, if(  @inbounds(goldArr[x,y,z])  ==numberToLooFor)
             #updating variables needed to calculate means
             countSegm+=UInt32(1)
-        end#if bool in arr  
+        end)#if bool in arr
+        
 
         offsetIter = UInt8(1)
         @redWitAct(offsetIter,shmemSum,  countGold,+, countSegm,+  )
