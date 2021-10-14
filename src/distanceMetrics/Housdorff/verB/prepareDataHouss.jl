@@ -41,6 +41,7 @@ function getBoolCubeKernel(goldBoolGPU3d
    anyPositive = false # true If any bit will bge positive in this array - we are not afraid of data race as we can set it multiple time to true
    #creates shared memory and initializes it to 0
    shmemSum = @cuStaticSharedMem(Float32,(32,2))
+   interMediateFPFN=@cuStaticSharedMem(UInt32,(2))
    #incrementing appropriate number of times 
    
     
@@ -182,18 +183,25 @@ function getBoolCubeKernel(goldBoolGPU3d
                 @ifXY 12 2 if(isAnyPositive[1])  setMetaBottomFN(metaData,bottomFN[1]) end   
 
 
-                @ifXY 1 3 if(isAnyPositive[1]) setMetaDataTotalFpCount(metaData,locArr[2], xOuter,yOuter,zOuter) end   
-                @ifXY 2 3 if(isAnyPositive[1]) setMetaDataTotalFnCount(metaData,locArr[1], xOuter,yOuter,zOuter) end
+                @ifXY 1 3 if(isAnyPositive[1]) setMetaDataTotalFpCount(metaData,shmemSum[1,2], xOuter,yOuter,zOuter) end   
+                @ifXY 2 3 if(isAnyPositive[1]) setMetaDataTotalFnCount(metaData,shmemSum[1,1], xOuter,yOuter,zOuter) end
                 #now in order to get total count  of fp and fn per block  we will do this subtraction              
 
-                @ifXY 3 3 if(isAnyPositive[1]) setMetaDataMainFpCount(metaData,locArr[2] -leftFP[1] - rightFP[1]- posteriorFP[1] -anteriorFP[1]- topFP[1] -bottomFP[1] , xOuter,yOuter,zOuter) end   
-                @ifXY 4 3 if(isAnyPositive[1]) setMetaDataMainFnCount(metaData,locArr[1] -leftFN[1] - rightFN[1] -posteriorFN[1]- anteriorFN[1]- topFN[1] -bottomFN[1]   , xOuter,yOuter,zOuter) end
-                
+                @ifXY 3 3 if(isAnyPositive[1]) setMetaDataMainFpCount(metaData,shmemSum[1,2] -leftFP[1] - rightFP[1]- posteriorFP[1] -anteriorFP[1]- topFP[1] -bottomFP[1] , xOuter,yOuter,zOuter) end   
+                @ifXY 4 3 if(isAnyPositive[1]) setMetaDataMainFnCount(metaData,shmemSum[1,1] -leftFN[1] - rightFN[1] -posteriorFN[1]- anteriorFN[1]- topFN[1] -bottomFN[1]   , xOuter,yOuter,zOuter) end
+                @ifXY 4 4 setMetaDataXYZ(metaData, xOuter,yOuter,zOuter  )
+
+                #adding the total fp and fn of a block to total result per thread block - later it will be pushed as total amiunt of fp and fn 
+                @ifXY 5 3 interMediateFPFN[1] +=shmemSum[1,1] 
+                @ifXY 6 3 interMediateFPFN[2] +=shmemSum[1,2] 
+                sync_threads()
+
+                #cleaning
+                clearSharedMemWarpLong(shmemSum, UInt8(6), Float32(0.0))
                 locArr= (Float32(0.0), Float32(0.0))
 
                 #set the x,y,z coordinates - so we will able to query it efficiently also with linear index
                 #what is important later as we will use only part of meta data this indicies will need to be updated
-                setMetaDataXYZ(metaData, xOuter,yOuter,zOuter  )
 
      end) #outer loop        
                 #consider ceating tuple structure where we will have  number of outer tuples the same as z dim then inner tuples the same as y dim and most inner tuples will have only the entries that are fp or fn - this would make us forced to put results always in correct spots 
@@ -202,20 +210,17 @@ function getBoolCubeKernel(goldBoolGPU3d
 
     #in order to have global data 
 
+    @ifXY 1 1 atomicMinSet(minxRes[],minX[1])
+    @ifXY 2 1 atomicMaxSet(maxxRes[],maxX[1])
 
-    @redWitAct(offsetIter,shmemSum,  locArr[1],+,     locArr[2],+   )
-    @addAtomic(shmemSum,fn,fp)
+    @ifXY 3 1 atomicMinSet(minyRes[],minY[1])
+    @ifXY 4 1 atomicMaxSet(maxyRes[],maxY[1])
 
-    @ifXY 1 1 atomicMinSet(minxRes[1],minX[1])
-    @ifXY 2 1 atomicMaxSet(maxxRes[1],maxX[1])
+    @ifXY 5 1 atomicMinSet(minzRes[],minY[1])
+    @ifXY 6 1 atomicMaxSet(maxzRes[],maxZ[1])
 
-    @ifXY 3 1 atomicMinSet(minyRes[1],minY[1])
-    @ifXY 4 1 atomicMaxSet(maxyRes[1],maxY[1])
-
-    @ifXY 5 1 atomicMinSet(minzRes[1],minY[1])
-    @ifXY 6 1 atomicMaxSet(maxzRes[1],maxZ[1])
-
-
+    @ifXY 7 1 atomicAdd(fn[],interMediateFPFN[2])
+    @ifXY 8 1 atomicAdd(fp[],interMediateFPFN[1])
    return  
    end
 
