@@ -6,23 +6,6 @@ using CUDA, StaticArrays
 export atomicallySetValueTrreeDim,atomicallyAddOneInt,clearLocArrdefineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc,reduce_warp_max,reduce_warp_min,reduce_warp_min,reduce_warp_or,reduce_warp_and,blockIdxZ,blockIdxY,blockIdxX,blockDimZ, blockDimY, blockDimX, threadIdxX, threadIdxY, threadIdxZ
 export @unroll, @ifX, @ifY, @ifXY, @widL, @wid, @lan
 
-"""
-atomically add to given 1 length array 1
-data type need to be Int32
-"""
-function atomicallyAddOneInt(arr)
-    @inbounds @atomic arr[]+=Int32(1)
-   # CUDA.atomic_inc!(pointer(arr), Int32(1))
-end
-
-"""
-looking in arr for entry x,y,z and setting atomically value it return old one also
-"""
-function atomicallySetValueTrreeDim(arr,x,y,z,value)
-    #@inbounds @atomic arr[]+=Int32(1)
-    CUDA.atomic_xchg!(pointer(arr[x,y,z]), UInt32(value))
-    #@inbounds @atomic arr[x,y,z]=UInt32(value)
-end
 
 """
 convinience macro that will execute only if it has given thread Id X

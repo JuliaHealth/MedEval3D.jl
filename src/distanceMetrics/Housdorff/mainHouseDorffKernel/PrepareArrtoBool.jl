@@ -115,9 +115,9 @@ function getBoolCubeKernel(goldBoolGPU3d
         ,maxxRes::CuDeviceVector{UInt32, 1}
         ,minyRes::CuDeviceVector{UInt32, 1}
         ,maxyRes::CuDeviceVector{UInt32, 1}
-        ,minZres::CuDeviceVector{UInt32, 1}
-        ,maxZres::CuDeviceVector{UInt32, 1}
-        ,warpNumber
+        ,minzres::CuDeviceVector{UInt32, 1}
+        ,maxzres::CuDeviceVector{UInt32, 1}
+        ,datBdim
 ) where T
 
    anyPositive = false # true If any bit will bge positive in this array - we are not afraid of data race as we can set it multiple time to true
@@ -157,12 +157,13 @@ function getBoolCubeKernel(goldBoolGPU3d
     sync_threads()
     #we need nested x,y,z iterations so we will iterate over the matadata and on its basis over the  data in the main arrays 
     #first loop over the metadata 
-    datBdim - indicats dimensions of data blocks
-    @iter3d(xname= xOuter,yName = yOuter, zName= zOuter, loppDims = metadataLoopDims
-    ex = begin
+    #datBdim - indicats dimensions of data blocks
+    @iter3dOuter(xname,yName , zName, loopXMeta,loopYMeta,loopZmeta,
+         begin
          #inner loop is over the data indicated by metadata
-         @iter3d(xOffset = xOuter*datBdim[1] , yOffset=yOuter*datBdim[2], zOffset=zOuter*datBdim[3],checkAlwaysBorder= true,zadd = zdim ,loppDims = inBlockLoopDims
-                         ,ex=begin       boolGold=    goldBoolGPU3d[x,y,z]==numberToLooFor
+         @iter3d(xOuter*datBdim[1] ,yOuter*datBdim[2], zzOuter*datBdim[3],true,zdim ,inBlockLoopX,inBlockLoopY,inBlockLoopZ
+                         ,begin 
+                                boolGold=    goldBoolGPU3d[x,y,z]==numberToLooFor
                                 boolSegm=    segmBoolGPU3d[x,y,z]==numberToLooFor
                                     
                                 @inbounds locArr[boolGold+ boolSegm+ boolSegm]+=(boolGold  ⊻ boolSegm)
@@ -195,16 +196,16 @@ function getBoolCubeKernel(goldBoolGPU3d
                                     reducedGoldB[x,y,z]=boolGold    
                                     reducedSegmB[x,y,z]=boolSegm 
                                 end#if boolGold  || boolSegm
-                            end#ex
-                ) 
-                    IMPORTANT we need to set also the amount of the main part fp and fn by subtracting from totla block count the  border counts
+                            end)#ex
+                
+             #       IMPORTANT we need to set also the amount of the main part fp and fn by subtracting from totla block count the  border counts
 
             #now we are just after we iterated over a single data block  we need to
 
                 #we save data about border data blocks 
                 sync_threads()
                 #we want to invoke this only once 
-                                IMPORTANT we need to set also the amount of the main part fp and fn by subtracting from totla block count the  border counts
+                #                IMPORTANT we need to set also the amount of the main part fp and fn by subtracting from totla block count the  border counts
 
                #save the data about number of fp and fn of this block and accumulate also this sum for global sum 
                 @ifXY 1 2 if(isAnyPositive[1]) setMetaDataFpCount(locArr[2], xOuter,yOuter,zOuter) end   
@@ -216,11 +217,13 @@ function getBoolCubeKernel(goldBoolGPU3d
                 @ifXY 1 8 if(isAnyPositive[1]) minZ[1]= min(minZ[1],zOuter) end
                 @ifXY 1 9 if(isAnyPositive[1]) maxZ[1]= max(maxZ[1],zOuter) end
                 @ifXY 1 10 if(isAnyPositive[1]) isAnyPositive[1]= false end #reset     
-                    
+     end) #outer loop        
                 #consider ceating tuple structure where we will have  number of outer tuples the same as z dim then inner tuples the same as y dim and most inner tuples will have only the entries that are fp or fn - this would make us forced to put results always in correct spots 
                 
-        end# outer loop expession  )
+        # outer loop expession  )
     #in order to have global data 
+
+
     @redWitAct(offsetIter,shmemSum,  locArr[1],+,     locArr[2],+   )
     @addAtomic(shmemSum,fn,fp)
 
@@ -230,7 +233,7 @@ function getBoolCubeKernel(goldBoolGPU3d
     @ifXY 3 3 atomicMinSet(minyRes[1],minY[1])
     @ifXY 4 4 atomicMaxSet(maxyRes[1],maxY[1])
 
-    @ifXY 5 5 atomicMinSet(minyRes[1],minY[1])
+    @ifXY 5 5 atomicMinSet(minzRes[1],minY[1])
     @ifXY 6 6 atomicMaxSet(maxzRes[1],maxZ[1])
 
 
