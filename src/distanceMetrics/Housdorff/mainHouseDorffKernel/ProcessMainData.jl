@@ -135,6 +135,7 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
     
     
     locArr::UInt32 = UInt32(0)
+    # locFloat::Float32 = Float32(0.0)
     isMaskFull::Bool= true
     isMaskEmpty::Bool = true
     isMaskOkForProcessing::Bool = true

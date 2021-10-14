@@ -44,9 +44,9 @@ function getBoolCubeKernel(goldBoolGPU3d
    #incrementing appropriate number of times 
    
     
-    
     #1 - false negative; 2- false positive
     locArr= (Float32(0.0), Float32(0.0))
+    offsetIter= UInt8(1)
     #needed to get the borders in metadata terms - so blocks that have sth of our intrest
     minX =@cuStaticSharedMem(Float32, 1)
     maxX= @cuStaticSharedMem(Float32, 1)
@@ -114,6 +114,9 @@ function getBoolCubeKernel(goldBoolGPU3d
                                 #we need to also collect data about how many fp and fn we have in main part and borders
                                 #important in case of corners we will first analyze z and y dims and z dim on last resort only !
                                 if(fpXOrFn)
+                                    #here we store total count first false nehative, second false positive
+                                    @inbounds locArr[boolGold+ boolSegm*2]+=1                                      
+
                                     if(xdim ==1) #left
                                         incrementAtomFPifTrue(boolSegm,leftFP,leftFN)                                
                                     elseif(xdim == inBlockLoopDims[1] )  # right   
@@ -126,8 +129,6 @@ function getBoolCubeKernel(goldBoolGPU3d
                                         incrementAtomFPifTrue(boolSegm,topFP,topFN)  
                                     elseif(zdim == inBlockLoopDims[3] )  # bottom 
                                         incrementAtomFPifTrue(boolSegm,bottomFP, bottomFN)  
-                                    else #main part
-                                        @inbounds locArr[boolGold+ boolSegm+ boolSegm]+=1                                      
                                     end
                                     isAnyPositive[1]= true #- we just mark that there was some fp or fn in this block 
                                 end#if fpXOrFn       
@@ -146,11 +147,13 @@ function getBoolCubeKernel(goldBoolGPU3d
 
                 #we save data about border data blocks 
                 sync_threads()
-                #we want to invoke this only once 
-                #                IMPORTANT we need to set also the amount of the main part fp and fn by subtracting from totla block count the  border counts
+                @redWitAct(offsetIter,shmemSum,  locArr[1],+,     locArr[2],+ )
+                sync_threads()
+             
+                #now we need to reduce locArr - to get total amount of fp and fn            
+
 
                #save the data about number of fp and fn of this block and accumulate also this sum for global sum 
-
                 @ifXY 1 1 if(isAnyPositive[1]) minX[1]= min(minX[1],xOuter) end
                 @ifXY 2 1 if(isAnyPositive[1]) maxX[1]= max(maxX[1],xOuter) end
                 @ifXY 3 1 if(isAnyPositive[1]) minY[1]= min(minY[1],yOuter) end
@@ -176,12 +179,17 @@ function getBoolCubeKernel(goldBoolGPU3d
                 @ifXY 10 2 if(isAnyPositive[1]) setMetaTopFN(metaData,topFN[1]) end  
 
                 @ifXY 11 2 if(isAnyPositive[1]) setMetaBottomFP(metaData,bottomFP[1]) end  
-                @ifXY 12 2 if(isAnyPositive[1])  setMetaBottomFN(metaData,bottomFN[1]) end  
+                @ifXY 12 2 if(isAnyPositive[1])  setMetaBottomFN(metaData,bottomFN[1]) end   
 
-                @ifXY 1 2 if(isAnyPositive[1]) setMetaDataMainFpCount(metaData,locArr[2], xOuter,yOuter,zOuter) end   
-                @ifXY 1 2 if(isAnyPositive[1]) setMetaDataMainFnCount(metaData,locArr[1], xOuter,yOuter,zOuter) end
+
+                @ifXY 1 3 if(isAnyPositive[1]) setMetaDataTotalFpCount(metaData,locArr[2], xOuter,yOuter,zOuter) end   
+                @ifXY 2 3 if(isAnyPositive[1]) setMetaDataTotalFnCount(metaData,locArr[1], xOuter,yOuter,zOuter) end
+                #now in order to get total count  of fp and fn per block  we will do this subtraction              
+
+                @ifXY 3 3 if(isAnyPositive[1]) setMetaDataMainFpCount(metaData,locArr[2] -leftFP[1] - rightFP[1]- posteriorFP[1] -anteriorFP[1]- topFP[1] -bottomFP[1] , xOuter,yOuter,zOuter) end   
+                @ifXY 4 3 if(isAnyPositive[1]) setMetaDataMainFnCount(metaData,locArr[1] -leftFN[1] - rightFN[1] -posteriorFN[1]- anteriorFN[1]- topFN[1] -bottomFN[1]   , xOuter,yOuter,zOuter) end
+                
                 locArr= (Float32(0.0), Float32(0.0))
-
 
                 #set the x,y,z coordinates - so we will able to query it efficiently also with linear index
                 #what is important later as we will use only part of meta data this indicies will need to be updated

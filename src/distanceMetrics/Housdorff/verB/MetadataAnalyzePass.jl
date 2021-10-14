@@ -1,8 +1,11 @@
 
+
+
+"""
 For first metadata pass we need already cut the area o boolean arrays that we are intrested in and portion of metadata array that we are intrested in 
 this way indexing will be simpler we will start from 0 and we will reduce memor usage
 
-"""
+
 3) first metadata pass we add to the metadata offset where each block will put its main results and padding results - so all will be stored in result quueue but in diffrent spots
     we need to make ques for paddings longer than number of possible results becouse of possible modifications from neighbouring blocks that can happen simultanously
     we will establish this offsets using atomics- at this pass we will also prepare first work queue with indicies of metadata blocks and booleans indicating is it related to gold pass dilatation step or other pass
@@ -25,17 +28,34 @@ module  MetadataAnalyzePass
 
 """
 we analyze metadate as described above 
-minX, minY,minZ - minimal values of voulme that holds all of the data that is of intrest to us
-maxX,maxY,maxZ  - maximal values of voulme that holds all of the data that is of intrest to us
-metadata - global memory data structure that we analyze
+minX, minY,minZ - minimal indexes of metadata that holds all of the data that is of intrest to us
+maxX,maxY,maxZ  - maximal indexes of metadata that holds all of the data that is of intrest to us
+metaData - global memory data structure that we analyze
 """
 macro analyzeMetadataFirstPass(minX, minY,minZ, maxX,maxY,maxZ, metaData )
         # we need to iterate over all metadata blocks with checks so the blocks can not be full outside the area of intrest defined by  minX, minY,minZ and maxX,maxY,maxZ
-   @iter3d( lopDims = metadataLoopDims
-    ex = begin
-         #inner loop is over the data indicated by metadata
-         metaDataFpcount = getMetaDataFpCount(metaData,x,y,z)
-         metaDataFncount = getMetaDataFnCount(metaData,x,y,z)
+        @metaDataWarpIter  begin
+            #now we upload all data related to amount of data that is of our intrest 
+            @ifXY 1 idY locArr= getMetaLeftFP(metadat)
+            @ifXY 2 idY locArr= getMetaLeftFN(metadat)
+            @ifXY 3 idY locArr=  getMetaRightFP(metadat)
+            @ifXY 4 idY locArr=  getMetaRightFN(metadat)
+            @ifXY 5 idY locArr=  getMetaPosteriorFP(metadat)
+            @ifXY 6 idY locArr=  getMetaPosteriorFN(metadat)
+            @ifXY 7 idY locArr=  getMetaAnteriorFP(metadat)
+            @ifXY 8 idY locArr=   getMetaAnteriorFN(metadat)
+            @ifXY 9 idY locArr=  getMetaTopFP(metadat)
+            @ifXY 10 idY locArr=  getMetaTopFN(metadat)
+            @ifXY 11 idY locArr=  getMetaBottomFP(metadat)
+            @ifXY 12 idY locArr= getMetaBottomFN(metadat)
+            
+            #now we will calculate and writ
+
+         
+         #gets  count of fp, fn in main part
+         
+         getMetaDataMainFpCount
+         getMetaDataMainFnCount
             
          #now we want to set offsets        
     
@@ -47,8 +67,16 @@ macro analyzeMetadataFirstPass(minX, minY,minZ, maxX,maxY,maxZ, metaData )
         
 end      
 
+"""
+this will enable iteration of metadata blocks where each warp will be responsible for single block
+we will use the linear indexing in order to     
+"""
 
-macro 
+macro metaDataWarpIter()
+    linIndex - linear index
+    idY -  thread id of warp that is responsible for this iteration
+    metadat= metaData[x]
+end
 
 
 
