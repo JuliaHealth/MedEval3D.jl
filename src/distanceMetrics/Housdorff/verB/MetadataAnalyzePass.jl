@@ -34,42 +34,54 @@ metaData - global memory data structure that we analyze
 shmemSum - shared memory used primary for reductions 
 globalFpResOffsetCounter, globalFnResOffsetCounter  - counters accessed atomically that points where we want to set the  results from this metadata block
 workQueaueA, workQueaueAcounter
+
 """
 macro analyzeMetadataFirstPass(minX, minY,minZ, maxX,maxY,maxZ, metaData
         ,globalFpResOffsetCounter, globalFnResOffsetCounter )
         # we need to iterate over all metadata blocks with checks so the blocks can not be full outside the area of intrest defined by  minX, minY,minZ and maxX,maxY,maxZ
         @metaDataWarpIter metaData begin
             #now we upload all data related to amount of data that is of our intrest 
-            @unroll for i in 1:16
-                @ifXY i idY locArr= getMetaResFPOrFNcount(i, mataData,linIndex )
+            #as we need to perform basically the same work across all warps - instead on specializing threads in warp we will execute the same fynction across all warps
+            # so warp will execute the same function just with varying data as it should be 
+            @unroll for i in 1:14
+                @exOnWarp i  locArr= getMetaResFPOrFNcount(threadIdxX(), mataData,linIndex )
             end#for
             #now in order to get offsets we need to atomially access the resOffsetCounter - we add to them total fp or fn cout so next blocks will not overwrite the 
             #area that is scheduled for this particular metadata block
-            @ifXY 17 idY shmemSum[idY,1]=   atomicAdd(globalFpResOffsetCounter,   round(getMetaDataTotalFpCount(metadat) *1,5)  )
-            @ifXY 18 idY shmemSum[idY,2]=   atomicAdd( globalFnResOffsetCounter,  round(getMetaDataTotalFnCount(metadat) *1,5 )  )
+            @exOnWarp 15 shmemSum[threadIdxX(),1]=   atomicAdd(globalFpResOffsetCounter,   round(getMetaDataTotalFpCount(metadat,linIndex) *1,5)  )
+            @exOnWarp 16 shmemSum[threadIdxX(),2]=   atomicAdd( globalFnResOffsetCounter,  round(getMetaDataTotalFnCount(metadat,linIndex) *1,5 )  )
             #as we reduced the metadata size we need now to update x,y,z coordinates 
-            @ifXY 19 reduceMetaDataXYZ(metaData, minX,minY,minZ, linIndex  )
+            @exOnWarp 17 reduceMetaDataXYZ(metaData, minX,minY,minZ, linIndex  )
                     
-            sync_warp()
+
+            sync_threads()
             ######  we need to establish is block is active at the first pass block is active simply  when total count of fp and fn is greater than 0 
-            @ifXY 19 if((shmemSum[idY,1]) >0 )  appendToWorkQueue(workQueaueA,workQueaueAcounter, linIndex, false )      end 
-            @ifXY 20 if((shmemSum[idY,2]) >0 )  appendToWorkQueue(workQueaueA,workQueaueAcounter, linIndex, true )      end 
-            @ifXY 21 if((shmemSum[idY,1]+shmemSum[idY,2] ) >0 )  setBlockToActive(metaData,linIndex)     end 
+            @exOnWarp 1 if((shmemSum[idY,1]) >0 )  appendToWorkQueue(workQueaueA,workQueaueAcounter, linIndex, false )      end 
+            @exOnWarp 2 if((shmemSum[idY,2]) >0 )  appendToWorkQueue(workQueaueA,workQueaueAcounter, linIndex, true )      end 
+            @exOnWarp 3 if((shmemSum[idY,1]+shmemSum[idY,2] ) >0 )  setBlockToActive(metaData,linIndex)     end 
 
 
            #####3set offsets
             #now we will calculate and set the result queue offsets for each offset we need to synchronize warps in order to have unique offsets 
-            @unroll for i in 0:7
+            #we can not parallalize it mote            
+            
+            @exOnWarp 4 @unroll for i in 0:7
                     #set fp
-                    @ifXY i*2+1 idY begin value=shmemSum[idY,1]+ round(locArr*1.4); shmemSum[idY,1]= value ; setMetaResOffsets(i*2+1, mataData,linIndex,value )end
-                    #set fn
-                    @ifXY i*2+2 idY begin value=shmemSum[idY,2]+ round(locArr*1.4); shmemSum[idY,1]= value ; setMetaResOffsets(i*2+2, mataData,linIndex,value )end
-                    sync_warp()
-    
+                  value=shmemSum[threadIdxX(),1]+ round(locArr*1.4)
+                  shmemSum[threadIdxX(),1]= value
+                  setMetaResOffsets(i*2+1, mataData,linIndex,value )
+                    end#for
+
+            @exOnWarp 5 @unroll for i in 0:7
+                #set fn
+                value=shmemSum[threadIdxX(),2]+ round(locArr*1.4) #multiply as we can have some entries potentially repeating
+                shmemSum[threadIdxX(),1]= value
+                setMetaResOffsets(i*2+2, mataData,linIndex,value )
             end#for
 
 
         end# outer loop expession  )
+        sync_threads()
         clearSharedMemWarpLong(shmemSum, UInt8(2), Float32(0.0))
         locArr=0
         
@@ -77,14 +89,37 @@ end
 
 
 """
-this will enable iteration of metadata blocks where each warp will be responsible for single block
+this will enable iteration of metadata block
 we will use the linear indexing in order to  make it simpler    
+
+Additionally it will check wheather threadIdxX is <= number of metadata blocks we want to analyze - particularly important in corner cases
+
 """
 
 macro metaDataWarpIter(metaData, ex)
-    linIndex - linear index
-    idY -  thread id of warp that is responsible for this iteration
-    metadat= metaData[x]
+    #first we check weather the thread id of the lane is not bigger than 
+    offset = blockid * something + ...
+    isMaskFull= (threadIdxX()+offset >maxX)#now we have in registers information can this thread can be used to look for ome data ...
+        linIndex - linear index of the block of intrest should be varying in diffrent threadidx
+        idY -  thread id of warp that is responsible for this iteration
+        metadat= metaData[x]
+    
+end
+
+
+"""
+macro will know about the number of available warps as this will equall the  y dimension of thread block
+    now we will supply on what warp we want to execute the function  if the number will be smaller than number of warps 
+    it will be executed on chosen warp otherwise macro will perform modulus operation to establish index that is indicating some 
+    warp that exists  
+    we execute only if isMaskFull is false what indicates that there is a metadata block that is associated with this idX
+    
+"""
+macro exOnWarp(numb, ex)
+if(!isMaskFull)
+    @iY numb ...
+
+   end 
 end
 
 
@@ -101,27 +136,31 @@ will be invoked in order to iterate over the metadata  after some dilatations we
 """
 macro setMEtaDataOtherPasses()
 
+
     @metaDataWarpIter metaData begin
         isMaskOkForProcessing=false
         #first two threads tell about wheather 
-        @ifXY 1 idY isMaskFull = !isBlockFull(metaData, linIndex)
-        @ifXY 2 idY isMaskFull = isBlockToBeActivated(metaData, linIndex)
-        @ifXY 3 idY isMaskFull = isBlockCurrentlyActive(metaData, linIndex)
-
+        @exOnWarp 1 resShmem[1,1] = isBlockFulliInGold(metaData, linIndex)
+        @exOnWarp 2 resShmem[1,2] = isBlockToBeActivatediInGold(metaData, linIndex)
+        @exOnWarp 3 resShmem[1,3] = isBlockCurrentlyActiveiInGold(metaData, linIndex)
+        @exOnWarp 4 resShmem[1,1] = isBlockFullInSegm(metaData, linIndex)
+        @exOnWarp 5 resShmem[1,2] = isBlockToBeActivatedInSegm(metaData, linIndex)
+        @exOnWarp 6 resShmem[1,3] = isBlockCurrentlyActiveInSegm(metaData, linIndex)
         #now we will load the diffrence 
-        @unroll for i in 1:16
-            @ifXY i idY locArr= getCounterDiffrence(numb, mataData,linIndex)
+        @unroll for i in 7:21
+            @exOnWarp i locArr= getCounterDiffrence(numb, mataData,linIndex)
         end#For
         #now in some threads we have booleans needed for telling is mask active and in futher sixteen diffrences of counters that will tell us is there a res list that 
         #increased its  amount of value in last dilatation step if so and  this increase is in some border result list we need to  establish weather we do not have any repeating  results
-        sync_warp()
-        #IMPOTANT check if we can add booleans 
-        @reduceWitActSecondPart(offsetIter,shmemSum,  isMaskFull,+,     locArr,+ )
-        res in second
-        sync_warp()
-        @ifXY 1 idY if(shmemSum[1,1]>0 )
-        shmemSum[1,1]
-        shmemSum[1,2]
+        sync_threads()
+
+        @reduceWitActSecondPart(offsetIter,shmemSum,   locArr,+ )
+        #we set information that block should be activated
+        @exOnWarp 1 if(!resShmem[1,1]  && (resShmem[1,2]  ||  resShmem[1,3])  )   setBlockasCurrentlyActiveInGold(metaData, linIndex)     end
+
+        @exOnWarp 2 if(!resShmem[1,1]  && (resShmem[1,2]  ||  resShmem[1,3])  )   setBlockasCurrentlyActiveInSegm(metaData, linIndex)     end
+        
+        @exOnWarp 3 if(shmemSum[1,1]>0 )
 
         
         isMaskOkForProcessing

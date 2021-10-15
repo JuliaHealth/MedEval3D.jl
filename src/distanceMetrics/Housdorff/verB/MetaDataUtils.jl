@@ -1,22 +1,58 @@
 """
-sets is active of given block to true
+sets is active of given block to true for gold standard pass
 """
-setBlockToActive(metaData,linIndex)
+setBlockToActiveInGold(metaData,linIndex)
 
 """
-true if block is full
+true if block is full for gold standard pass
 """
-isBlockFull(metaData, linIndex)
+isBlockFullInGold(metaData, linIndex)
 
 """
-is block set to be activated
+is block set to be activated for gold standard pass
 """
-isBlockToBeActivated(metaData, linIndex)
+isBlockToBeActivatedInGold(metaData, linIndex)
 
 """
-is block currently Active
+is block currently Active for gold standard pass
 """
-isBlockCurrentlyActive(metaData, linIndex)
+isBlockCurrentlyActiveInGold(metaData, linIndex)
+
+"""
+make is block currently active to true for gold standard pass
+"""
+setBlockasCurrentlyActiveInGold(metaData, linIndex)
+
+
+
+"""
+sets is active of given block to true for not gold pass
+"""
+setBlockToActiveInSegm(metaData,linIndex)
+
+"""
+true if block is full for not gold pass
+"""
+isBlockFullInSegm(metaData, linIndex)
+
+"""
+is block set to be activated for not gold pass
+"""
+isBlockToBeActivatedInSegm(metaData, linIndex)
+
+"""
+is block currently Active for not gold pass
+"""
+isBlockCurrentlyActiveInSegm(metaData, linIndex)
+
+"""
+make is block currently active to true for not gold pass
+"""
+setBlockasCurrentlyActiveInSegm(metaData, linIndex)
+
+
+
+
 
 
 
@@ -102,6 +138,8 @@ accordin numb will invoke function that will give the number of fp and fn in giv
     numb - will  tell what value as seen above we want
     mataData - metadata of data blocks
     linIndex- linear index of given block in metadata
+
+    IMPORTANT if we will have numb above 14 we should just return 0 ///
 
 """
 function getMetaResFPOrFNcount(numb, mataData,linIndex )
