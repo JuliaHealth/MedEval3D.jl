@@ -23,7 +23,7 @@ macro loadMainValues()
         #zIter given in macro as we are iterating in this spot
         sourceShmem[threadIdxX(), threadIdxY(), zIter]                
     end                
-                end #loadMainValues
+end #loadMainValues
                 
                 
 """

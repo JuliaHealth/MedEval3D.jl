@@ -133,8 +133,7 @@ function mainLoopIterationsKernel(reducedArrays
                 else    #at this point we got some 0 in the shmemIter 
                     if(threadIdxX()==1)# sadly only threads with this id are managing the work queue
                         isAnyBiggerThanZero[]=false
-                  --------- probably we need sync here?
-                    end#inner if
+                    end#inner if    
                 end#if    
             end#for    
         end#while

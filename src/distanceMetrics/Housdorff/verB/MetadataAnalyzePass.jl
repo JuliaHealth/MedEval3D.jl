@@ -181,7 +181,7 @@ macro setMEtaDataOtherPasses()
     end    
         sync_threads()
         clearMainShmem(resShmem)
-        
+
         clearSharedMemWarpLong(shmemSum, UInt8(14), Float32(0.0))
         locArr=0
         offsetIter=0
@@ -222,8 +222,7 @@ macro scanForDuplicatesMainPart()
     @unroll for scanIter in 0: cld(shmemSum[34,i],32 )
         # here we are loading data about linear indicies of result in main bool array depending on a queue we are analyzing it will tell about gold or other pas
         if(((scanIter*32) + threadIdxX())< shmemSum[34,resQueueNumb]  )
-            shmemSum[threadIdxX(),resQueueNumb]=  
-                resArray[shmemSum[33,resQueueNumb]+ (scanIter*32) + threadIdxX(),1]  
+            shmemSum[threadIdxX(),resQueueNumb] = resArray[shmemSum[33,resQueueNumb]+ (scanIter*32) + threadIdxX(),1]  
         end
         sync_warp() # now we have 32 linear indicies loaded into the shared memory
         #so we need to load some value into single value into thread and than go over all value in shared memory  
