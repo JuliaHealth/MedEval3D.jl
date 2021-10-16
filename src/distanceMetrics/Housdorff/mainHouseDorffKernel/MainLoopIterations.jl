@@ -99,7 +99,7 @@ function mainLoopIterationsKernel(reducedArrays
     """
     just making easier to invoke it without passing arguments all the time
     """
-    function  innersingleDataBlockPass(ispassGoldd::Bool,currMatadataBlockX::UInt8,currMatadataBlockY::UInt8 ,currMatadataBlockZ::UInt8 )
+    macro  innersingleDataBlockPass(ispassGoldd::Bool,currMatadataBlockX::UInt8,currMatadataBlockY::UInt8 ,currMatadataBlockZ::UInt8 )
         singleDataBlockPass(reducedArrays[ispassGoldd*2+1]
         ,reducedArrays[ispassGoldd*2+2]
         ,iterationNumberShmem[]

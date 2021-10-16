@@ -126,7 +126,7 @@ end
 # ifverr - will return only this expression that is compatible with version number supplied
 ###                                    
 
-function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBeginingX
+function executeDataIterWithPadding(analyzedArr, referenceArray,blockBeginingX
                                 ,blockBeginingY,blockBeginingZ,resShmem,sourceShmem,resArray,resArraysCounter
                                 ,currBlockX,currBlockY,currBlockZ,isPassGold,metaData,metadataDims
                                 ,mainQuesCounter,mainWorkQueue,iterationNumber,debugArr, loopX,loopY,loopZ, dataBlockDims,
