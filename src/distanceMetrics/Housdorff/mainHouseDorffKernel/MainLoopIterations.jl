@@ -57,8 +57,12 @@ function mainLoopIterationsKernel(reducedArrays
     grid_handle = this_grid()
     #storing intermidiate results +2 in order to get the one padding 
     resShmem =  @cuStaticSharedMem(Bool,(34,34,34))
+    #storing values loaded from analyzed array ...
+    sourceShmem =  @cuStaticSharedMem(Bool,(34,34,34))
     #for storing sums for reductions
     shmemSum =  @cuStaticSharedMem(Float32,35,14) # we need this additional 33th an 34th spots
+
+    
     #coordinates of data in main array
     #we will use this to establish weather we should mark  the data block as empty or full ...
     isMaskFull= false
@@ -215,12 +219,8 @@ those should be invoked only once per grid hence it will  be invoked only in fir
 """
 function prepareForNextDilatationStep(iterationNumber,tailCounter,numberOfThreadBlocks,tailParts,mainQuesCounterArr,isOddPassShmem)
     if(blockIdx().x==1)  
-        if(threadIdxY()==8 && threadIdxX()==8 )
-            iterationNumber[1]= CUDA.atomic_inc!(pointer(iterationNumber), UInt16(1))+1
-        end   
-        if(threadIdxY()==9 && threadIdxX()==9 )
-            tailCounter[1]=cld(mainQuesCounterArr[isOddPassShmem[1]+1],(numberOfThreadBlocks+tailParts))*numberOfThreadBlocks +1
-        end   
+        @IfYX 8 8 iterationNumber[1]= CUDA.atomic_inc!(pointer(iterationNumber), UInt16(1))+1
+        @IfYX 9 9 tailCounter[1]=cld(mainQuesCounterArr[isOddPassShmem[1]+1],(numberOfThreadBlocks+tailParts))*numberOfThreadBlocks +1
     end#if
 end#prepareForNextDilatationStep
 
@@ -230,11 +230,7 @@ end#prepareForNextDilatationStep
 load data needed for tail analysis into shared memory
 """
 function loadDataNeededForTailAnalysisToShmem(currentTailPosition,tailCounter )
-
-    if(threadIdxY()==4 && threadIdxX()==4 )
-        currentTailPosition[1]= CUDA.atomic_inc!(pointer(tailCounter), UInt16(1))+1
-    end
-
+    @IfYX 4 4 currentTailPosition[1]= CUDA.atomic_inc!(pointer(tailCounter), UInt16(1))+1
 end#loadDataNeededForTailAnalysisToShmem   
 
 
@@ -244,28 +240,16 @@ loads data at the begining of each dilatation step
 """
 function loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,iterationNumber,positionInMainWorkQueaue,workCounterInshmem,mainQuesCounterArr,isAnyBiggerThanZero,goldToBeDilatated,segmToBeDilatated, resArraysCounters  )
 
-    
-    if(threadIdxX()==2 && threadIdxY()==2)
-        iterationNumberShmem[1]= iterationNumber[1]
-    end    
-
-    if(threadIdxY()==3 && threadIdxX()==3 )
-        positionInMainWorkQueaue[1]=0
-    end
-    if(threadIdxX()==4 && threadIdxY()==4)
+    @IfYX 2 2 iterationNumberShmem[1]= iterationNumber[1]
+    @IfYX 3 3 positionInMainWorkQueaue[1]=0 
+    @IfYX 4 4 begin
         workCounterInshmem[1]= mainQuesCounterArr[isOddPassShmem[1]+1]
         workCounterBiggerThan0[1]= (workCounterInshmem[1]>0)
-    end
-    if(threadIdxX()==5 && threadIdxY()==5)
-        isAnyBiggerThanZero[]=true  
-    end
-    if(threadIdxX()==6 && threadIdxY()==6)
-        goldToBeDilatated[1]=(resArraysCounters[2] < fp[1])
-    end
-    if(threadIdxX()==7 && threadIdxY()==7)
-        segmToBeDilatated[1]=(resArraysCounters[1] < fn[1])
-    end
-    
+                    end 
+    @IfYX 5 5 isAnyBiggerThanZero[]=true  
+    @IfYX 6 6 goldToBeDilatated[1]=(resArraysCounters[2] < fp[1])
+    @IfYX 7 7  segmToBeDilatated[1]=(resArraysCounters[1] < fn[1])
+
 end
 
 """

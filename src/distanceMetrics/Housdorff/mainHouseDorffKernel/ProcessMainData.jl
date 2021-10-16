@@ -119,18 +119,17 @@ end
     
     
 ####to 3d iter data 
-      ---- to iteration3d we can get a function from macro to a generalized function and then produce multiple macros that will be chosen  based on multiple dispatch
-         same will get the macro iter3d with val so value will also be available  also we need to   we can also specify bounds safe and not safe variant - what will reduce number of ifs
-                    - also we can consider 
-    ----------- need to add in 3 dim iter a possibility to customize the way how we define offsets in x,y,z so instead of grid or block dim we need to have ability to do it separately as extra arguments
-ifverr - will return only this expression that is compatible with version number supplied
+#       ---- to iteration3d we can get a function from macro to a generalized function and then produce multiple macros that will be chosen  based on multiple dispatch
+#          same will get the macro iter3d with val so value will also be available  also we need to   we can also specify bounds safe and not safe variant - what will reduce number of ifs
+#                     - also we can consider 
+#     ----------- need to add in 3 dim iter a possibility to customize the way how we define offsets in x,y,z so instead of grid or block dim we need to have ability to do it separately as extra arguments
+# ifverr - will return only this expression that is compatible with version number supplied
 ###                                    
 
-privateResCounter, blockMaxRes - 
 function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBeginingX
                                 ,blockBeginingY,blockBeginingZ,resShmem,sourceShmem,resArray,resArraysCounter
                                 ,currBlockX,currBlockY,currBlockZ,isPassGold,metaData,metadataDims
-                                ,mainQuesCounter,mainWorkQueue,iterationNumber,debugArr, loopX,loopY,loopZ, dataBlockDims
+                                ,mainQuesCounter,mainWorkQueue,iterationNumber,debugArr, loopX,loopY,loopZ, dataBlockDims,
                                 privateResCounter, blockResCounter)
     
     
@@ -138,35 +137,35 @@ function executeDataIterFirstPassWithPadding(analyzedArr, referenceArray,blockBe
     # locFloat::Float32 = Float32(0.0)
     isMaskFull::Bool= true
     isMaskOkForProcessing::Bool = true
-    offset = UInt8(1)
+    offset = 1
 
 
     ############## upload data
   ############## upload data
         ###step 1            
-@loadMainValues
+    @loadMainValues
                                         
     syncthreads()
-        ---------  can be skipped if we have the block with already all results analyzed - we know it from block private counter
-if(privateResCounter[1]<blockMaxRes[1])
-   @validateData 
-end                  
+ #       ---------  can be skipped if we have the block with already all results analyzed - we know it from block private counter
+    if(privateResCounter[1]<blockMaxRes[1])
+    @validateData 
+    end                  
     ##step 2  
     ########## check data aprat from padding
   
      ################################################################################################################################ 
      #processing padding
-    --- so here we utilize iter3 with 1 dim fihed 
+  #  --- so here we utilize iter3 with 1 dim fihed 
 @unroll for  dim in 1:3, numb in [1,34]              
   @iter3dFixed dim numb if( isPaddingValToBeValidated(dir,analyzedArr, x,y,z ))
      innerValidate(analyzedArr,referenceArray,x,y,z,privateResArray,privateResCounter,iterationnumber,sourceShmem  )
-      --- here we need also to set appropriate value in metadata marking that block in given direction marked as to be acivated from padding     all still need to check is th ere any block at all
-                  so check metadata dims
+   #   --- here we need also to set appropriate value in metadata marking that block in given direction marked as to be acivated from padding     all still need to check is th ere any block at all
+    #              so check metadata dims
   end#if       
  end#for
 offset = UInt16(1)
 @ifverr zzz   @reduce(isMaskFull,&,isMaskEmpty,&)  | @reduce(isMaskFull,&)        
-@ifverr zzz  ---here send to appropriate spots of metadata 
+@ifverr zzz  #---here send to appropriate spots of metadata 
                       if(threadIdxY()==5 && threadIdxX()==5 && (resShmem[2,2,6] || resShmem[2,2,7]))
             metaData[currBlockX,currBlockY,currBlockZ,isPassGold+1]=false # we set is inactive 
         end#if   
