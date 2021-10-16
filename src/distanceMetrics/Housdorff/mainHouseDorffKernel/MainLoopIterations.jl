@@ -114,7 +114,6 @@ function mainLoopIterationsKernel(reducedArrays
         ,mainWorkQueueArr[!isOddPassShmem[]+1]
         ,resArrays[ispassGoldd+1]
         ,resArraysCounters[ispassGoldd+1]  )
-    end    
 
     loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,iterationNumber,positionInMainWorkQueaue,workCounterInshmem,mainQuesCounterArr,isAnyBiggerThanZero,goldToBeDilatated,segmToBeDilatated, resArraysCounters  )
     sync_threads()

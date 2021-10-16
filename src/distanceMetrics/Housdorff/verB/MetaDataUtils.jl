@@ -65,13 +65,19 @@ setBlockasCurrentlyActiveInSegm(metaData, linIndex)
 10)   Top FN  
 11)   Bottom FP  
 12)   Bottom FN  
-13)   Data Main Fp  
-14)   Data Main Fn  
+13)   Total block Fp  
+14)   Total block Fn  
 checks is the total counter for the given result queue is smaller than the total amount of fp or fn for given list 
 and sets appropriate variable isTpBeAnalyzed 
+Important!!! we need to take into account corners so if we look from the top we only care of the top process  
+    or we also needs tops of the sides and anterior posterior paddings? - this needs to be adressed
 """
-setIstoBeAnalyzed(numb, mataData,linIndex) 
+macro setIstoBeAnalyzed() 
 
+
+    
+
+end
 
 
 

@@ -240,168 +240,168 @@ function getBoolCubeKernel(goldBoolGPU3d
    return  
    end
 
-"""
-add value to the shared memory in the position i, x where x is 1 ,2 or 3 and is calculated as described below
-boolGold & boolSegm + boolGold +1 will evaluate to 
-    ⊻- xor gate 
-    1 in case of false negative
-    2 in case of false positive
-x,y,z - the coordinates we are currently in 
+# """
+# add value to the shared memory in the position i, x where x is 1 ,2 or 3 and is calculated as described below
+# boolGold & boolSegm + boolGold +1 will evaluate to 
+#     ⊻- xor gate 
+#     1 in case of false negative
+#     2 in case of false positive
+# x,y,z - the coordinates we are currently in 
 
-"""
-@inline function incr_locArr(boolGold::Bool
-                            ,boolSegm::Bool
-                            ,locArr::MVector{6, UInt16}
-                            ,x,y,z
-                            ,reducedGoldA
-                            ,reducedSegmA
-                            ,reducedGoldB
-                            ,reducedSegmB
-                            ,anyPositive)
-    #first we need the flase positives and false negatives - this will write also true positive - but later we will 
-    @inbounds locArr[boolGold+ boolSegm+ boolSegm]+=(boolGold  ⊻ boolSegm)
-    #in case some is positive we can go futher with looking for max,min in dims and add to the new reduced boolean arrays waht we are intrested in  
-    if(boolGold  || boolSegm)
-    #locArr  0 - false negative; 1- false positive; 2 -minx; 3 max x; 4 miny; 5 maxy
-    locArr[3]= min(locArr[3],x)
-    locArr[4]= max(locArr[4],x)
-    locArr[5]= min(locArr[5],y)
-    locArr[6]= max(locArr[6],y)
+# """
+# @inline function incr_locArr(boolGold::Bool
+#                             ,boolSegm::Bool
+#                             ,locArr::MVector{6, UInt16}
+#                             ,x,y,z
+#                             ,reducedGoldA
+#                             ,reducedSegmA
+#                             ,reducedGoldB
+#                             ,reducedSegmB
+#                             ,anyPositive)
+#     #first we need the flase positives and false negatives - this will write also true positive - but later we will 
+#     @inbounds locArr[boolGold+ boolSegm+ boolSegm]+=(boolGold  ⊻ boolSegm)
+#     #in case some is positive we can go futher with looking for max,min in dims and add to the new reduced boolean arrays waht we are intrested in  
+#     if(boolGold  || boolSegm)
+#     #locArr  0 - false negative; 1- false positive; 2 -minx; 3 max x; 4 miny; 5 maxy
+#     locArr[3]= min(locArr[3],x)
+#     locArr[4]= max(locArr[4],x)
+#     locArr[5]= min(locArr[5],y)
+#     locArr[6]= max(locArr[6],y)
     
-    #CUDA.@cuprint " locArr A $(locArr[1]) B $(locArr[2])  C $(locArr[3]) D $(locArr[4]) E $(locArr[5]) F $(locArr[6])  x $x y $y z $z  \n"    
+#     #CUDA.@cuprint " locArr A $(locArr[1]) B $(locArr[2])  C $(locArr[3]) D $(locArr[4]) E $(locArr[5]) F $(locArr[6])  x $x y $y z $z  \n"    
 
-    #passing data to new arrays needed for running final algorithm
-    reducedGoldA[x,y,z]=boolGold    
-    reducedSegmA[x,y,z]=boolSegm    
-    reducedGoldB[x,y,z]=boolGold    
-    reducedSegmB[x,y,z]=boolSegm    
+#     #passing data to new arrays needed for running final algorithm
+#     reducedGoldA[x,y,z]=boolGold    
+#     reducedSegmA[x,y,z]=boolSegm    
+#     reducedGoldB[x,y,z]=boolGold    
+#     reducedSegmB[x,y,z]=boolSegm    
     
-    #anyPositive[1]=true
-    end    
+#     #anyPositive[1]=true
+#     end    
    
-    return true
-end
-"""
-get which warp it is in a block and which lane in warp 
-"""
-function getWidAndLane(threadIdx)::Tuple{UInt8, UInt8}
-      return fldmod1(threadIdx,32)
-end
+#     return true
+# end
+# """
+# get which warp it is in a block and which lane in warp 
+# """
+# function getWidAndLane(threadIdx)::Tuple{UInt8, UInt8}
+#       return fldmod1(threadIdx,32)
+# end
 
-"""
-creates shared memory and initializes it to 0
-wid - the number of the warp in the block
-"""
-function createAndInitializeShmem(wid, threadId,lane)
-   #for storing results from warp reductions
-   shmemSum = @cuStaticSharedMem(UInt16, (33,6))
+# """
+# creates shared memory and initializes it to 0
+# wid - the number of the warp in the block
+# """
+# function createAndInitializeShmem(wid, threadId,lane)
+#    #for storing results from warp reductions
+#    shmemSum = @cuStaticSharedMem(UInt16, (33,6))
 
-    if(wid==1)
-        shmemSum[lane,1]=0
-    elseif(wid==2)
-        shmemSum[lane,2]=0
-    elseif(wid==3)
-        shmemSum[lane,3]=10000 # in case of minimum we must start high    
-    elseif(wid==4)
-        shmemSum[lane,4]=0       
-    elseif(wid==5)
-        shmemSum[lane,5]=10000 # in case of minimum we must start high            
-    elseif(wid==6)
-        shmemSum[lane,6]=0
-    end            
+#     if(wid==1)
+#         shmemSum[lane,1]=0
+#     elseif(wid==2)
+#         shmemSum[lane,2]=0
+#     elseif(wid==3)
+#         shmemSum[lane,3]=10000 # in case of minimum we must start high    
+#     elseif(wid==4)
+#         shmemSum[lane,4]=0       
+#     elseif(wid==5)
+#         shmemSum[lane,5]=10000 # in case of minimum we must start high            
+#     elseif(wid==6)
+#         shmemSum[lane,6]=0
+#     end            
 
-return shmemSum
+# return shmemSum
 
-end#createAndInitializeShmem
-
-
-"""
-reduction across the warp and adding to appropriate spots in the  shared memory
-"""
-function firstReduce(locArr,shmemSum,wid)
-    #locArr  0 - false negative; 1- false positive; 2 -minx; 3 max x; 4 miny; 5 maxy
-    @inbounds shmemSum[wid,1] = reduce_warp(locArr[1],32)
-    @inbounds shmemSum[wid,2] = reduce_warp(locArr[2],32)
-
-    @inbounds shmemSum[wid,3] = reduce_warp_min(locArr[3],32)
-    @inbounds shmemSum[wid,4] = reduce_warp_max(locArr[4],32)
-    @inbounds shmemSum[wid,5] = reduce_warp_min(locArr[5],32)
-    @inbounds shmemSum[wid,6] = reduce_warp_max(locArr[6],32)
-
-#    CUDA.@cuprint " shmemSum[wid,3] $(shmemSum[wid,3])  shmemSum[wid,4] $(shmemSum[wid,4] ) shmemSum[wid,5]  $(shmemSum[wid,5])  shmemSum[wid,6]  $(shmemSum[wid,6])   \n"
+# end#createAndInitializeShmem
 
 
-end#firstReduce
+# """
+# reduction across the warp and adding to appropriate spots in the  shared memory
+# """
+# function firstReduce(locArr,shmemSum,wid)
+#     #locArr  0 - false negative; 1- false positive; 2 -minx; 3 max x; 4 miny; 5 maxy
+#     @inbounds shmemSum[wid,1] = reduce_warp(locArr[1],32)
+#     @inbounds shmemSum[wid,2] = reduce_warp(locArr[2],32)
 
-"""
-sets the final block amount of true positives, false positives and false negatives and saves it
-to the  array representing each slice, 
-wid - the warp in a block we want to use
-numb - number associated with constant - used to access shared memory for example
-chosenWid - on which block we want to make a reduction to happen
-intermediateRes - array with intermediate -  slice wise results
-singleREs - the final  constant holding image witde values (usefull for example for debugging)
-shmemSum - shared memory where we get the  results to be reduced now and to which we will also save the output
-blockId - number related to block we are currently in 
-lane - the lane in the warp
-"""
-function getSecondBlockReduceSum(chosenWid,numb,wid, singleREs,shmemSum,blockId,lane)
-    if(wid==chosenWid )
-        shmemSum[33,numb] = reduce_warp(shmemSum[lane,numb],32 )
+#     @inbounds shmemSum[wid,3] = reduce_warp_min(locArr[3],32)
+#     @inbounds shmemSum[wid,4] = reduce_warp_max(locArr[4],32)
+#     @inbounds shmemSum[wid,5] = reduce_warp_min(locArr[5],32)
+#     @inbounds shmemSum[wid,6] = reduce_warp_max(locArr[6],32)
+
+# #    CUDA.@cuprint " shmemSum[wid,3] $(shmemSum[wid,3])  shmemSum[wid,4] $(shmemSum[wid,4] ) shmemSum[wid,5]  $(shmemSum[wid,5])  shmemSum[wid,6]  $(shmemSum[wid,6])   \n"
+
+
+# end#firstReduce
+
+# """
+# sets the final block amount of true positives, false positives and false negatives and saves it
+# to the  array representing each slice, 
+# wid - the warp in a block we want to use
+# numb - number associated with constant - used to access shared memory for example
+# chosenWid - on which block we want to make a reduction to happen
+# intermediateRes - array with intermediate -  slice wise results
+# singleREs - the final  constant holding image witde values (usefull for example for debugging)
+# shmemSum - shared memory where we get the  results to be reduced now and to which we will also save the output
+# blockId - number related to block we are currently in 
+# lane - the lane in the warp
+# """
+# function getSecondBlockReduceSum(chosenWid,numb,wid, singleREs,shmemSum,blockId,lane)
+#     if(wid==chosenWid )
+#         shmemSum[33,numb] = reduce_warp(shmemSum[lane,numb],32 )
         
-      #probably we do not need to sync warp as shfl dow do it for us         
-      if(lane==1)
-          @inbounds @atomic singleREs[]+=shmemSum[33,numb]    
-      end    
-    #   if(lane==3)
-    #     #ovewriting the value 
-    #     @inbounds shmemSum[1,numb]=vall
-    #   end     
+#       #probably we do not need to sync warp as shfl dow do it for us         
+#       if(lane==1)
+#           @inbounds @atomic singleREs[]+=shmemSum[33,numb]    
+#       end    
+#     #   if(lane==3)
+#     #     #ovewriting the value 
+#     #     @inbounds shmemSum[1,numb]=vall
+#     #   end     
 
-  end  
+#   end  
 
 
-end#getSecondBlockReduce
-function getSecondBlockReduceMin(chosenWid,numb,wid, singleREs::CuDeviceVector{UInt32, 1},shmemSum,blockId,lane)
-    if(wid==chosenWid )
-        shmemSum[33,numb] = reduce_warp_min(shmemSum[lane,numb],32 )
+# end#getSecondBlockReduce
+# function getSecondBlockReduceMin(chosenWid,numb,wid, singleREs::CuDeviceVector{UInt32, 1},shmemSum,blockId,lane)
+#     if(wid==chosenWid )
+#         shmemSum[33,numb] = reduce_warp_min(shmemSum[lane,numb],32 )
         
 
-      #probably we do not need to sync warp as shfl dow do it for us         
-      if(lane==1)
-        @inbounds CUDA.atomic_min!(pointer(singleREs),UInt32(shmemSum[33,numb]))    
-      end    
-    #   if(lane==3)
-    #     #ovewriting the value 
-    #     @inbounds shmemSum[1,numb]=vall
-    #   end     
+#       #probably we do not need to sync warp as shfl dow do it for us         
+#       if(lane==1)
+#         @inbounds CUDA.atomic_min!(pointer(singleREs),UInt32(shmemSum[33,numb]))    
+#       end    
+#     #   if(lane==3)
+#     #     #ovewriting the value 
+#     #     @inbounds shmemSum[1,numb]=vall
+#     #   end     
 
-  end  
+#   end  
 
-end#getSecondBlockReduce
-function getSecondBlockReduceMax(chosenWid,numb,wid, singleREs::CuDeviceVector{UInt32, 1},shmemSum,blockId,lane,singleREsMin::CuDeviceVector{UInt32, 1},singleREsMax::CuDeviceVector{UInt32, 1})
-    if(wid==chosenWid )
-        shmemSum[33,numb] = reduce_warp_max(shmemSum[lane,numb],32 )
+# end#getSecondBlockReduce
+# function getSecondBlockReduceMax(chosenWid,numb,wid, singleREs::CuDeviceVector{UInt32, 1},shmemSum,blockId,lane,singleREsMin::CuDeviceVector{UInt32, 1},singleREsMax::CuDeviceVector{UInt32, 1})
+#     if(wid==chosenWid )
+#         shmemSum[33,numb] = reduce_warp_max(shmemSum[lane,numb],32 )
         
-      #probably we do not need to sync warp as shfl dow do it for us         
-      if(lane==1)
-        @inbounds CUDA.atomic_max!(pointer(singleREs),UInt32(shmemSum[33,numb]))   
-      end    
-      if(lane==3 && shmemSum[33,numb]>0)
-        @inbounds CUDA.atomic_min!(pointer(singleREsMin),UInt32(blockId))   
-      end  
-      if(lane==4&& shmemSum[33,numb]>0)
-        @inbounds CUDA.atomic_max!(pointer(singleREsMax),UInt32(blockId))   
-      end 
+#       #probably we do not need to sync warp as shfl dow do it for us         
+#       if(lane==1)
+#         @inbounds CUDA.atomic_max!(pointer(singleREs),UInt32(shmemSum[33,numb]))   
+#       end    
+#       if(lane==3 && shmemSum[33,numb]>0)
+#         @inbounds CUDA.atomic_min!(pointer(singleREsMin),UInt32(blockId))   
+#       end  
+#       if(lane==4&& shmemSum[33,numb]>0)
+#         @inbounds CUDA.atomic_max!(pointer(singleREsMax),UInt32(blockId))   
+#       end 
       
-    #   if(lane==3)
-    #     #ovewriting the value 
-    #     @inbounds shmemSum[1,numb]=vall
-    #   end     
+#     #   if(lane==3)
+#     #     #ovewriting the value 
+#     #     @inbounds shmemSum[1,numb]=vall
+#     #   end     
 
-  end  
+#   end  
 
-end#getSecondBlockReduce
+# end#getSecondBlockReduce
 
 # function getSecondBlockReduceForZ(chosenWid,numb,wid, singleREsMin::CuDeviceVector{UInt32, 1},singleREsMax::CuDeviceVector{UInt32, 1},value,lane)
 #     if(wid==chosenWid )

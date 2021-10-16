@@ -162,10 +162,9 @@ macro setMEtaDataOtherPasses()
                 end #@exOnWarp
         end#for
 
-        #here we load the diffrence between current counter and 
-        @unroll for i in 15:29
-            @exOnWarp i setIstoBeAnalyzed(numb, mataData,linIndex) 
-        end#for
+        #here we load data about wheather there is anything to be validated here - we save data so it can be read from the perspective of this block
+        #and the blocks aroud that will want to analyze paddings
+        @setIsToBeValidated()
 
         #now in some threads we have booleans needed for telling is mask active and in futher sixteen diffrences of counters that will tell us is there a res list that 
         #increased its  amount of value in last dilatation step if so and  this increase is in some border result list we need to  establish weather we do not have any repeating  results
@@ -186,6 +185,15 @@ macro setMEtaDataOtherPasses()
         locArr=0
         offsetIter=0
 end
+
+
+macro setIsToBeValidated()
+
+@unroll for i in 15:29
+    @exOnWarp i setIstoBeAnalyzed(numb, mataData,linIndex) 
+end#for
+
+end#setIsToBeValidated
 
 """
 after previous sync threads we already have the number of how much we increased number of results  relative to previous dilatation step
