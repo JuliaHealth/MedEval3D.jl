@@ -57,11 +57,15 @@ function mainLoopIterationsKernel(reducedArrays
     grid_handle = this_grid()
     #storing intermidiate results +2 in order to get the one padding 
     resShmem =  @cuStaticSharedMem(Bool,(34,34,34))
+    #for storing sums for reductions
+    shmemSum =  @cuStaticSharedMem(Float32,35,14) # we need this additional 33th an 34th spots
     #coordinates of data in main array
     #we will use this to establish weather we should mark  the data block as empty or full ...
-    isMaskFull= zeros(MVector{1,Bool})
+    isMaskFull= false
     #here we will store in registers data uploaded from mask for later verification wheather we should send it or not
-    locArr= zeros(MVector{32,Bool})
+    locArr= Int32(0)
+    offsetIter = UInt16(0)
+
     #we will store here the data about the blocks that we want to process 
     toIterWorkQueueShmem =  @cuStaticSharedMem(UInt8,32,4)
     #indicates where we are in general work queue in given moment if we are iterating over part of work queue owned by this thread block
@@ -71,8 +75,7 @@ function mainLoopIterationsKernel(reducedArrays
     #used for iterating over a tail
     tailCounterInShmem= @cuStaticSharedMem(UInt16,1)
     workCounterInshmem= @cuStaticSharedMem(UInt16,1)
-    tailCounterInShmem[1]=0
-    workCounterInshmem[1]=0
+
     #loading data to shared memory from global about is it even or odd pass
     isOddPassShmem =  @cuStaticSharedMem(Bool,1)
     iterationNumberShmem =  @cuStaticSharedMem(UInt16,1)
@@ -83,8 +86,12 @@ function mainLoopIterationsKernel(reducedArrays
     segmToBeDilatated =  @cuStaticSharedMem(Bool,1)
     #true when we have more than 0 blocks to analyze in next iteration
     workCounterBiggerThan0 =  @cuStaticSharedMem(Bool,1) 
-    
-    
+
+    #resetting
+    @ifXY 1 1 tailCounterInShmem[1]=0
+    @ifXY 2 1 workCounterInshmem[1]=0
+
+
     """
     just making easier to invoke it without passing arguments all the time
     """

@@ -136,143 +136,232 @@ will be invoked in order to iterate over the metadata  after some dilatations we
 """
 macro setMEtaDataOtherPasses()
 
-
+    locArr=0
+    offsetIter=0
+    isMaskFull=false
     @metaDataWarpIter metaData begin
         isMaskOkForProcessing=false
         #first two threads tell about wheather 
-        @exOnWarp 1 resShmem[1,1] = isBlockFulliInGold(metaData, linIndex)
-        @exOnWarp 2 resShmem[1,2] = isBlockToBeActivatediInGold(metaData, linIndex)
-        @exOnWarp 3 resShmem[1,3] = isBlockCurrentlyActiveiInGold(metaData, linIndex)
-        @exOnWarp 4 resShmem[1,1] = isBlockFullInSegm(metaData, linIndex)
-        @exOnWarp 5 resShmem[1,2] = isBlockToBeActivatedInSegm(metaData, linIndex)
-        @exOnWarp 6 resShmem[1,3] = isBlockCurrentlyActiveInSegm(metaData, linIndex)
-        #now we will load the diffrence 
-        @unroll for i in 7:21
-            @exOnWarp i locArr= getCounterDiffrence(numb, mataData,linIndex)
-        end#For
+        @exOnWarp 30 resShmem[threadIdxX()+1,2,2] = isBlockFulliInGold(metaData, linIndex)
+        @exOnWarp 31 resShmem[threadIdxX()+1,3,2] = isBlockToBeActivatediInGold(metaData, linIndex)
+        @exOnWarp 32 resShmem[threadIdxX()+1,4,2] = isBlockCurrentlyActiveiInGold(metaData, linIndex)
+        @exOnWarp 33 resShmem[threadIdxX()+1,5,2] = isBlockFullInSegm(metaData, linIndex)
+        @exOnWarp 34 resShmem[threadIdxX()+1,6,2] = isBlockToBeActivatedInSegm(metaData, linIndex)
+        @exOnWarp 35 resShmem[threadIdxX()+1,7,2] = isBlockCurrentlyActiveInSegm(metaData, linIndex)
+        #now we will load the diffrence between old and current counter
+        @unroll for i in 1:12#12 not 14 as we are intrested onli in border result queues
+            @exOnWarp i begin
+                #store result in registers
+                #store result in registers (we are reusing some variables)
+                #old count
+                locArr = getOldCount(numb, mataData,linIndex)
+                #diffrence new - old 
+                offsetIter= geNewCount(numb, mataData,linIndex)- locArr
+                # enable access to information is it bigger than 0 to all threads in block
+                resShmem[threadIdxX()+1,i+1,3] = offsetIter>0
+                end #@exOnWarp
+        end#for
+
+        #here we load the diffrence between current counter and 
+        @unroll for i in 15:29
+            @exOnWarp i setIstoBeAnalyzed(numb, mataData,linIndex) 
+        end#for
+
         #now in some threads we have booleans needed for telling is mask active and in futher sixteen diffrences of counters that will tell us is there a res list that 
         #increased its  amount of value in last dilatation step if so and  this increase is in some border result list we need to  establish weather we do not have any repeating  results
         sync_threads()
 
-        @reduceWitActSecondPart(offsetIter,shmemSum,   locArr,+ )
-        #we set information that block should be activated
-        @exOnWarp 1 if(!resShmem[1,1]  && (resShmem[1,2]  ||  resShmem[1,3])  )   setBlockasCurrentlyActiveInGold(metaData, linIndex)     end
-
-        @exOnWarp 2 if(!resShmem[1,1]  && (resShmem[1,2]  ||  resShmem[1,3])  )   setBlockasCurrentlyActiveInSegm(metaData, linIndex)     end
-        
-        @exOnWarp 3 if(shmemSum[1,1]>0 )
-
-        
-        isMaskOkForProcessing
-        #now we will check 
-        #we are reusing isMaskOkForProcessing boolean
-
-        isMaskFull
-
+        #we set information that block should be activated in gold segm
+        @exOnWarp 1 if(!resShmem[threadIdxX()+1,2,2]  && (resShmem[threadIdxX()+1,3,2]  ||  resShmem[threadIdxX()+1,4,2])  )   setBlockasCurrentlyActiveInGold(metaData, linIndex)     end
+        @exOnWarp 2 if(!resShmem[threadIdxX()+1,5,2]  && (resShmem[threadIdxX()+1,6,2]  ||  resShmem[threadIdxX()+1,7,2])  )   setBlockasCurrentlyActiveInSegm(metaData, linIndex)     end
+        #after previous sync threads we already have the number of how much we increased number of results  relative to previous dilatation step
+        #now we need to go through  those numbers and in case some of the border queues were incremented we need to analyze those added entries to establish is there 
+        # any duplicate in case there will be we need to decrement counter and set the corresponding duplicated entry to 0 
+        @scanForDuplicates(locArr, offsetIter) 
     end    
+        sync_threads()
+        clearMainShmem(resShmem)
+        
+        clearSharedMemWarpLong(shmemSum, UInt8(14), Float32(0.0))
+        locArr=0
+        offsetIter=0
+end
 
-    clearSharedMemWarpLong(shmemSum, UInt8(2), Float32(0.0))
-    locArr=0
+"""
+after previous sync threads we already have the number of how much we increased number of results  relative to previous dilatation step
+now we need to go through  those numbers and in case some of the border queues were incremented we need to analyze those added entries to establish is there 
+any duplicate in case there will be we need to decrement counter and set the corresponding duplicated entry to 0 
+"""
+macro scanForDuplicates(oldCount, countDiff) 
+
+    @unroll for resQueueNumb in 1:12 #we have diffrent result queues
+        @exOnWarp resQueueNumb begin
+            @unroll for threadNumber in 1:32 # we need to analyze all thread id x 
+                if( resShmem[warpNumb+1,resQueueNumb+1,3]) # futher actions necessary only if counter diffrence is bigger than 0 
+                    if( threadIdxX()==threadNumber ) #now we need some  values that are in the registers  of the associated thread 
+                        #those will be needed to know what we need to iterate over 
+                        shmemSum[33,resQueueNumb]=  $oldCount 
+                        shmemSum[34,resQueueNumb]=  $countDiff
+                        shmemSum[35,resQueueNumb]=  linIndex
+                    end# if ( threadIdxX()==warpNumb )
+                    
+                    sync_warp()# now we should have the required number for scanning of new values for duplicates
+                    @scanForDuplicatesMainPart()
+                end# resShmem[warpNumb+1,i+1,3]
+            end # for warp number  
+        end #@exOnWarp
+    end#for
+end
+
+"""
+main part of scanninf we are already on a correct warp; we already have old counter value and new counter value available in shared memory
+now we need to access the result queue starting from old counter 
+"""
+macro scanForDuplicatesMainPart()
+    #as we can analyze 32 numbers at once if the amount of new results is bigger we need to do it in multiple passes 
+    @unroll for scanIter in 0: cld(shmemSum[34,i],32 )
+        # here we are loading data about linear indicies of result in main bool array depending on a queue we are analyzing it will tell about gold or other pas
+        if(((scanIter*32) + threadIdxX())< shmemSum[34,resQueueNumb]  )
+            shmemSum[threadIdxX(),resQueueNumb]=  
+                resArray[shmemSum[33,resQueueNumb]+ (scanIter*32) + threadIdxX(),1]  
+        end
+        sync_warp() # now we have 32 linear indicies loaded into the shared memory
+        #so we need to load some value into single value into thread and than go over all value in shared memory  
+        @scanWhenDataInShmem()
+    end# for scanIter 
+
 end
 
 
-isBlockFull(metaData, linIndex)
-isBlockToBeActivated(metaData, linIndex)
+"""
+in this spot we already have 32 (not more at least ) values in shared memory
+we need to now 
+"""
+macro scanWhenDataInShmem()
+    @unroll for tempCount in shmemSum[33,resQueueNumb] :shmemSum[33,resQueueNumb]+shmemSum[34,resQueueNumb]
+        #now we need to make sure that we are not at spot whre this value is legitimite - so this is first occurence
+        if(tempCount!=shmemSum[33,resQueueNumb]+ (scanIter*32) + threadIdxX()  )
+            #finally we iterate over all values in any given thread and compare to associated value in shared memory
+            if(resArray[tempCount,1]  == shmemSum[threadIdxX(),resQueueNumb] )
+                 #if we are here it means that we have duplicated value 
+                @manageDuplicatedValue()
+            end    
+        end    
+    end
+end #scanWhenDataInShmem
+
+"""
+this will be invoked when we have duplicated value in result queue - so we need to 
+    set this value - of linear index to 0 
+    and reduce the counter value 
+"""
+macro  manageDuplicatedValue()
+    resArray[tempCount,1]=0
+    decrCounterByOne(numb, mataData,shmemSum[35,resQueueNumb])
+end    
+
+end
 
 
-HFUtils.clearMainShmem(resShmem)
-        # first we check weather next block is viable for processing
-        @unroll for zIter in 1:6
+
+
+# isBlockFull(metaData, linIndex)
+# isBlockToBeActivated(metaData, linIndex)
+
+
+# HFUtils.clearMainShmem(resShmem)
+#         # first we check weather next block is viable for processing
+#         @unroll for zIter in 1:6
  
-          ----------- what is crucial those actions will be happening on diffrent threads hence when we will reduce it we will know results from all        
+#           ----------- what is crucial those actions will be happening on diffrent threads hence when we will reduce it we will know results from all        
      
-            #we will iterate over all padding planes below way to calculate the next block in all dimensions not counting oblique directions
-            @ifXY 1 zIter isMaskOkForProcessing = ((currBlockX+UInt8(zIter==1)-UInt8(zIter==2))>0)
-            @ifXY 2 zIter @inbounds isMaskOkForProcessing = (currBlockX+UInt8(zIter==1)-UInt8(zIter==2))<=metadataDims[1]
-            @ifXY 3 zIter @inbounds isMaskOkForProcessing = (currBlockY+UInt8(zIter==3)-UInt8(zIter==4))>0
-            @ifXY 4 zIter @inbounds isMaskOkForProcessing = (currBlockY+UInt8(zIter==3)-UInt8(zIter==4))<=metadataDims[2]
-            @ifXY 5 zIter @inbounds isMaskOkForProcessing = (currBlockZ+UInt8(zIter==5)-UInt8(zIter==6))>0
-            @ifXY 6 zIter @inbounds isMaskOkForProcessing = (currBlockZ+UInt8(zIter==5)-UInt8(zIter==6))<=metadataDims[3]
-            @ifXY 7 zIter @inbounds isMaskOkForProcessing = !metaData[currBlockX+UInt8(zIter==1)-UInt8(zIter==2)
-                                                            ,(currBlockY+UInt8(zIter==3)-UInt8(zIter==4))
-                                                            ,(currBlockZ+UInt8(zIter==5)-UInt8(zIter==6)),isPassGold+3]#then we need to check weather mask is already full - in this case we can not activate it 
-            #now we check are all true 
-                 ----------- this can be done by one of the reduction macros    
+#             #we will iterate over all padding planes below way to calculate the next block in all dimensions not counting oblique directions
+#             @ifXY 1 zIter isMaskOkForProcessing = ((currBlockX+UInt8(zIter==1)-UInt8(zIter==2))>0)
+#             @ifXY 2 zIter @inbounds isMaskOkForProcessing = (currBlockX+UInt8(zIter==1)-UInt8(zIter==2))<=metadataDims[1]
+#             @ifXY 3 zIter @inbounds isMaskOkForProcessing = (currBlockY+UInt8(zIter==3)-UInt8(zIter==4))>0
+#             @ifXY 4 zIter @inbounds isMaskOkForProcessing = (currBlockY+UInt8(zIter==3)-UInt8(zIter==4))<=metadataDims[2]
+#             @ifXY 5 zIter @inbounds isMaskOkForProcessing = (currBlockZ+UInt8(zIter==5)-UInt8(zIter==6))>0
+#             @ifXY 6 zIter @inbounds isMaskOkForProcessing = (currBlockZ+UInt8(zIter==5)-UInt8(zIter==6))<=metadataDims[3]
+#             @ifXY 7 zIter @inbounds isMaskOkForProcessing = !metaData[currBlockX+UInt8(zIter==1)-UInt8(zIter==2)
+#                                                             ,(currBlockY+UInt8(zIter==3)-UInt8(zIter==4))
+#                                                             ,(currBlockZ+UInt8(zIter==5)-UInt8(zIter==6)),isPassGold+3]#then we need to check weather mask is already full - in this case we can not activate it 
+#             #now we check are all true 
+#                  ----------- this can be done by one of the reduction macros    
 
-           offset = UInt8(1)
-            @ifY zIter begin 
-                while(offset <UInt8(8)) 
-                    @inbounds isMaskOkForProcessing =  isMaskOkForProcessing & shfl_down_sync(FULL_MASK, isMaskOkForProcessing, offset)
-                    offset<<= 1
-                end #while
-            end# @ifY 
-        #here is the information wheather we want to process next block
-        @ifXY 1 zIter @inbounds resShmem[2,zIter+1,2] = isMaskOkForProcessing
-         end#for zIter   
+#            offset = UInt8(1)
+#             @ifY zIter begin 
+#                 while(offset <UInt8(8)) 
+#                     @inbounds isMaskOkForProcessing =  isMaskOkForProcessing & shfl_down_sync(FULL_MASK, isMaskOkForProcessing, offset)
+#                     offset<<= 1
+#                 end #while
+#             end# @ifY 
+#         #here is the information wheather we want to process next block
+#         @ifXY 1 zIter @inbounds resShmem[2,zIter+1,2] = isMaskOkForProcessing
+#          end#for zIter   
                 
-         sync_threads()#now we should know wheather we are intrested in blocks around
+#          sync_threads()#now we should know wheather we are intrested in blocks around
        
    
             
             
-        # ################################################################################################################################ 
-        #checking is there anything in the padding plane - so we basically do (most of reductions)
-        #values stroing in local registers is there anything in padding associated # becouse we will store it in one int we can pass it at one move of registers
-        locArr=0 #reset for reuse
-               ----------- this was created for cubic 32x32x32 block where one plane of threads can analyze all paddings 
-                   ----------- as in variable size thread blocks some of threads when processing padding will have nothing to do we can think so it will work in this time on the  isMaskForProcessing from above
-        locArr|= resShmem[ 34 ,threadIdxX() , threadIdxY() ] << 1 #RIGHT
-        locArr|= resShmem[1 ,threadIdxX() , threadIdxY()] << 2 #LEFT
-        locArr|= resShmem[threadIdxX() ,34 ,threadIdxY() ] << 3 #ANTERIOR
-        locArr|=  resShmem[ threadIdxX(),1 , threadIdxY()] << 4 #POSTERIOR
-        locArr|= resShmem[ threadIdxX() , threadIdxY() ,1] << 5 #TOP
-        locArr|= resShmem[ threadIdxX() , threadIdxY() ,34] << 6 #BOTTOM
+#         # ################################################################################################################################ 
+#         #checking is there anything in the padding plane - so we basically do (most of reductions)
+#         #values stroing in local registers is there anything in padding associated # becouse we will store it in one int we can pass it at one move of registers
+#         locArr=0 #reset for reuse
+#                ----------- this was created for cubic 32x32x32 block where one plane of threads can analyze all paddings 
+#                    ----------- as in variable size thread blocks some of threads when processing padding will have nothing to do we can think so it will work in this time on the  isMaskForProcessing from above
+#         locArr|= resShmem[ 34 ,threadIdxX() , threadIdxY() ] << 1 #RIGHT
+#         locArr|= resShmem[1 ,threadIdxX() , threadIdxY()] << 2 #LEFT
+#         locArr|= resShmem[threadIdxX() ,34 ,threadIdxY() ] << 3 #ANTERIOR
+#         locArr|=  resShmem[ threadIdxX(),1 , threadIdxY()] << 4 #POSTERIOR
+#         locArr|= resShmem[ threadIdxX() , threadIdxY() ,1] << 5 #TOP
+#         locArr|= resShmem[ threadIdxX() , threadIdxY() ,34] << 6 #BOTTOM
 
-   ----------- this reduction can be done probably together with reduction from step above        
-                #we need to reduce now  the values  of padding vals to establish weather there is any true there if yes we put the neighbour block to be active 
-                    #reduction                   
-                    offset = UInt8(1)
-                    while(offset <32) 
-                        #we load first value from nearby thread 
-                        shuffled = shfl_down_sync(FULL_MASK, locArr, offset)
-                        #we loop over  bits and updating we are intrested weather there is any positive so we use or
-                        @unroll for zIter::UInt8 in UInt8(1):UInt8(6)
-                            locArr|= @inbounds ((shuffled>>zIter & 1) | @inbounds  (locArr>>zIter & 1) ) <<zIter
-                        end#for    
-                        #isMaskOkForProcessing = (isMaskOkForProcessing | 
-                        offset<<= 1
-                    end
+#    ----------- this reduction can be done probably together with reduction from step above        
+#                 #we need to reduce now  the values  of padding vals to establish weather there is any true there if yes we put the neighbour block to be active 
+#                     #reduction                   
+#                     offset = UInt8(1)
+#                     while(offset <32) 
+#                         #we load first value from nearby thread 
+#                         shuffled = shfl_down_sync(FULL_MASK, locArr, offset)
+#                         #we loop over  bits and updating we are intrested weather there is any positive so we use or
+#                         @unroll for zIter::UInt8 in UInt8(1):UInt8(6)
+#                             locArr|= @inbounds ((shuffled>>zIter & 1) | @inbounds  (locArr>>zIter & 1) ) <<zIter
+#                         end#for    
+#                         #isMaskOkForProcessing = (isMaskOkForProcessing | 
+#                         offset<<= 1
+#                     end
 
-                    @unroll for zIter::UInt8 in UInt8(1):UInt8(6)
-                        @ifX 1  resShmem[zIter+1,threadIdxY()+1,3]=  @inbounds  (locArr>>zIter & 1)
-                        #@ifX 1 CUDA.@cuprint " resShmem[zIter+1,threadIdxX()+1,3]   $(resShmem[zIter+1,threadIdxX()+1,3] )   locArr $(locArr) \n" 
-                    end#for  
+#                     @unroll for zIter::UInt8 in UInt8(1):UInt8(6)
+#                         @ifX 1  resShmem[zIter+1,threadIdxY()+1,3]=  @inbounds  (locArr>>zIter & 1)
+#                         #@ifX 1 CUDA.@cuprint " resShmem[zIter+1,threadIdxX()+1,3]   $(resShmem[zIter+1,threadIdxX()+1,3] )   locArr $(locArr) \n" 
+#                     end#for  
                              
-             sync_threads()#now we have partially reduced values marking wheather we have any true in padding         
-                  #  # we get full reductions
-            @unroll for zIter::UInt8 in UInt8(1):UInt8(6)
-                if(resShmem[2,zIter+1,2] )
-                offset = UInt8(1)
-                if(UInt8(threadIdxY())==zIter)
-                    while(offset <32)                        
-                        @inbounds  resShmem[zIter+1,threadIdxX()+1,3] = (resShmem[zIter+1,threadIdxX()+1,3] | shfl_down_sync(FULL_MASK,resShmem[zIter+1,threadIdxX()+1,3], offset))
-                        offset<<= 1
-                    end#while
-                end#if    
-                end#if                          
-            end#for
+#              sync_threads()#now we have partially reduced values marking wheather we have any true in padding         
+#                   #  # we get full reductions
+#             @unroll for zIter::UInt8 in UInt8(1):UInt8(6)
+#                 if(resShmem[2,zIter+1,2] )
+#                 offset = UInt8(1)
+#                 if(UInt8(threadIdxY())==zIter)
+#                     while(offset <32)                        
+#                         @inbounds  resShmem[zIter+1,threadIdxX()+1,3] = (resShmem[zIter+1,threadIdxX()+1,3] | shfl_down_sync(FULL_MASK,resShmem[zIter+1,threadIdxX()+1,3], offset))
+#                         offset<<= 1
+#                     end#while
+#                 end#if    
+#                 end#if                          
+#             end#for
 
-            sync_threads()#now we have fully reduced in resShmem[zIter+1,1+1,3]= resShmem[zIter+1,2,3]
+#             sync_threads()#now we have fully reduced in resShmem[zIter+1,1+1,3]= resShmem[zIter+1,2,3]
     
                 
                 
                 
                 
-                    #updating metadata
-    if(resShmem[2,primaryZiter+1,2] && resShmem[primaryZiter+1,2,3] )   
-        @ifXY 2 primaryZiter @inbounds  metaData[(currBlockX+(primaryZiter==1)-(primaryZiter==2)),(currBlockY+(primaryZiter==3)-(primaryZiter==4)),(currBlockZ+(primaryZiter==5)-(primaryZiter==6)),isPassGold+1]= true
-    end#if
-    sync_warp()
+#                     #updating metadata
+#     if(resShmem[2,primaryZiter+1,2] && resShmem[primaryZiter+1,2,3] )   
+#         @ifXY 2 primaryZiter @inbounds  metaData[(currBlockX+(primaryZiter==1)-(primaryZiter==2)),(currBlockY+(primaryZiter==3)-(primaryZiter==4)),(currBlockZ+(primaryZiter==5)-(primaryZiter==6)),isPassGold+1]= true
+#     end#if
+#     sync_warp()
 
 
     

@@ -52,6 +52,25 @@ setBlockasCurrentlyActiveInSegm(metaData, linIndex)
 
 
 
+"""
+1)   Left FP  
+2)   Left FN  
+3)   Right FP  
+4)   Right FN  
+5)   Posterior FP  
+6)   Posterior FN  
+7)   Anterior FP  
+8)   Anterior FN  
+9)   Top FP  
+10)   Top FN  
+11)   Bottom FP  
+12)   Bottom FN  
+13)   Data Main Fp  
+14)   Data Main Fn  
+checks is the total counter for the given result queue is smaller than the total amount of fp or fn for given list 
+and sets appropriate variable isTpBeAnalyzed 
+"""
+setIstoBeAnalyzed(numb, mataData,linIndex) 
 
 
 
@@ -203,6 +222,47 @@ end
 
 
 
+
+
+"""
+1)   Left FP  
+2)   Left FN  
+3)   Right FP  
+4)   Right FN  
+5)   Posterior FP  
+6)   Posterior FN  
+7)   Anterior FP  
+8)   Anterior FN  
+9)   Top FP  
+10)   Top FN  
+11)   Bottom FP  
+12)   Bottom FN  
+13)   Data Main Fp  
+14)   Data Main Fn  
+get old result counters for the result lsts as seen above 
+"""
+getOldCount(numb, mataData,linIndex)
+
+"""
+1)   Left FP  
+2)   Left FN  
+3)   Right FP  
+4)   Right FN  
+5)   Posterior FP  
+6)   Posterior FN  
+7)   Anterior FP  
+8)   Anterior FN  
+9)   Top FP  
+10)   Top FN  
+11)   Bottom FP  
+12)   Bottom FN  
+13)   Data Main Fp  
+14)   Data Main Fn  
+get new counter value of result queues as specified above
+"""
+geNewCount(numb, mataData,linIndex)
+
+
 """
 1)   Left FP  
 2)   Left FN  
@@ -227,6 +287,29 @@ function getCounterDiffrence(numb, mataData,linIndex)
 end    
 
 
+
+
+"""
+1)   Left FP  
+2)   Left FN  
+3)   Right FP  
+4)   Right FN  
+5)   Posterior FP  
+6)   Posterior FN  
+7)   Anterior FP  
+8)   Anterior FN  
+9)   Top FP  
+10)   Top FN  
+11)   Bottom FP  
+12)   Bottom FN  
+13)   Data Main Fp  
+14)   Data Main Fn  
+
+decrement value of a associated counter (look above ) by 1 
+"""
+function decrCounterByOne(numb, mataData,linIndex)
+
+end   
 
 
 getMetaLeftFPOffset
