@@ -75,13 +75,65 @@ Important!!! we need to take into account corners so if we look from the top we 
 macro setIstoBeAnalyzed() 
 
 
-    
+
 
 end
 
 
+"""
+1)   Left FP  
+2)   Left FN  
+3)   Right FP  
+4)   Right FN  
+5)   Posterior FP  
+6)   Posterior FN  
+7)   Anterior FP  
+8)   Anterior FN  
+9)   Top FP  
+10)   Top FN  
+11)   Bottom FP  
+12)   Bottom FN  
+13)   Total block Fp  
+14)   Total block Fn  
+#in order to be able to skip some of the validations we will load now informations about this block and neighbouring blocks 
+#like for example are there any futher results to be written in this block including border queues
+#and is there sth in border queues of the neighbouring data blocks
+basically give back the booleans that were calculated in setIstoBeAnalyzed
+we will store the results in a corner of res shmem
+"""
+macro getIstoBeAnalyzed(resShmem,metaData,linIndex,isGold)
+
+end
 
 
+"""
+get data is to be analyzed that was set in setIstoBeAnalyzed
+and loaded into res shmem in getIstoBeAnalyzed
+this function only return boolean from resshmem that tell us about wheather it makes sense to analyze the data inside
+    the data block - so it cares about total data block fp or fn not yet covered
+"""
+function getIsTotalFPorFNnotYetCovered(resshmem )
+
+end
+
+
+"""
+We just access data from res shmem that was loaded into resshmem in getIstoBeAnalyzed
+dim can be 1,2,3 and tell in what dimension is the plane of our analysis
+numb may be either 1 or 34  - on this basis we can establish which padding is of our intrest ...
+"""
+function isPaddingToBeAnalyzed(resShmem,dim,numb )
+
+
+end
+
+"""
+sets given block is full property of either gold or other pass 
+    as true
+"""
+function setBlockAsFull(metaData,linIndex, isGoldPass)
+
+end
 
 #first argument metadata second value from shared memory
 setMetaLeftFP
@@ -316,6 +368,44 @@ decrement value of a associated counter (look above ) by 1
 function decrCounterByOne(numb, mataData,linIndex)
 
 end   
+
+"""
+on the basis of linear index we will find the  metadata x,y,Z
+then on the basis of available maxX, maxY, maxZ of metadata we will establish is
+in dimension supplied and in direction known from numb we will return boolean 
+ that will e true if we have some block existing 
+"""
+function isNextBlockExists(metaData,dim, numb ,linIter, isPassGold, maxX,maxY,maxZ)::Bool
+    
+end
+
+"""
+set block is to be activated property to be true 
+"""
+function  setAsToBeActivated(metaData,linIndex,isPassGold)
+
+end   
+
+
+"""
+given metadata it pushes the result to the result list 
+    metadata is needed mainly to push result into correct queue that is described by 
+    appropriate offset and counter
+"""
+function appendResultPadding(metaData, linIndex, x,y,z,iterationnumber, dim,numb)
+
+
+end
+
+
+"""
+we are adding the result to appropriate spot in the result list
+on the basis of the main part offset from the  metadata
+"""
+function appendResultMainPart(metaData, linIndex, x,y,z,iterationnumber, direction)
+
+end #appendResultMainPart
+
 
 
 getMetaLeftFPOffset

@@ -102,11 +102,7 @@ stores the most important part of the kernel where we analyze supplied data bloc
 do the dilatation and add to the result queue
 """
 macro  innersingleDataBlockPass()
-           #clear shared memory 
-           clearMainShmem(resShmem,32)
-           clearPadding(resShmem,32)# we separately clear padding
-           clearSourceShmem(sourceShmem)
-           #in order to be able to skip some of the validations we will load now informations about this block and neighbouring blocks 
+            #in order to be able to skip some of the validations we will load now informations about this block and neighbouring blocks 
            #like for example are there any futher results to be written in this block including border queues
            #and is there sth in border queues of the neighbouring data blocks
            @fillPreValidationsCheck()
@@ -118,6 +114,19 @@ macro  innersingleDataBlockPass()
 end
 
 """
+clearing source shared memory
+"""
+function clearSourceShmem(sourceShmem)
+    krowa
+end#clearSourceShmem
+
+"""
+clears shmem sum taht is used for reductions
+"""
+function clearShmemSum(shmemSum)
+    krowa
+end
+"""
 in order to be able to skip some of the validations we will load now informations about this block and neighbouring blocks 
 like for example are there any futher results to be written in this block including border queues
 and is there sth in border queues of the neighbouring data blocks
@@ -126,7 +135,7 @@ problem is in case of the corners  as becouse of corners it may be included in d
 """
 macro fillPreValidationsCheck()
     #we keep function in metadata utils
-    setIstoBeAnalyzed()
+    getIstoBeAnalyzed(resShmem,metaData,linIndex,isGold)
 
 end#fillPreValidationsCheck
 
@@ -202,6 +211,8 @@ function clearBeforeNextDilatation(locArr,resShmem,oldBlockCounter)
     clearLocArr(locArr)
     clearMainShmem(resShmem)
     clearPadding(resShmem)
+    clearSourceShmem(sourceShmem)
+    clearSharedMemWarpLong(shmemSum, UInt8(14), Float32(0.0))
 end#clearBeforeNextDilatation
 
 """

@@ -1,44 +1,64 @@
-macro executeDataIterWithPadding()
-    locArr::UInt32 = UInt32(0)
-    # locFloat::Float32 = Float32(0.0)
-    isMaskFull::Bool= true
-    isMaskOkForProcessing::Bool = true
-    offset = 1
 
-    ############## upload data
-        ###step 1            
-        @loadMainValues                                 
-        syncthreads()
-        
-     #       ---------  can be skipped if we have the block with already all results analyzed - we know it from block private counter
-        if(privateResCounter[1]<blockMaxRes[1])
-        @validateData 
-        end                  
-        ##step 2  
-        ########## check data aprat from padding
-      
-         ################################################################################################################################ 
-         #processing padding
-      #  --- so here we utilize iter3 with 1 dim fihed 
-    @unroll for  dim in 1:3, numb in [1,34]              
-      @iter3dFixed dim numb if( isPaddingValToBeValidated(dir,analyzedArr, x,y,z ))
-         innerValidate(analyzedArr,referenceArray,x,y,z,privateResArray,privateResCounter,iterationnumber,sourceShmem  )
-       #   --- here we need also to set appropriate value in metadata marking that block in given direction marked as to be acivated from padding     all still need to check is th ere any block at all
-        #              so check metadata dims
-      end#if       
-     end#for
-    offset = UInt16(1)
-    @ifverr zzz   @reduce(isMaskFull,&,isMaskEmpty,&)  | @reduce(isMaskFull,&)        
-    @ifverr zzz  #---here send to appropriate spots of metadata 
-                          if(threadIdxY()==5 && threadIdxX()==5 && (resShmem[2,2,6] || resShmem[2,2,7]))
-                metaData[currBlockX,currBlockY,currBlockZ,isPassGold+1]=false # we set is inactive 
-            end#if   
-            if(threadIdxY()==6 && threadIdxX()==6 && (resShmem[2,2,6] || resShmem[2,2,7]))
-                metaData[currBlockX,currBlockY,currBlockZ,isPassGold+3]=true # we set is as full
-            end#if
-    
+macro executeDataIterWithPadding()
+  #some data cleaning
+  locArr::UInt32 = UInt32(0)
+  # locFloat::Float32 = Float32(0.0)
+  isMaskFull::Bool= true
+  isMaskOkForProcessing::Bool = true
+  offset = 1
+  ############## upload data
+  @loadMainValues                                        
+  sync_threads()
+  ########## check data aprat from padding
+  #can be skipped if we have the block with already all results analyzed 
+  if(getIsTotalFPorFNnotYetCovered(resshmem )   )
+      @validateData() 
+  end                  
+  #processing padding
+  @processPadding()
+  #now in case to establish is the block full we need to reduce the isMaskFull information
+  @establishIsFull()
+  
 end#executeDataIterWithPadding
 
+"""
+we are processing padding 
+"""
+macro processPadding()
+    #so here we utilize iter3 with 1 dim fixed 
+    @unroll for  dim in 1:3, numb in [1,34]              
+        @iter3dFixed dim numb if( isPaddingToBeAnalyzed(resShmem,dim,numb ))
+                if(val)#if value in padding associated with this spot is true
+                    # setting value in global memory
+                    @inbounds  analyzedArr[x,y,z]= true
+                    # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
+                    resShmem[1,1,1]=true
+                    if(@inbounds referenceArray[x,y,z])
+                        appendResultPadding(metaData, linIndex, x,y,z,iterationnumber, dim,numb)
+                end#if
+                #we need to check is next block in given direction exists
+                if(isNextBlockExists(metaData,dim, numb ,linIter, isPassGold, maxX,maxY,maxZ))
+                    if(resShmem[1,1,1])
+                        @ifXY 1 1 setAsToBeActivated(metaData,linIndex,isPassGold)
+                    end    
+                end # if isNextBlockExists       
+            end # if isPaddingToBeAnalyzed   
+        end#iter3dFixed       
+    end#for
+
+end
+
+
+
+"""
+we need to establish is the block full after dilatation step 
+"""
+macro establishIsFull()
+    @redWitAct(offsetIter,shmemSum,  isMaskFull,& )
+    sync_threads()
+    #now if it evaluated to 1 we should save it to metadata 
+    @ifXY 2 2 setBlockAsFull(metaData,linIndex, isGoldPass)
+end#establishIsFull
 
 
 
@@ -93,9 +113,8 @@ next block data to establish could this spot be activated from there
                 #results now are stored in a matrix where first 3 entries are x,y,z coordinates entry 4 is in which iteration we covered it and entry 5 from which direction - this will be used if needed        
                 #privateResCounter privateResArray are holding in metadata blocks results and counter how many results were already added 
                 #in each thread block we will have separate rescounter, and res array for goldboolpass and other pass
-               direction=  @ifverr zzz  getDir(sourceShmem) | 0    
-               @append  privateResArray privateResCounter  [x,y,z,iterationnumber, direction]      
-
+               direction=  getDir(sourceShmem)   
+               appendResultMainPart(metaData, linIndex, x,y,z,iterationnumber, direction)
             end#if
   end#innerValidate 
      
@@ -155,4 +174,24 @@ function processMaskData(maskBool::Bool
     
 end#processMaskData
 
-  
+"""
+now in case we  want later to establish source of the data - would like to find the true distances  not taking the assumption of isometric voxels
+we need to store now data from what direction given voxel was activated what will later gratly simplify the task of finding the true distance 
+we will record first found true voxel from each of six directions 
+                 top 6 
+                bottom 5  
+                left 2
+                right 1 
+                anterior 3
+                posterior 4
+"""
+function getDir(sourceShmem)
+if( @inbounds sourceShmem[threadIdxX(),threadIdxY(),zIter-1]) return 6  end  #up
+if( @inbounds  sourceShmem[threadIdxX(),threadIdxY(),zIter+1]) return 5  end #down
+
+if( @inbounds  sourceShmem[threadIdxX()-1,threadIdxY(),zIter]) return 2  end #left
+if( @inbounds   sourceShmem[threadIdxX()+1,threadIdxY(),zIter]) return 1  end #right
+
+if(  @inbounds  sourceShmem[threadIdxX(),threadIdxY()+1,zIter]) return 3  end #front
+ if( @inbounds  sourceShmem[threadIdxX(),threadIdxY()-1,zIter]) return 4  end #back
+end#getDir

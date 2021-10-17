@@ -107,14 +107,14 @@ end
                     posterior 4
     """
    function getDir(sourceShmem)
-    if( @inbounds resShmem[threadIdxX(),threadIdxY(),zIter-1]) return 6  end  #up
-    if( @inbounds  resShmem[threadIdxX(),threadIdxY(),zIter+1]) return 5  end #down
+    if( @inbounds sourceShmem[threadIdxX(),threadIdxY(),zIter-1]) return 6  end  #up
+    if( @inbounds  sourceShmem[threadIdxX(),threadIdxY(),zIter+1]) return 5  end #down
     
-    if( @inbounds  resShmem[threadIdxX()-1,threadIdxY(),zIter]) return 2  end #left
-    if( @inbounds   resShmem[threadIdxX()+1,threadIdxY(),zIter]) return 1  end #right
+    if( @inbounds  sourceShmem[threadIdxX()-1,threadIdxY(),zIter]) return 2  end #left
+    if( @inbounds   sourceShmem[threadIdxX()+1,threadIdxY(),zIter]) return 1  end #right
 
-    if(  @inbounds  resShmem[threadIdxX(),threadIdxY()+1,zIter]) return 3  end #front
-     if( @inbounds  resShmem[threadIdxX(),threadIdxY()-1,zIter]) return 4  end #back
+    if(  @inbounds  sourceShmem[threadIdxX(),threadIdxY()+1,zIter]) return 3  end #front
+     if( @inbounds  sourceShmem[threadIdxX(),threadIdxY()-1,zIter]) return 4  end #back
   end#getDir
     
     
@@ -132,41 +132,25 @@ function executeDataIterWithPadding(analyzedArr, referenceArray,blockBeginingX
                                 ,mainQuesCounter,mainWorkQueue,iterationNumber,debugArr, loopX,loopY,loopZ, dataBlockDims,
                                 privateResCounter, blockResCounter)
     
-    
+    #some data cleaning
     locArr::UInt32 = UInt32(0)
     # locFloat::Float32 = Float32(0.0)
     isMaskFull::Bool= true
     isMaskOkForProcessing::Bool = true
     offset = 1
-
-
     ############## upload data
-  ############## upload data
-        ###step 1            
-    @loadMainValues
-                                        
+    @loadMainValues                                        
     syncthreads()
- #       ---------  can be skipped if we have the block with already all results analyzed - we know it from block private counter
-    if(privateResCounter[1]<blockMaxRes[1])
-    @validateData 
-    end                  
-    ##step 2  
     ########## check data aprat from padding
-  
-     ################################################################################################################################ 
-     #processing padding
-  #  --- so here we utilize iter3 with 1 dim fihed 
-@unroll for  dim in 1:3, numb in [1,34]              
-  @iter3dFixed dim numb if( isPaddingValToBeValidated(dir,analyzedArr, x,y,z ))
-     innerValidate(analyzedArr,referenceArray,x,y,z,privateResArray,privateResCounter,iterationnumber,sourceShmem  )
-   #   --- here we need also to set appropriate value in metadata marking that block in given direction marked as to be acivated from padding     all still need to check is th ere any block at all
-    #              so check metadata dims
-  end#if       
- end#for
-offset = UInt16(1)
-@ifverr zzz   @reduce(isMaskFull,&,isMaskEmpty,&)  | @reduce(isMaskFull,&)        
-@ifverr zzz  #---here send to appropriate spots of metadata 
-                      if(threadIdxY()==5 && threadIdxX()==5 && (resShmem[2,2,6] || resShmem[2,2,7]))
+    #can be skipped if we have the block with already all results analyzed 
+    if(getIsTotalFPorFNnotYetCovered(resshmem )   )
+        @validateData 
+    end                  
+    #processing padding
+    @processPadding
+
+
+        if(threadIdxY()==5 && threadIdxX()==5 && (resShmem[2,2,6] || resShmem[2,2,7]))
             metaData[currBlockX,currBlockY,currBlockZ,isPassGold+1]=false # we set is inactive 
         end#if   
         if(threadIdxY()==6 && threadIdxX()==6 && (resShmem[2,2,6] || resShmem[2,2,7]))
@@ -177,6 +161,23 @@ offset = UInt16(1)
 end#executeDataIter
 
 
+"""
+we are processing padding 
+"""
+macro processPadding()
+    #so here we utilize iter3 with 1 dim fixed 
+    @unroll for  dim in 1:3, numb in [1,34]              
+        @iter3dFixed dim numb if( isPaddingValToBeValidated(dir,analyzedArr, x,y,z ))
+            if(isPaddingToBeAnalyzed(resShmem,dim,numb ))
+                innerValidate(analyzedArr,referenceArray,x,y,z,privateResArray,privateResCounter,iterationnumber,sourceShmem  )
+                #   --- here we need also to set appropriate value in metadata marking that block in given direction marked as to be acivated from padding     all still need to check is th ere any block at all
+                #              so check metadata dims
+            end    
+
+        end#iter3dFixed       
+    end#for
+
+end
 
 
 

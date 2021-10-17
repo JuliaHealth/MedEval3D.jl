@@ -18,13 +18,14 @@ function clearMainShmem(shmem)
 end#clearMainShmem
 
 """
-clear local array
-"""
-function clearLocArr(locArr)
-    @unroll for i in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
-        locArr[i]=0
+clear source shmem in shared memory """
+function clearSourceShmem(shmem)
+    @unroll for zIter in UInt8(1):UInt8(32)
+         shmem[threadIdxX(),threadIdxY(),zIter]=0
     end#for 
 end#clearMainShmem
+
+
 
 """
 set padding planes to 0 
