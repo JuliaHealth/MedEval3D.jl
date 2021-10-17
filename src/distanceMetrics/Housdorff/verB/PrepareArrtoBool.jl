@@ -18,8 +18,7 @@ we have a and b - becouse the Housdorff distance is defined as 2 pass algorithm
 reducedGold a nd b - the smallest boolean block (3 dim array) that contains all positive entris from both masks
 reducedSegm a nd b- the smallest boolean block (3 dim array) that contains all positive entris from both masks
 numberToLooFor - number we will analyze whether is the same between two sets
-threadNumPerBlock - how many threads should be associated with single block
-
+metaData - sets some basic informations to metaData
 cuda arrays holding just single value wit atomically reduced result
 ,fn,fp
 ,minxRes,maxxRes
@@ -42,7 +41,8 @@ function getBoolCube!(goldBoolGPU3d
     ,reducedGoldA
     ,reducedSegmA
     ,reducedGoldB
-    ,reducedSegmB) where T
+    ,reducedSegmB
+    ,metaData) where T
 
 # we prepare the boolean array of dimensions at the begining the same as the gold standard array - later we will work only on view of it
 
