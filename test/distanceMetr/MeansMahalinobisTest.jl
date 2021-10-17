@@ -8,9 +8,7 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
 
-using Cthulhu
 using Main.BasicPreds, Main.CUDAGpuUtils , Main.MeansMahalinobis, Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils
-using Cthulhu
 nx=512 ; ny=512 ; nz=317
 #first we initialize the metrics on CPU so we will modify them easier
 goldBoolCPU= zeros(Float32,nx,ny,nz); #mimicks gold standard mask
@@ -92,9 +90,9 @@ varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGloba
    # convert to 2D block size and figure out appropriate grid size
     threads = get_threads(config.threads)
     blocks = UInt32(config.blocks)
-    loopXdim = UInt32(cld(maxX, threads[1]))
-    loopYdim = UInt32(cld(maxY, threads[2])) 
-    loopZdim = UInt32(cld(maxZ,blocks )) 
+    loopXdim = UInt32(fld(maxX, threads[1]))
+    loopYdim = UInt32(fld(maxY, threads[2])) 
+    loopZdim = UInt32(fld(maxZ,blocks )) 
 
 #covariancesSliceWise= CUDA.zeros(Float32,12,sizz[3]+1);
 covariancesSliceWiseGold= CUDA.zeros(Float32,6,sizz[3]+1);

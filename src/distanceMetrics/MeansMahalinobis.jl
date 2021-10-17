@@ -250,48 +250,55 @@ sync_threads()
 # our data is stored in covariancesSliceWiseGold and  covariancesSliceWiseSegm   
 #1) variance x 2) covariance xy 3) covariance xz 4) variance y 5) covariance yz 6) variance z this applies to both 
 
-@unroll for i in 0:cld(loopZdim,6) 
-    @unroll for j in 1:6
-        #we need to stay in the existing slices 
-        index = (i*6+j)*gridDim().x+blockIdxX()
-        if(index<arrDims[3])            
-        #first we load data from gold 
-        sumX,sumY,sumZ,count = Float32(0),Float32(0),Float32(0),Float32(0)
-        shmemSum[threadIdxX(),j]=Float32(0.0)
-            if(threadIdxX()<7 )
-                sumx = covariancesSliceWiseGold[threadIdxX(),index]
-            #then from segm 
-            elseif(threadIdxX()<13 )
-                shmemSum[12+threadIdxX() ,1] = covariancesSliceWiseGold[threadIdxX(),index]
-            end #else if  
-            sync_warp()
-            #we set it on diffrent warps
-            @ifXY 1 j shmemSum[1,j]= (sumX+shmemSum[13,j])/(sumY+sumZ)  #common variance x
-            @ifXY 3 j shmemSum[2,j]= (sumX+shmemSum[14,j])/(sumY+sumZ) #common covariance xy
-            @ifXY 5 j shmemSum[3,j] = (sumX+shmemSum[15,j])/(sumY+sumZ)#common covariance xz
-            @ifXY 7 j shmemSum[4,j] = (sumX+shmemSum[16,j])/(sumY+sumZ) #common variance y
-            @ifXY 10 j shmemSum[5,j] = (sumX+shmemSum[17,j])/(sumY+sumZ) #common covariance yz
-            @ifXY 12 j shmemSum[6,j] = (sumX+shmemSum[18,j])/(sumY+sumZ) #common variance z
-            sync_warp()
-            @ifXY 1 j begin
-                # #unrolled 3 by 3 cholesky decomposition 
-                a = CUDA.sqrt(shmemSum[1,j])  #getting varianceX
-                b = (shmemSum[2,j])/a #getting covarianceXY
-                c = (shmemSum[3,j])/a  #getting covarianceXZ
-                e = CUDA.sqrt(shmemSum[4,j] - b*b)  #getting varianceY
-                d = (shmemSum[5,j] -(c * b))/e #getting covarianceYZ
-              #unrolled forward substitiution - we reuse the variables to reduce register preassure (hopefully)
-                sumX= (shmemSum[7,1] -shmemSum[10,1]  )   /a 
-                sumY = ( (shmemSum[8,1] -  shmemSum[11,1] )  -b*sumX)/e
-                sumZ= ( (shmemSum[9,1] - shmemSum[12,1]  )  -sumY*d-sumX* c)/CUDA.sqrt(shmemSum[6,j] - c*c -d*d ) #getting  varianceZ
-                #taking square euclidean distance
-                mahalanobisResSliceWise[index]= CUDA.sqrt(sumX*sumX+sumY*sumY+sumZ*sumZ)
-                CUDA.@cuprint "slice wise " CUDA.sqrt(sumX*sumX+sumY*sumY+sumZ*sumZ)
-            end # @ifXY  numb
-        end#if
-    end#for
-    sync_warp()
-end#for 
+
+
+
+
+# @unroll for i in 0:cld(loopZdim,6) 
+#     @unroll for j in 1:6
+#         #we need to stay in the existing slices 
+#         index = (i*6+j)*gridDim().x+blockIdxX()
+#         if(index<arrDims[3])            
+#         #first we load data from gold 
+#         sumX,sumY,sumZ,count = Float32(0),Float32(0),Float32(0),Float32(0)
+#         shmemSum[threadIdxX(),j]=Float32(0.0)
+#             if(threadIdxX()<7 )
+#                 sumx = covariancesSliceWiseGold[threadIdxX(),index]
+#             #then from segm 
+#             elseif(threadIdxX()<13 )
+#                 shmemSum[12+threadIdxX() ,1] = covariancesSliceWiseGold[threadIdxX(),index]
+#             end #else if  
+#             sync_warp()
+#             #we set it on diffrent warps
+#             @ifXY 1 j shmemSum[1,j]= (sumX+shmemSum[13,j])/(sumY+sumZ)  #common variance x
+#             @ifXY 3 j shmemSum[2,j]= (sumX+shmemSum[14,j])/(sumY+sumZ) #common covariance xy
+#             @ifXY 5 j shmemSum[3,j] = (sumX+shmemSum[15,j])/(sumY+sumZ)#common covariance xz
+#             @ifXY 7 j shmemSum[4,j] = (sumX+shmemSum[16,j])/(sumY+sumZ) #common variance y
+#             @ifXY 10 j shmemSum[5,j] = (sumX+shmemSum[17,j])/(sumY+sumZ) #common covariance yz
+#             @ifXY 12 j shmemSum[6,j] = (sumX+shmemSum[18,j])/(sumY+sumZ) #common variance z
+#             sync_warp()
+#             @ifXY 1 j begin
+#                 # #unrolled 3 by 3 cholesky decomposition 
+#                 a = CUDA.sqrt(shmemSum[1,j])  #getting varianceX
+#                 b = (shmemSum[2,j])/a #getting covarianceXY
+#                 c = (shmemSum[3,j])/a  #getting covarianceXZ
+#                 e = CUDA.sqrt(shmemSum[4,j] - b*b)  #getting varianceY
+#                 d = (shmemSum[5,j] -(c * b))/e #getting covarianceYZ
+#               #unrolled forward substitiution - we reuse the variables to reduce register preassure (hopefully)
+#                 sumX= (shmemSum[7,1] -shmemSum[10,1]  )   /a 
+#                 sumY = ( (shmemSum[8,1] -  shmemSum[11,1] )  -b*sumX)/e
+#                 sumZ= ( (shmemSum[9,1] - shmemSum[12,1]  )  -sumY*d-sumX* c)/CUDA.sqrt(shmemSum[6,j] - c*c -d*d ) #getting  varianceZ
+#                 #taking square euclidean distance
+#                 mahalanobisResSliceWise[index]= CUDA.sqrt(sumX*sumX+sumY*sumY+sumZ*sumZ)
+#                 CUDA.@cuprint "slice wise " CUDA.sqrt(sumX*sumX+sumY*sumY+sumZ*sumZ)
+#             end # @ifXY  numb
+#         end#if
+#     end#for
+#     sync_warp()
+# end#for 
+
+
+
 
 # covariancesSliceWiseGold
     #covariancesSliceWiseSegm

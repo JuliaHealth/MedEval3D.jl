@@ -104,7 +104,7 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
    ,ex 
    ,isFullBoundaryCheckX =false
    , isFullBoundaryCheckY=false
-   , isFullBoundaryCheckZ=false
+   , isFullBoundaryCheckZ=true
    ,nobundaryCheckX=false
    , nobundaryCheckY=false
    , nobundaryCheckZ =false)
