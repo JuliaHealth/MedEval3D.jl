@@ -178,13 +178,13 @@ Array(d_out)
 # aFrag = zeros(4,4);
 # bFrag = zeros(4,4);
 
-for i in 1:32
+# for i in 1:32
     
-    a =  ((i-1) >>3)
-    b = ((i-1)>>4 )+1
-    c = ((i-1) & (2^4 - 1))+1
-  @info "i $(i) a $(a)  b $(b) c $(c) "
-end    
+#     a =  ((i-1) >>3)
+#     b = ((i-1)>>4 )+1
+#     c = ((i-1) & (2^4 - 1))+1
+#   @info "i $(i) a $(a)  b $(b) c $(c) "
+# end    
 
 
 # bFrag

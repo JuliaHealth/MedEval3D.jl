@@ -15,7 +15,7 @@ function getExampleKernelArgs()
     nx=512 ; ny=512 ; nz=317
     #first we initialize the metrics on CPU so we will modify them easier
     goldBoolCPU= zeros(Float32,nx,ny,nz); #mimicks gold standard mask
-    segmBoolCPU= zeros(Float32,nx,ny,nz); #mimicks other  mask
+    segmBoolCPU= ones(Float32,nx,ny,nz); #mimicks other  mask
     cartTrueGold =  CartesianIndices(zeros(3,3,5) ).+CartesianIndex(5,5,5);
     cartTrueSegm =  CartesianIndices(zeros(150,150,150) ).+CartesianIndex(100,100,100);
 
@@ -28,11 +28,11 @@ function getExampleKernelArgs()
     #we will fill it after we work with launch configuration
     loopXdim = UInt32(1);loopYdim = UInt32(1) ;loopZdim = UInt32(1) ;
     sizz = size(goldBoolCPU);maxX = UInt32(sizz[1]);maxY = UInt32(sizz[2]);maxZ = UInt32(sizz[3])
-    threads = (32,10)
+    threads = (32,20)
     blocks = 50
-    loopXdim = UInt32(cld(maxX, threads[1]))
-    loopYdim = UInt32(cld(maxY, threads[2])) 
-    loopZdim = UInt32(cld(maxZ,blocks )) 
+    loopXdim = UInt32(fld(maxX, threads[1]))
+    loopYdim = UInt32(fld(maxY, threads[2])) 
+    loopZdim = UInt32(fld(maxZ,blocks )) 
 
     totalCountGold= CuArray([0]);
     totalCountSegm= CuArray([0]);
@@ -88,7 +88,23 @@ end
     @cuda threads=(32,20) blocks=50 testLoopKernelA(args...)
 
     @test totalCountGold[1]==3*3*5
-    @test totalCountSegm[1]==150*150*150
+    nx=512 ; ny=512 ; nz=317
+    @test totalCountSegm[1]==(nx*ny*nz)
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
 # end#testset

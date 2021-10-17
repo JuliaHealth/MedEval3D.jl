@@ -59,9 +59,6 @@ macro iter3dAdditionalzActs(arrDims, loopXdim,loopYdim,loopZdim,ex,additionalAct
   return esc(:( $mainExp))
 end#iter3dAdditionalxyzActs
 
-
-
-
 """
 generalized version of iter3d we will specilize it in the macro on the basis of multiple dispatch
   arrDims- dimensions of main arrya
@@ -127,29 +124,86 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
   # zState = :($zname= $zOffset +$zAdd)
   
 
-  exp1 = quote
-    @unroll for $loopIterNameX::UInt32 in 0:$loopXdim
-        $xname::UInt32= $xOffset +threadIdxX()
+  exp1= :()
+  if(isFullBoundaryCheckX)
+    exp1 = quote
+      @unroll for $loopIterNameX in 0:$loopXdim
+          $xname= $xOffset +$xAdd
+          if( $xCheck)
+            $ex
+          end#if x
+        $additionalActionAfterX  
+        end#for x dim
+      end#quote
+  elseif(nobundaryCheckX)
+    exp1 = quote
+      @unroll for $loopIterNameX in 0:$loopXdim
+          $xname= $xOffset +$xAdd
+            $ex
+        $additionalActionAfterX  
+        end#for x dim
+      end#quote
+
+
+  else
+    exp1 = quote
+      @unroll for $loopIterNameX in 0:$loopXdim-1
+          $xname= $xOffset +$xAdd
+          $ex
+          $additionalActionAfterX 
+      end#for x dim
+      
+      $loopIterNameX=$loopXdim
+      $xname= $xOffset +$xAdd
         if( $xCheck)
           $ex
-        end#if x
+        end#if x     
       $additionalActionAfterX  
-      end#for x dim
-    end#quote
-  
+      end#quote
+  end  
+
+
+
+  exp2= :()
+if(isFullBoundaryCheckY)
     exp2= quote
-      @unroll for $loopIterNameY::UInt32 in  0:$loopYdim
-        $yname::UInt32 = $yOffset +threadIdxY()
+      @unroll for $loopIterNameY in  0:$loopYdim
+        $yname = $yOffset +$yAdd
           if($yCheck)
             $exp1
           end#if y
           $additionalActionAfterY
           end#for  yLoops 
-        end
+        end#quote
+elseif(nobundaryCheckY)
+  exp2= quote
+    @unroll for $loopIterNameY in  0:$loopYdim
+      $yname = $yOffset +$yAdd
+          $exp1
+        $additionalActionAfterY
+        end#for  yLoops 
+      end#quote
+else
+  exp2= quote
+    @unroll for $loopIterNameY in  0:$loopYdim-1
+      $yname = $yOffset +$yAdd
+        $exp1
+        $additionalActionAfterY
+    end#for  yLoops 
+        $loopIterNameY=$loopYdim
+        $yname = $yOffset +$yAdd
+        if($yCheck)
+          $exp1
+        end#if y
+        $additionalActionAfterY
+      end#quote
+end
 
+############################### z 
+if(isFullBoundaryCheckZ)
         exp3= quote
-          @unroll for $loopIterNameZ::UInt32 in 0:$loopZdim
-            $zname::UInt32 = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
+          @unroll for $loopIterNameZ in 0:$loopZdim
+            $zname = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
             if($zCheck)          
               $exp2
             end#if z 
@@ -157,6 +211,29 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
         end#for z dim
         end 
 
+elseif(nobundaryCheckZ)
+        exp3= quote
+          @unroll for $loopIterNameZ in 0:$loopZdim
+            $zname = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
+              $exp2
+            $additionalActionAfterZ  
+        end#for z dim
+        end 
+ else
+        exp3= quote
+          @unroll for $loopIterNameZ in 0:$loopZdim-1
+            $zname = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
+            $exp2
+            $additionalActionAfterZ  
+        end#for z dim
+        $loopIterNameZ=$loopZdim
+        $zname = $zOffset + $zAdd
+        if($zCheck)          
+          $exp2
+        end#if z 
+
+        end 
+end
 
 if(is3d)
   return exp3
