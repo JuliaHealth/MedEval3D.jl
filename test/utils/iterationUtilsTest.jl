@@ -68,12 +68,11 @@ end
         @iter3d(arrDims,  loopXdim,loopYdim,loopZdim,if(  @inbounds(goldArr[x,y,z])  ==numberToLooFor)
             #updating variables needed to calculate means
             countGold+=UInt32(1)
-            CUDA.@cuprint( "  inn $(x) ")
         end)#if bool in arr  
         
         sync_threads()
 
-        @iter3d(arrDims, loopXdim,loopYdim,loopZdim, if(  @inbounds(goldArr[x,y,z])  ==numberToLooFor)
+        @iter3d(arrDims, loopXdim,loopYdim,loopZdim, if(  @inbounds(segmArr[x,y,z])  ==numberToLooFor)
             #updating variables needed to calculate means
             countSegm+=UInt32(1)
         end)#if bool in arr

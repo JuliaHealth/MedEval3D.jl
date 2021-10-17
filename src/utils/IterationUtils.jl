@@ -31,7 +31,7 @@ nobundaryCheckX, nobundaryCheckY, nobundaryCheckZ - true if we want to avoid com
 ex - main expression around which we build loop  
 """
 macro iter3d(arrDims,loopXdim,loopYdim,loopZdim   ,ex   )
-  mainExp = generalizedItermultiDim(; arrDims=arrDims,loopXdim=5 ,loopYdim=5,loopZdim=5, ex = ex)  
+  mainExp = generalizedItermultiDim(; arrDims=arrDims,loopXdim ,loopYdim,loopZdim, ex = ex)  
   return esc(:( $mainExp))
   end#iter3d
 
@@ -85,17 +85,17 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
    ,xname = :x
    ,yname = :y
    ,zname = :z
-   ,loopIterNameX = :xDim
-   ,loopIterNameY = :yDim
-   ,loopIterNameZ = :zDim    
+   ,loopIterNameX = :xdim
+   ,loopIterNameY = :ydim
+   ,loopIterNameZ = :zdim    
    ,loopXdim = 1
    ,loopYdim= 1
    ,loopZdim= 1
-  ,zOffset= :($loopIterNameZ*gridDim().x)
+  ,zOffset= :(zdim*gridDim().x)
    ,zAdd =:(blockIdxX())
-  ,yOffset = :($loopIterNameY* blockDimY())
+  ,yOffset = :(ydim* blockDimY())
   ,yAdd= :(threadIdxY())
-  ,xOffset= :($loopIterNameX * blockDimX())
+  ,xOffset= :(xdim * blockDimX())
    ,xAdd= :(threadIdxX())
   ,xCheck = :(x <= $arrDims[1])
   ,yCheck = :(y <= $arrDims[2])
@@ -112,6 +112,12 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
    , nobundaryCheckY=false
    , nobundaryCheckZ =false)
 #we will define expressions from deepest to most superficial
+
+# ,zOffset= :($loopIterNameZ*gridDim().x)
+# ,zAdd =:(blockIdxX())
+# ,yOffset = :($loopIterNameY* blockDimY())
+# ,yAdd= :(threadIdxY())
+# ,xOffset= :($loopIterNameX * blockDimX())
 
   # xState = :(x= $xOffset +$xAdd)
   # yState = :(y= $yOffset +$yAdd)
