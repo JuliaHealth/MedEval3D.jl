@@ -127,10 +127,9 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
   # zState = :($zname= $zOffset +$zAdd)
   
 
- 
   exp1 = quote
-    @unroll for xdim::UInt32 in 0:$loopXdim
-        x::UInt32= $xOffset +threadIdxX()
+    @unroll for $loopIterNameX::UInt32 in 0:$loopXdim
+        $xname::UInt32= $xOffset +threadIdxX()
         if( $xCheck)
           $ex
         end#if x
@@ -139,8 +138,8 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
     end#quote
   
     exp2= quote
-      @unroll for ydim::UInt32 in  0:$loopYdim
-        y::UInt32 = $yOffset +threadIdxY()
+      @unroll for $loopIterNameY::UInt32 in  0:$loopYdim
+        $yname::UInt32 = $yOffset +threadIdxY()
           if($yCheck)
             $exp1
           end#if y
@@ -149,8 +148,8 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
         end
 
         exp3= quote
-          @unroll for zdim::UInt32 in 0:$loopZdim
-            z::UInt32 = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
+          @unroll for $loopIterNameZ::UInt32 in 0:$loopZdim
+            $zname::UInt32 = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
             if($zCheck)          
               $exp2
             end#if z 
