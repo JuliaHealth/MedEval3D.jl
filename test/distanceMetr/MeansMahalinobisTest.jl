@@ -49,14 +49,16 @@ varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGloba
 
 totalCountSegm= CuArray([0]);
 totalCountGold
-#countPerZGold= CUDA.zeros(Float32,sizz[3]+1);
-#countPerZSegm= CUDA.zeros(Float32,sizz[3]+1);
+
 countPerZGold= CUDA.zeros(Float32,sizz[3]+1);
 countPerZSegm= CUDA.zeros(Float32,sizz[3]+1);
 
-#covariancesSliceWise= CUDA.zeros(Float32,12,sizz[3]+1);
-covariancesSliceWiseGold= CUDA.zeros(Float32,6,sizz[3]+1);
-covariancesSliceWiseSegm= CUDA.zeros(Float32,6,sizz[3]+1);
+# covariancesSliceWiseGold= CUDA.zeros(Float32,6,sizz[3]+1);
+# covariancesSliceWiseSegm= CUDA.zeros(Float32,6,sizz[3]+1);
+
+covariancesSliceWiseGold= CUDA.zeros(Float32,6,500);
+covariancesSliceWiseSegm= CUDA.zeros(Float32,6,500);
+
 covarianceGlobal= CUDA.zeros(Float32,12,1);
 
 mahalanobisResGlobal= CUDA.zeros(1);
@@ -166,7 +168,8 @@ yc= (meanZ-yb*d-ya* c)/sqrt(varianceZ - c*c -d*d )
 sqrt(ya*ya+yb*yb+yc*yc)
 
 
-
+ Int64(maximum(covariancesSliceWiseGold[:,1,1,1,1,1]))
+ Int64(maximum(covariancesSliceWiseSegm[:,1,1,1,1,1]))
 
 @testset " mahalinobis tests " begin
       @test totalCountGold[1]==length(cartTrueGold)

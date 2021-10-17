@@ -137,13 +137,20 @@ macro calculateVariancesAdCov(countPerZ,arrToAnalyze,covariancesSliceWise,varian
             @ifXY 1 7 @inbounds @atomic $varianceZGlobal[]+=((z- meanxyz[3])*(z- meanxyz[3])  )*shmemSum[1,6]
             ###########remove
             
-            @ifY 2 @unroll for i in 1:5
-                @ifX i @inbounds $covariancesSliceWise[i,z]+=shmemSum[1,i]
-            end 
-                @ifXY 2 6 @inbounds $covariancesSliceWise[6,z]+= ((z- meanxyz[3])*(z- meanxyz[3]))*shmemSum[1,6]
+            # @ifY 2 @unroll for i in 1:5
+            #     @ifX i @inbounds $covariancesSliceWise[i,z]+=shmemSum[1,i]
+                
+            #     if(shmemSum[1,i]>0)
+            #         CUDA.@cuprint " i $(i) val $(shmemSum[1,i]) "
+            #     end    
+
+            # end 
+            #     @ifXY 2 6 @inbounds $covariancesSliceWise[6,z]+= ((z- meanxyz[3])*(z- meanxyz[3]))*shmemSum[1,6]
             sync_threads()
-            #clear shared memory
+            # #clear shared memory
             clearSharedMemWarpLong(shmemSum, UInt8(6), Float32(0.0))
+
+
         end#if covariance non empty
     end  )# iterations loop
 
@@ -243,7 +250,7 @@ macro getFinalResults()
           end#for numb  
     end# if block
 #### now in case we want the slice wise results we need to loop through the 
-sync_threads()
+#sync_threads()
 #in order to maximize parallelization we will use 6 warps at a time (if needed )
 # and each will use up diffrent row of shared memory so we will loop through slicewise
 #and concurrently update the slicewise results list
@@ -266,20 +273,28 @@ sync_threads()
 #                 sumx = covariancesSliceWiseGold[threadIdxX(),index]
 #             #then from segm 
 #             elseif(threadIdxX()<13 )
-#                 shmemSum[12+threadIdxX() ,1] = covariancesSliceWiseGold[threadIdxX(),index]
+#                 shmemSum[12+threadIdxX() ,1] = covariancesSliceWiseSegm[threadIdxX()-6,index]
 #             end #else if  
 #             sync_warp()
 #             #we set it on diffrent warps
-#             @ifXY 1 j shmemSum[1,j]= (sumX+shmemSum[13,j])/(sumY+sumZ)  #common variance x
-#             @ifXY 3 j shmemSum[2,j]= (sumX+shmemSum[14,j])/(sumY+sumZ) #common covariance xy
+
+#             @ifXY 1 j shmemSum[1,j] = (sumX+shmemSum[13,j])/(sumY+sumZ)  #common variance x
+#             @ifXY 3 j shmemSum[2,j] = (sumX+shmemSum[14,j])/(sumY+sumZ) #common covariance xy
 #             @ifXY 5 j shmemSum[3,j] = (sumX+shmemSum[15,j])/(sumY+sumZ)#common covariance xz
 #             @ifXY 7 j shmemSum[4,j] = (sumX+shmemSum[16,j])/(sumY+sumZ) #common variance y
 #             @ifXY 10 j shmemSum[5,j] = (sumX+shmemSum[17,j])/(sumY+sumZ) #common covariance yz
 #             @ifXY 12 j shmemSum[6,j] = (sumX+shmemSum[18,j])/(sumY+sumZ) #common variance z
+            
+#            # CUDA.@cuprint " varx $(shmemSum[1,j]) cov xy  $(shmemSum[2,j])  cov xz $(shmemSum[3,j])  var y $(shmemSum[4,j]) covyz $(shmemSum[5,j]) var z  $(shmemSum[6,j]) \n"
+
+
 #             sync_warp()
+
+
 #             @ifXY 1 j begin
 #                 # #unrolled 3 by 3 cholesky decomposition 
 #                 a = CUDA.sqrt(shmemSum[1,j])  #getting varianceX
+
 #                 b = (shmemSum[2,j])/a #getting covarianceXY
 #                 c = (shmemSum[3,j])/a  #getting covarianceXZ
 #                 e = CUDA.sqrt(shmemSum[4,j] - b*b)  #getting varianceY
@@ -290,7 +305,7 @@ sync_threads()
 #                 sumZ= ( (shmemSum[9,1] - shmemSum[12,1]  )  -sumY*d-sumX* c)/CUDA.sqrt(shmemSum[6,j] - c*c -d*d ) #getting  varianceZ
 #                 #taking square euclidean distance
 #                 mahalanobisResSliceWise[index]= CUDA.sqrt(sumX*sumX+sumY*sumY+sumZ*sumZ)
-#                 CUDA.@cuprint "slice wise " CUDA.sqrt(sumX*sumX+sumY*sumY+sumZ*sumZ)
+#                 #CUDA.@cuprint "slice wise $(CUDA.sqrt(sumX*sumX+sumY*sumY+sumZ*sumZ))" 
 #             end # @ifXY  numb
 #         end#if
 #     end#for
@@ -300,8 +315,7 @@ sync_threads()
 
 
 
-# covariancesSliceWiseGold
-    #covariancesSliceWiseSegm
+
 
 
     end)
