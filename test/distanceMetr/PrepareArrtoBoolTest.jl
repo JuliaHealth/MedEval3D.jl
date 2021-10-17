@@ -1,12 +1,17 @@
-using Test,Revise
+using Revise, Parameters, Logging, Test
+using CUDA
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
-
-
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/kernels/PrepareArrtoBool.jl")
 using Main.PrepareArrtoBool, Main.CUDAGpuUtils
 using CUDA
 
-@testset "getBoolCubeKernel" begin 
+#@testset "getBoolCubeKernel" begin 
     sliceW = 512
     sliceH = 512
     sliceNumb = 91
@@ -97,5 +102,5 @@ size(vv)
       @test   reducedSegmB[5,2,90]==false
 
 
-end#testset
+#end#testset
 

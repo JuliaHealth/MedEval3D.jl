@@ -72,7 +72,7 @@ end
         
         sync_threads()
 
-        @iter3d(arrDims, loopXdim,loopYdim,loopZdim, if(  @inbounds(segmArr[x,y,z])  ==numberToLooFor)
+        @iter3dWithVal(segmArr,arrDims, loopXdim,loopYdim,loopZdim, if(  value  ==numberToLooFor)
             #updating variables needed to calculate means
             countSegm+=UInt32(1)
         end)#if bool in arr

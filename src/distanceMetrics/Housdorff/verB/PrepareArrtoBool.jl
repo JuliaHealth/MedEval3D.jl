@@ -5,98 +5,42 @@ module PrepareArrtoBool
 
 using CUDA, Main.CUDAGpuUtils, Logging,StaticArrays
 
+"""
+specialization of 3 dim iteration  for iterating over 3 dimensional metadata
+"""
+macro iter3dOuter(metaDataDims,xname,yname , zname, loopXMeta,loopYMeta,loopZmeta, ex)
+    mainExp = generalizedItermultiDim(;xname,yname , zname, arrDims=metaDataDims,loopXdim=loopXMeta ,loopYdim=loopYMeta,loopZdim=loopZmeta, ex = ex)  
+    return esc(:( $mainExp))
+
+end #iter3dOuter
 
 
 """
-This will prepare data for more complex distance metrics - we need to change input data type into boolean and find smallest possible cube that hold all necessery data
-
-returning the data  from a kernel that  calclulate number of true positives,
-true negatives, false positives and negatives par image and per slice in given data 
-goldBoolGPU - array holding data of gold standard bollean array
-segmBoolGPU - array with the data we want to compare with gold standard
-we have a and b - becouse the Housdorff distance is defined as 2 pass algorithm
-reducedGold a nd b - the smallest boolean block (3 dim array) that contains all positive entris from both masks
-reducedSegm a nd b- the smallest boolean block (3 dim array) that contains all positive entris from both masks
-numberToLooFor - number we will analyze whether is the same between two sets
-metaData - sets some basic informations to metaData
-cuda arrays holding just single value wit atomically reduced result
-,fn,fp
-,minxRes,maxxRes
-,minyRes,maxyRes
-,minZres,maxZres
+will enable iterating over the data of data block
 """
-function getBoolCube!(goldBoolGPU3d
-    ,segmBoolGPU3d
-    ,numberOfSlices::Int64
-    ,fn
-    ,fp
-    ,minxRes
-    ,maxxRes
-    ,minyRes
-    ,maxyRes
-    ,minZres
-    ,maxZres
-    ,numberToLooFor::T
-    ,IndexesArray
-    ,reducedGoldA
-    ,reducedSegmA
-    ,reducedGoldB
-    ,reducedSegmB
-    ,metaData) where T
+macro iterDataBlock(arrDims,loopXdim ,loopYdim,loopZdim,xOffset,yOffset,zOffset,ex)
+    mainExp = generalizedItermultiDim(;arrDims,loopXdim ,loopYdim,loopZdim, ex = ex)  
+    return esc(:( $mainExp))
 
-# we prepare the boolean array of dimensions at the begining the same as the gold standard array - later we will work only on view of it
-
-goldDims=size(goldBoolGPU3d) 
-
-#biggest divisible by 32 number to cover the x dimension
-warpNumb = cld(goldDims[1],32)
-threadNumb = min(1024,warpNumb*32)
-
-args = (goldBoolGPU3d
-        ,segmBoolGPU3d
-        ,reducedGoldA
-        ,reducedSegmA
-        ,reducedGoldB
-        ,reducedSegmB
-        ,UInt16(goldDims[2])
-        ,UInt16(goldDims[1])
-        ,UInt16(cld(goldDims[1],threadNumb))
-        ,numberToLooFor
-        ,IndexesArray
-        ,fn
-        ,fp
-        ,minxRes
-        ,maxxRes
-        ,minyRes
-        ,maxyRes
-        ,minZres
-        ,maxZres
-        ,warpNumb
-        )
-#getMaxBlocksPerMultiproc(args, getBlockTpFpFn) -- evaluates to 3
-
-@cuda threads=threadNumb blocks=numberOfSlices getBoolCubeKernel(args...) 
-return args
-end#getTpfpfnData
-
+end
 """
 we need to give back number of false positive and false negatives and min,max x,y,x of block containing all data 
-IMPORTANT - we require at least 7 in y dim and 32 in x dim of block thread
 adapted from https://github.com/JuliaGPU/CUDA.jl/blob/afe81794038dddbda49639c8c26469496543d831/src/mapreduce.jl
 goldBoolGPU3d - array holding 3 dimensional data of gold standard bollean array
 segmBoolGPU3d - array with 3 dimensional the data we want to compare with gold standard
 reducedGold - the smallest boolean block (3 dim array) that contains all positive entris from both masks
 reducedSegm - the smallest boolean block (3 dim array) that contains all positive entris from both masks
 numberToLooFor - number we will analyze whether is the same between two sets
-loopNumbYdim - number of times the single lane needs to loop in order to get all needed data - in this kernel it will be exactly a y dimension of a slice
-xdim - length in x direction of source array 
-loopNumbXdim - in case the x dim will be bigger than number of threads we will create second inner loop
 cuda arrays holding just single value wit atomically reduced result
 ,fn,fp
 ,minxRes,maxxRes
 ,minyRes,maxyRes
 ,minZres,maxZres
-
+datBdim - dimensions of data block
+metaDataDims - dimensions of the metadata
+loopXMeta,loopYMeta,loopZmeta - indicates how many times we need to iterate over the metadata
+inBlockLoopX,inBlockLoopY,inBlockLoopZ - indicates how many times we need to iterate over the data block using our size of thread block
+                                          basically data block size will be established by the thread block size of main kernel  
 """
 function getBoolCubeKernel(goldBoolGPU3d
         ,segmBoolGPU3d
@@ -104,68 +48,32 @@ function getBoolCubeKernel(goldBoolGPU3d
         ,reducedSegmA
         ,reducedGoldB
         ,reducedSegmB
-        ,loopNumbYdim::UInt16
-        ,xdim::UInt16
-        ,loopNumbXdim::UInt16
         ,numberToLooFor::T
-        ,IndexesArray
         ,fn::CuDeviceVector{UInt32, 1}
         ,fp::CuDeviceVector{UInt32, 1}
         ,minxRes::CuDeviceVector{UInt32, 1}
         ,maxxRes::CuDeviceVector{UInt32, 1}
         ,minyRes::CuDeviceVector{UInt32, 1}
         ,maxyRes::CuDeviceVector{UInt32, 1}
-        ,minzres::CuDeviceVector{UInt32, 1}
-        ,maxzres::CuDeviceVector{UInt32, 1}
+        ,minzRes::CuDeviceVector{UInt32, 1}
+        ,maxzRes::CuDeviceVector{UInt32, 1}
         ,datBdim
+        ,metaDataDims
+        ,mainArrDims
+        ,loopXMeta,loopYMeta,loopZmeta
+        ,inBlockLoopX,inBlockLoopY,inBlockLoopZ
 ) where T
-
-   anyPositive = false # true If any bit will bge positive in this array - we are not afraid of data race as we can set it multiple time to true
-   #creates shared memory and initializes it to 0
-   shmemSum = @cuStaticSharedMem(Float32,(32,2))
-   #incrementing appropriate number of times 
-   
-    
-    
-    #1 - false negative; 2- false positive
-    locArr= (Float32(0.0), Float32(0.0))
-
-    minX =@cuStaticSharedMem(Float32, 1)
-    maxX= @cuStaticSharedMem(Float32, 1)
-    minY = @cuStaticSharedMem(Float32, 1)
-    maxY= @cuStaticSharedMem(Float32, 1)
-    minZ = @cuStaticSharedMem(Float32, 1)
-    maxZ= @cuStaticSharedMem(Float32, 1) 
-    
-    
-    
-    
-    
-    
-    isAnyPositive = @cuStaticSharedMem(Bool, 1)
-    #resetting
-    minX[1]= Float32(1110.0)
-    maxX[1]= Float32(0.0)
-    minY[1]= Float32(1110.0)
-    maxY[1]= Float32(0.0)    
-    minZ[1]= Float32(1110.0)
-    maxZ[1]= Float32(0.0) 
-    isAnyPositive[1]= false
-    #in shared memory
-
-    
-    sync_threads()
+    @localAllocations()
     #we need nested x,y,z iterations so we will iterate over the matadata and on its basis over the  data in the main arrays 
     #first loop over the metadata 
     #datBdim - indicats dimensions of data blocks
-    @iter3dOuter(xname,yName , zName, loopXMeta,loopYMeta,loopZmeta,
+    @iter3dOuter(metaDataDims,xOuter,yOuter , zOuter, loopXMeta,loopYMeta,loopZmeta,
          begin
          #inner loop is over the data indicated by metadata
-         @iter3d(xOuter*datBdim[1] ,yOuter*datBdim[2], zzOuter*datBdim[3],true,zdim ,inBlockLoopX,inBlockLoopY,inBlockLoopZ
+         @iterDataBlock(mainArrDims, inBlockLoopX,inBlockLoopY,inBlockLoopZ, xOuter*datBdim[1] ,yOuter*datBdim[2], zOuter*datBdim[3]
                          ,begin 
-                                boolGold=    goldBoolGPU3d[x,y,z]==numberToLooFor
-                                boolSegm=    segmBoolGPU3d[x,y,z]==numberToLooFor
-                                    
+                                boolGold=goldBoolGPU3d[x,y,z]==numberToLooFor
+                                boolSegm=segmBoolGPU3d[x,y,z]==numberToLooFor                                    
                                 @inbounds locArr[boolGold+ boolSegm+ boolSegm]+=(boolGold  ⊻ boolSegm)
                                 #we need to also collect data about how many fp and fn we have in main part and borders
                                 #important in case of corners we will first analyze z and y dims and z dim on last resort only !
@@ -205,18 +113,19 @@ function getBoolCubeKernel(goldBoolGPU3d
                 #we save data about border data blocks 
                 sync_threads()
                 #we want to invoke this only once 
-                #                IMPORTANT we need to set also the amount of the main part fp and fn by subtracting from totla block count the  border counts
 
                #save the data about number of fp and fn of this block and accumulate also this sum for global sum 
-                @ifXY 1 2 if(isAnyPositive[1]) setMetaDataFpCount(locArr[2], xOuter,yOuter,zOuter) end   
-                @ifXY 1 3 if(isAnyPositive[1]) setMetaDataFnCount(locArr[1], xOuter,yOuter,zOuter) end
-                @ifXY 1 4 if(isAnyPositive[1]) minX[1]= min(minX[1],xOuter) end
-                @ifXY 1 5 if(isAnyPositive[1]) maxX[1]= max(maxX[1],xOuter) end
-                @ifXY 1 6 if(isAnyPositive[1]) minY[1]= min(minY[1],yOuter) end
-                @ifXY 1 7 if(isAnyPositive[1]) maxY[1]= max(maxY[1],yOuter) end
-                @ifXY 1 8 if(isAnyPositive[1]) minZ[1]= min(minZ[1],zOuter) end
-                @ifXY 1 9 if(isAnyPositive[1]) maxZ[1]= max(maxZ[1],zOuter) end
-                @ifXY 1 10 if(isAnyPositive[1]) isAnyPositive[1]= false end #reset     
+                @ifXY 1 1 if(isAnyPositive[1]) setMetaDataFpCount(locArr[2], xOuter,yOuter,zOuter) end   
+                @ifXY 2 1 if(isAnyPositive[1]) setMetaDataFnCount(locArr[1], xOuter,yOuter,zOuter) end
+                
+                @ifXY 3 1 if(isAnyPositive[1]) minX[1]= min(minX[1],xOuter) end
+                @ifXY 4 1 if(isAnyPositive[1]) maxX[1]= max(maxX[1],xOuter) end
+                @ifXY 5 1 if(isAnyPositive[1]) minY[1]= min(minY[1],yOuter) end
+                @ifXY 6 1 if(isAnyPositive[1]) maxY[1]= max(maxY[1],yOuter) end
+                @ifXY 7 1 if(isAnyPositive[1]) minZ[1]= min(minZ[1],zOuter) end
+                @ifXY 8 1 if(isAnyPositive[1]) maxZ[1]= max(maxZ[1],zOuter) end
+                sync_warp()
+                @ifXY 9 1 if(isAnyPositive[1]) isAnyPositive[1]= false end #reset     
      end) #outer loop        
                 #consider ceating tuple structure where we will have  number of outer tuples the same as z dim then inner tuples the same as y dim and most inner tuples will have only the entries that are fp or fn - this would make us forced to put results always in correct spots 
                 
@@ -239,6 +148,46 @@ function getBoolCubeKernel(goldBoolGPU3d
 
    return  
    end
+
+"""
+allocates in the local, register in shared memory
+"""
+macro localAllocations()
+
+    return esc(quote
+    anyPositive = false # true If any bit will bge positive in this array - we are not afraid of data race as we can set it multiple time to true
+    #creates shared memory and initializes it to 0
+    shmemSum = @cuStaticSharedMem(Float32,(32,2))
+    #incrementing appropriate number of times  
+     
+     #1 - false negative; 2- false positive
+     locArr= (Float32(0.0), Float32(0.0))
+ 
+     minX =@cuStaticSharedMem(Float32, 1)
+     maxX= @cuStaticSharedMem(Float32, 1)
+     minY = @cuStaticSharedMem(Float32, 1)
+     maxY= @cuStaticSharedMem(Float32, 1)
+     minZ = @cuStaticSharedMem(Float32, 1)
+     maxZ= @cuStaticSharedMem(Float32, 1)      
+     
+     
+     isAnyPositive = @cuStaticSharedMem(Bool, 1)
+     #resetting
+     minX[1]= Float32(1110.0)
+     maxX[1]= Float32(0.0)
+     minY[1]= Float32(1110.0)
+     maxY[1]= Float32(0.0)    
+     minZ[1]= Float32(1110.0)
+     maxZ[1]= Float32(0.0) 
+     @ifXY 1 1 isAnyPositive[1]= false
+     #in shared memory
+ 
+     
+     sync_threads()
+end)
+end
+
+
 
 # """
 # add value to the shared memory in the position i, x where x is 1 ,2 or 3 and is calculated as described below
@@ -481,3 +430,76 @@ end#TpfpfnKernel
 
 # return  
 # end
+
+
+# """
+# This will prepare data for more complex distance metrics - we need to change input data type into boolean and find smallest possible cube that hold all necessery data
+
+# returning the data  from a kernel that  calclulate number of true positives,
+# true negatives, false positives and negatives par image and per slice in given data 
+# goldBoolGPU - array holding data of gold standard bollean array
+# segmBoolGPU - array with the data we want to compare with gold standard
+# we have a and b - becouse the Housdorff distance is defined as 2 pass algorithm
+# reducedGold a nd b - the smallest boolean block (3 dim array) that contains all positive entris from both masks
+# reducedSegm a nd b- the smallest boolean block (3 dim array) that contains all positive entris from both masks
+# numberToLooFor - number we will analyze whether is the same between two sets
+# metaData - sets some basic informations to metaData
+# cuda arrays holding just single value wit atomically reduced result
+# ,fn,fp
+# ,minxRes,maxxRes
+# ,minyRes,maxyRes
+# ,minZres,maxZres
+# """
+# function getBoolCube!(goldBoolGPU3d
+#     ,segmBoolGPU3d
+#     ,numberOfSlices::Int64
+#     ,fn
+#     ,fp
+#     ,minxRes
+#     ,maxxRes
+#     ,minyRes
+#     ,maxyRes
+#     ,minZres
+#     ,maxZres
+#     ,numberToLooFor::T
+#     ,IndexesArray
+#     ,reducedGoldA
+#     ,reducedSegmA
+#     ,reducedGoldB
+#     ,reducedSegmB
+#     ,metaData) where T
+
+# # we prepare the boolean array of dimensions at the begining the same as the gold standard array - later we will work only on view of it
+
+# goldDims=size(goldBoolGPU3d) 
+
+# #biggest divisible by 32 number to cover the x dimension
+# warpNumb = cld(goldDims[1],32)
+# threadNumb = min(1024,warpNumb*32)
+
+# args = (goldBoolGPU3d
+#         ,segmBoolGPU3d
+#         ,reducedGoldA
+#         ,reducedSegmA
+#         ,reducedGoldB
+#         ,reducedSegmB
+#         ,UInt16(goldDims[2])
+#         ,UInt16(goldDims[1])
+#         ,UInt16(cld(goldDims[1],threadNumb))
+#         ,numberToLooFor
+#         ,IndexesArray
+#         ,fn
+#         ,fp
+#         ,minxRes
+#         ,maxxRes
+#         ,minyRes
+#         ,maxyRes
+#         ,minZres
+#         ,maxZres
+#         ,warpNumb
+#         )
+# #getMaxBlocksPerMultiproc(args, getBlockTpFpFn) -- evaluates to 3
+
+# @cuda threads=threadNumb blocks=numberOfSlices getBoolCubeKernel(args...) 
+# return args
+# end#getTpfpfnData

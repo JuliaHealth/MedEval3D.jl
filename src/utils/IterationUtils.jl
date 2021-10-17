@@ -11,7 +11,8 @@ we need also to supply functions of iterating the 3 dimensional data but with ch
 """
 module IterationUtils
 using CUDA,Logging
-export @iter3d, @iter3dAdditionalxyzActsAndZcheck, @iter3dAdditionalxyzActs, @iter3dAdditionalzActs
+export generalizedItermultiDim
+export @iter3d, @iter3dAdditionalxyzActsAndZcheck, @iter3dAdditionalxyzActs, @iter3dAdditionalzActs,@iter3dWithVal
 
 """
 arrDims- dimensions of main arrya
@@ -31,9 +32,17 @@ nobundaryCheckX, nobundaryCheckY, nobundaryCheckZ - true if we want to avoid com
 ex - main expression around which we build loop  
 """
 macro iter3d(arrDims,loopXdim,loopYdim,loopZdim   ,ex   )
-  mainExp = generalizedItermultiDim(; arrDims=arrDims,loopXdim ,loopYdim,loopZdim, ex = ex)  
+  mainExp = generalizedItermultiDim(; arrDims,loopXdim ,loopYdim,loopZdim, ex = ex)  
   return esc(:( $mainExp))
   end#iter3d
+
+"""
+modification where value will be loaded from the suppplied array in x,y,z position
+"""
+  macro iter3dWithVal(arrMain,arrDims,loopXdim,loopYdim,loopZdim   ,ex   )
+    mainExp = generalizedItermultiDim(; arrMain= arrMain,isVal=true, arrDims=arrDims,loopXdim ,loopYdim,loopZdim, ex = ex)  
+    return esc(:( $mainExp))
+    end#iter3d
 
 """
 modification of iter3d loop  where wa allow additional action after z check
@@ -74,7 +83,9 @@ generalized version of iter3d we will specilize it in the macro on the basis of 
   is3d - if true we use 3 dimensional loop if not we iterate only over x and y 
   isFullBoundaryCheckX, isFullBoundaryCheckY, isFullBoundaryCheckZ - indicates wheather we want to check boundaries on all iterations if false it will be done only on last iteration if not stated explicitely to avoid all boundary checks
   nobundaryCheckX, nobundaryCheckY, nobundaryCheckZ - true if we want to avoid completely boundary checks
-  
+  arrMain - array from which we will take value in case isVal is true
+  isVal  - if true will indicate that we want  to have the value of the supplied array arrMain in x,y,z point
+
   ex - main expression around which we build loop    
 """
 function generalizedItermultiDim(; #we keep all as keyword arguments
@@ -107,7 +118,12 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
    , isFullBoundaryCheckZ=true
    ,nobundaryCheckX=false
    , nobundaryCheckY=false
-   , nobundaryCheckZ =false)
+   , nobundaryCheckZ =false
+   ,isVal=false
+   ,arrMain=:()
+   
+   
+   )
 #we will define expressions from deepest to most superficial
 
 # ,zOffset= :($loopIterNameZ*gridDim().x)
@@ -123,6 +139,10 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
   # yState = :($yname= $yOffset +$yAdd)
   # zState = :($zname= $zOffset +$zAdd)
   
+  valExp= :()
+  if(isVal)
+    valExp=:(value = $arrMain[$xname,$yname,$zname ])
+  end  
 
   exp1= :()
   if(isFullBoundaryCheckX)
@@ -130,6 +150,7 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
       @unroll for $loopIterNameX in 0:$loopXdim
           $xname= $xOffset +$xAdd
           if( $xCheck)
+            $valExp
             $ex
           end#if x
         $additionalActionAfterX  
@@ -139,7 +160,8 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
     exp1 = quote
       @unroll for $loopIterNameX in 0:$loopXdim
           $xname= $xOffset +$xAdd
-            $ex
+          $valExp
+          $ex
         $additionalActionAfterX  
         end#for x dim
       end#quote
@@ -149,6 +171,7 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
     exp1 = quote
       @unroll for $loopIterNameX in 0:$loopXdim-1
           $xname= $xOffset +$xAdd
+          $valExp
           $ex
           $additionalActionAfterX 
       end#for x dim
@@ -156,6 +179,7 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
       $loopIterNameX=$loopXdim
       $xname= $xOffset +$xAdd
         if( $xCheck)
+          $valExp
           $ex
         end#if x     
       $additionalActionAfterX  
