@@ -172,9 +172,9 @@ and sets appropriate variable isTpBeAnalyzed
 Important!!! we need to take into account corners so if we look from the top we only care of the top process  
     or we also needs tops of the sides and anterior posterior paddings? - this needs to be adressed
 """
-macro setIstoBeAnalyzed() 
+macro setIstoBeAnalyzed(numb, mataData,linIndex,resShmem) 
 
-
+krowa
 
    getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
     setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
@@ -216,7 +216,7 @@ and loaded into res shmem in getIstoBeAnalyzed
 this function only return boolean from resshmem that tell us about wheather it makes sense to analyze the data inside
     the data block - so it cares about total data block fp or fn not yet covered
 """
-function getIsTotalFPorFNnotYetCovered(resshmem )
+function getIsTotalFPorFNnotYetCovered(resshmem ,isGold)
    getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
     setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
     
@@ -226,24 +226,15 @@ function getIsTotalFPorFNnotYetCovered(resshmem )
 """
 We just access data from res shmem that was loaded into resshmem in getIstoBeAnalyzed
 dim can be 1,2,3 and tell in what dimension is the plane of our analysis
-numb may be either 1 or 34  - on this basis we can establish which padding is of our intrest ...
+            isStart may be either 1 or end of data block   - on this basis we can establish which padding is of our intrest ...
 """
-function isPaddingToBeAnalyzed(resShmem,dim,numb )
+function isPaddingToBeAnalyzed(resShmem,dim,isStart )
 
    getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
     setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
     
     end
 
-"""
-sets given block is full property of either gold or other pass 
-    as true
-"""
-function setBlockAsFull(metaData,linIndex, isGoldPass)
-   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
-    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
-    
-    end
 
 
 """
@@ -263,27 +254,32 @@ function setBlockAsFull(metaData,linIndex, isGoldPass)
 14)   Total block Fn  
 sets values for amount of fp and fn in all of the ques specified above
 """
-function setMetaFPandFN()
+function setMetaFPandFN(numb, mataData,linIndex,valuee)
     
-   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
-    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+    setMetaDataFieldFromLin(metaData,linIndex,numb+24,valuee)
     
     end
 
 #set the x,y,z coordinates - so we will able to query it efficiently also with linear index
 #what is important later as we will use only part of meta data this indicies will need to be updated
 function setMetaDataXYZ(metaData, xOuter,yOuter,zOuter  )
-       getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
-    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
-    
+    setMetaDataFieldFromLin(metaData,linIndex,7,UInt32(xOuter))
+    setMetaDataFieldFromLin(metaData,linIndex,8,UInt32(yOuter))
+    setMetaDataFieldFromLin(metaData,linIndex,9,UInt32(zOuter))
+
     end
+                
+                
+                
+                
 """
 reduce the values of selected metadata block by the supplied values
 """
 function reduceMetaDataXYZ(metaData, minX,minY,minZ, linIndex  )
-   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
-    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
-    
+                    krowa ...
+    setMetaDataFieldFromLin(metaData,linIndex,7,UInt32(xOuter))
+    setMetaDataFieldFromLin(metaData,linIndex,8,UInt32(yOuter))
+    setMetaDataFieldFromLin(metaData,linIndex,9,UInt32(zOuter))
     end
 
 
