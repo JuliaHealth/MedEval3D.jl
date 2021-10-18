@@ -1,4 +1,50 @@
 """
+order of queues
+1)   Left FP  
+2)   Left FN  
+3)   Right FP  
+4)   Right FN  
+5)   Posterior FP  
+6)   Posterior FN  
+7)   Anterior FP  
+8)   Anterior FN  
+9)   Top FP  
+10)   Top FN  
+11)   Bottom FP  
+12)   Bottom FN  
+13)   Total block Fp  
+14)   Total block Fn  
+
+
+16t - means 16 of such variables 
+activeInGold::Bool
+activeInSegm::Bool
+fullInGold::Bool
+fullInSegm::Bool
+
+isToBectivatedGold::Bool
+isToBeActivatedSegm::Bool
+x,y,z coordinates ::UInt32
+2t totalfpAndFnCount::UInt32
+14T isToBeAnalyzed::Bool
+14T fpFNcounts::UInt32
+
+14T resOffsets::UInt32
+2T totalOffsetBeginingAndEnd UInt32
+16T oldCounters ::UInt32
+16T new counters::UInt32
+
+"""
+
+
+
+
+
+
+
+
+
+"""
 sets is active of given block to true for gold standard pass
 """
 setBlockToActiveInGold(metaData,linIndex)
@@ -135,28 +181,31 @@ function setBlockAsFull(metaData,linIndex, isGoldPass)
 
 end
 
-#first argument metadata second value from shared memory
-setMetaLeftFP
-setMetaLeftFN
-setMetaRightFP
-setMetaRightFN
-setMetaPosteriorFP
-setMetaPosteriorFN
-setMetaAnteriorFP
-setMetaAnteriorFN
-setMetaTopFP
-setMetaTopFN
-setMetaBottomFP
-setMetaBottomFN
 
-#sets  count of fp, fn in main part
+"""
+1)   Left FP  
+2)   Left FN  
+3)   Right FP  
+4)   Right FN  
+5)   Posterior FP  
+6)   Posterior FN  
+7)   Anterior FP  
+8)   Anterior FN  
+9)   Top FP  
+10)   Top FN  
+11)   Bottom FP  
+12)   Bottom FN  
+13)   Total block Fp  
+14)   Total block Fn  
+sets values for amount of fp and fn in all of the ques specified above
+"""
+function setMetaFPandFN()
+    
+    
+end
 
-setMetaDataMainFpCount
-setMetaDataMainFnCount
 
 
-setMetaDataTotalFpCount
-setMetaDataTotalFnCount
 
 setMetaDataFnCount(metaData,locArr[1], xOuter,yOuter,zOuter) 
 
@@ -171,28 +220,6 @@ reduce the values of selected metadata block by the supplied values
 reduceMetaDataXYZ(metaData, minX,minY,minZ, linIndex  )
 
 
-
-#getters for metaData
-getMetaLeftFP
-getMetaLeftFN
-getMetaRightFP
-getMetaRightFN
-getMetaPosteriorFP
-getMetaPosteriorFN
-getMetaAnteriorFP
-getMetaAnteriorFN
-getMetaTopFP
-getMetaTopFN
-getMetaBottomFP
-getMetaBottomFN
-
-#gets  count of fp, fn in main part
-
-getMetaDataMainFpCount
-getMetaDataMainFnCount
-
-getMetaDataTotalFpCount
-getMetaDataTotalFnCount
 
 
 """
@@ -406,37 +433,3 @@ function appendResultMainPart(metaData, linIndex, x,y,z,iterationnumber, directi
 
 end #appendResultMainPart
 
-
-
-getMetaLeftFPOffset
-getMetaLeftFNOffset
-getMetaRightFPOffset
-getMetaRightFNOffset
-getMetaPosteriorFPOffset
-getMetaPosteriorFNOffset
-getMetaAnteriorFPOffset
-getMetaAnteriorFNOffset
-getMetaTopFPOffset
-getMetaTopFNOffset
-getMetaBottomFPOffset
-getMetaBottomFNOffset
-getMetaDataMainFpCountOffset
-getMetaDataMainFnCountOffset
-
-
-
-
-setMetaLeftFPOffset
-setMetaLeftFNOffset
-setMetaRightFPOffset
-setMetaRightFNOffset
-setMetaPosteriorFPOffset
-setMetaPosteriorFNOffset
-setMetaAnteriorFPOffset
-setMetaAnteriorFNOffset
-setMetaTopFPOffset
-setMetaTopFNOffset
-setMetaBottomFPOffset
-setMetaBottomFNOffset
-setMetaDataMainFpCountOffset
-setMetaDataMainFnCountOffset
