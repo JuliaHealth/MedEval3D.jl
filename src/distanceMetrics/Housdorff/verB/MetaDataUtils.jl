@@ -15,39 +15,72 @@ order of queues
 13)   Total block Fp  
 14)   Total block Fn  
 
+In order to simplify the structure all will be represented as the UInt32  even values that are really booleans
+in those cases false will be 0 and true 32 ...
 
-16t - means 16 of such variables 
-activeInGold::Bool
-activeInSegm::Bool
-fullInGold::Bool
-fullInSegm::Bool
 
-isToBectivatedGold::Bool
-isToBeActivatedSegm::Bool
-x,y,z coordinates ::UInt32
-2t totalfpAndFnCount::UInt32
-14T isToBeAnalyzed::Bool
-14T fpFNcounts::UInt32
 
-14T resOffsets::UInt32
-2T totalOffsetBeginingAndEnd UInt32
-16T oldCounters ::UInt32
-16T new counters::UInt32
 
 """
 
+"""
+it will be 4 dimensional array - where fourth dimension will store actual data  in UInt32 format 
+    -even Bool will be UInt32 for simplicity
+1)activeInGold::Bool
+2)activeInSegm::Bool
+3)fullInGold::Bool
+4)fullInSegm::Bool
+
+5)isToBectivatedGold::Bool
+6)isToBeActivatedSegm::Bool
+7-9)x,y,z coordinates ::UInt32
+10-24) isToBeAnalyzed::Bool
+25-29) fpFNcounts::UInt32
+30-31) totalfpAndFnCount::UInt32
+
+32-45) resOffsets::UInt32
+46-47) totalOffsetBeginingAndEnd UInt32
+48-54) oldCounters ::UInt32
+55-60) new counters::UInt32
+
+arrDims - dimensions of the main data array
+dataBDims - dimensions of the data block - part of the main array that is to be analyzed by single block
+creates empty metadata on the basis of the main array dimensions and data block dimensions
+"""
+function allocateMetadata(arrDims,dataBDims)
+    return CUDA.zeros(cld(arrDims[1],dataBDims[1] ) 
+            ,cld(arrDims[2,dataBDims[2] )
+            ,cld(arrDims[3],dataBDims[3])
+            ,60 )
+end
 
 
+"""
+given linear index that is telling us about x,y,z location in one number (linIndex) and number that is the position in fourth dimesnsion (locFourthDim)
+it will give us back this entryin meta data (metaData) 
+for reducing the need of recalculations we will supply also the 
+"""
+function getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
+
+end
 
 
+"""
+given linear index that is telling us about x,y,z location in one number (linIndex) and number that is the position in fourth dimesnsion (locFourthDim)
+it will set  this entry in meta data (metaData) to value (valuee)
+"""
+function setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+
+end
 
 
-
-
+    
 """
 sets is active of given block to true for gold standard pass
 """
-setBlockToActiveInGold(metaData,linIndex)
+function setBlockToActiveInGold(metaData,linIndex)
+    metaData[linIndex]
+end
 
 """
 true if block is full for gold standard pass
