@@ -79,59 +79,53 @@ end
 sets is active of given block to true for gold standard pass
 """
 function setBlockToActiveInGold(metaData,linIndex)
-   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
-    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
-    
-    end
+    setMetaDataFieldFromLin(metaData,linIndex,1,UInt32(1))
+end
 
+    
+       
+    """
+is block set to be activated for gold standard pass
+"""
+function isBlockToBeActivatedInGold(metaData, linIndex)
+   return getMetaDataFieldFromLin(metaData,5,locFourthDim)
+end
+    
+   
+    
 """
 true if block is full for gold standard pass
 """
 function isBlockFullInGold(metaData, linIndex)
-   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
-    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
-    
-    end
-"""
-is block set to be activated for gold standard pass
-"""
-function isBlockToBeActivatedInGold(metaData, linIndex)
-   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
-    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
-    
-    end
+  return  getMetaDataFieldFromLin(metaData,linIndex,3)    
+end
+
 """
 is block currently Active for gold standard pass
 """
 function isBlockCurrentlyActiveInGold(metaData, linIndex)
-   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
-    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
-    
+   getMetaDataFieldFromLin(metaData,1,locFourthDim)    
     end
 """
 make is block currently active to true for gold standard pass
 """
 function setBlockasCurrentlyActiveInGold(metaData, linIndex)
-   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
-    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
-    
-    end
+    setMetaDataFieldFromLin(metaData,1,locFourthDim,UInt32(1))
+ end
 
 
 """
 sets is active of given block to true for not gold pass
 """
 function setBlockToActiveInSegm(metaData,linIndex)
-   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
-    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
-    
+    setMetaDataFieldFromLin(metaData,2,locFourthDim,UInt32(1))    
     end
+            
 """
 true if block is full for not gold pass
 """
 function isBlockFullInSegm(metaData, linIndex)
-   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
-    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+   getMetaDataFieldFromLin(metaData,linIndex,4)
     
     end
 """
@@ -139,24 +133,21 @@ is block set to be activated for not gold pass
 """
 function isBlockToBeActivatedInSegm(metaData, linIndex)
 
-   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
-    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+   getMetaDataFieldFromLin(metaData,6,locFourthDim)
     
     end
 """
 is block currently Active for not gold pass
 """
 function isBlockCurrentlyActiveInSegm(metaData, linIndex)
-   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
-    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+   getMetaDataFieldFromLin(metaData,2,locFourthDim)
     
     end
 """
 make is block currently active to true for not gold pass
 """
 function setBlockasCurrentlyActiveInSegm(metaData, linIndex)
-   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
-    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+    setMetaDataFieldFromLin(metaData,2,locFourthDim,UInt32(1))
     
     end
 
