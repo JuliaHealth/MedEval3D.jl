@@ -2,27 +2,224 @@
 this kernel will prepare da
 """
 module PrepareArrtoBool
+export getIndexOfQueue
+using CUDA, Logging,Main.CUDAGpuUtils, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils
 
-using CUDA, Main.CUDAGpuUtils, Logging,StaticArrays
+
 
 """
-specialization of 3 dim iteration  for iterating over 3 dimensional metadata
+allocates in the local, register in shared memory
 """
-macro iter3dOuter(metaDataDims,xname,yname , zname, loopXMeta,loopYMeta,loopZmeta, ex)
-    mainExp = generalizedItermultiDim(;xname,yname , zname, arrDims=metaDataDims,loopXdim=loopXMeta ,loopYdim=loopYMeta,loopZdim=loopZmeta, ex = ex)  
+macro localAllocations()
+
+    return esc(quote
+    anyPositive = false # true If any bit will bge positive in this array - we are not afraid of data race as we can set it multiple time to true
+    #creates shared memory and initializes it to 0
+    shmemSum = @cuStaticSharedMem(Float32,(32,2))
+    
+
+    ######## needed for establishing min and max values of blocks that are intresting us 
+     minX =@cuStaticSharedMem(Float32, 1)
+     maxX= @cuStaticSharedMem(Float32, 1)
+     minY = @cuStaticSharedMem(Float32, 1)
+     maxY= @cuStaticSharedMem(Float32, 1)
+     minZ = @cuStaticSharedMem(Float32, 1)
+     maxZ= @cuStaticSharedMem(Float32, 1)      
+     
+     
+     isAnyPositive = @cuStaticSharedMem(Bool, 1)
+     #resetting
+     minX[1]= Float32(1110.0)
+     maxX[1]= Float32(0.0)
+     minY[1]= Float32(1110.0)
+     maxY[1]= Float32(0.0)    
+     minZ[1]= Float32(1110.0)
+     maxZ[1]= Float32(0.0) 
+     @ifXY 1 1 isAnyPositive[1]= false
+     #in shared memory
+ 
+#####needed for fp fn sums
+     #1 - false negative; 2- false positive
+     locArr= (Float32(0.0), Float32(0.0))# for global fp fn sums
+     locArrB= (Float32(0.0), Float32(0.0))# for local fp fn sums
+    #  1)   Left FP  
+    #  2)   Left FN  
+    #  3)   Right FP  
+    #  4)   Right FN  
+    #  5)   Posterior FP  
+    #  6)   Posterior FN  
+    #  7)   Anterior FP  
+    #  8)   Anterior FN  
+    #  9)   Top FP  
+    #  10)   Top FN  
+    #  11)   Bottom FP  
+    #  12)   Bottom FN  
+    #13)   main part FP  
+    #14)   main Part FN  
+    localQuesValues= @cuStaticSharedMem(Float32, 14)   
+  
+
+    #making sure they are initialized all to zeros
+
+     
+     sync_threads()
+end)
+end
+
+
+"""
+specialization of 2 dim iteration  for iterating over 3 dimensional metadata
+    we join y and z iterations in order to increase occupancy for potentially small arrays
+"""
+macro iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta, ex)
+    mainExp = generalizedItermultiDim(;xname=:(xMeta)
+    ,yname= :(yzSpot)
+    #,zname
+    ,arrDims=metaDataDims
+    ,loopXdim=loopXMeta 
+    ,loopYdim=loopYZMeta
+    #,loopZdim=loopZmeta
+    ,isFullBoundaryCheckY=true
+    ,isFullBoundaryCheckX =true
+    #,zOffset= :(zdim*gridDim().x)
+    #,zAdd =:(blockIdxX())
+    ,yOffset = :(ydim*gridDim().x)
+    #here we are hackin a bit so we put couple lines
+    ,yAdd=  :(blockIdxX()-1) 
+    ,additionalActionBeforeY= :( yMeta= rem(yzSpot,$metaDataDims[2]) ; zMeta= fld(yzSpot,$metaDataDims[2]) )
+    ,yCheck = :(yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] )
+    ,xCheck = :(xMeta < $metaDataDims[1])
+
+    #so each block will iterate over all xses
+    ,xOffset= :(0)
+    ,xAdd= :(xdim)
+    ,is3d = false
+    , ex = ex)  
     return esc(:( $mainExp))
 
 end #iter3dOuter
 
-
 """
 will enable iterating over the data of data block
 """
-macro iterDataBlock(arrDims,loopXdim ,loopYdim,loopZdim,xOffset,yOffset,zOffset,ex)
-    mainExp = generalizedItermultiDim(;arrDims,loopXdim ,loopYdim,loopZdim, ex = ex)  
+macro iterDataBlock(mainArrDims,dataBlockDims,loopXdim ,loopYdim,loopZdim,xOffset,yOffset,zOffset,ex)
+    mainExp = generalizedItermultiDim(;arrDims=dataBlockDims
+    ,loopXdim
+    ,loopYdim
+    ,loopZdim
+    ,xCheck = :(x <= $dataBlockDims[1] && (xOuter* $dataBlockDims[1]+x)<mainArrDims[1] )
+    ,yCheck = :(y <= $dataBlockDims[2] && (yOuter* $dataBlockDims[2]+y)<mainArrDims[2])
+    ,zCheck = :(z <= $dataBlockDims[3] && (zOuter* $dataBlockDims[3]+z)<mainArrDims[3])
+    ,zOffset= :(zOuter* $dataBlockDims[3])
+    ,zAdd =:(zdim)
+   ,yOffset = :(ydim* blockDimY()+yOuter* $dataBlockDims[2])
+   ,yAdd= :(threadIdxY())
+   ,xOffset= :(xdim * blockDimX()+xOuter* $dataBlockDims[1])
+    ,xAdd= :(threadIdxX())
+    , ex = ex)  
     return esc(:( $mainExp))
 
 end
+
+"""
+1)   Left FP  
+2)   Left FN  
+3)   Right FP  
+4)   Right FN  
+5)   Posterior FP  
+6)   Posterior FN  
+7)   Anterior FP  
+8)   Anterior FN  
+9)   Top FP  
+10)   Top FN  
+11)   Bottom FP  
+12)   Bottom FN  
+13)   Total block Fp  
+14)   Total block Fn  
+
+xpos,ypos,zpos -current  position in x,y,z dimension 
+datBdim - dimensions of the data block
+
+on the basis of the data it should give the index from 1 to 14 - to the appropriate queue
+"""
+function getIndexOfQueue(xpos,ypos,zpos, datBdim,boolSegm)
+    # @info " xpos = $(xpos) ; ypos = $(ypos) ; zpos = $(zpos) "
+    #we need to do so many != in order to deal with corners ...
+    return (
+     (xpos==1)*1
+    +(xpos==datBdim[1])*3
+    +(ypos==1 && xpos!=1 && xpos!=datBdim[1] )*5
+    +(ypos==datBdim[2] && xpos!=1 && xpos!=datBdim[1]  )*7
+    +(zpos==1  && xpos!=1 && xpos!=datBdim[1]  && ypos!=1 && ypos!=datBdim[2] )*9
+    +(zpos==datBdim[2] && xpos!=1 && xpos!=datBdim[1]  && ypos!=1 && ypos!=datBdim[2])*11
+    +(xpos>1 && xpos<datBdim[1] &&  ypos>1 && ypos<datBdim[2] && zpos>1 && zpos<datBdim[3])*13
+    )+boolSegm# in that way we will get odd for fp an even for fn
+
+end
+
+"""
+invoked on each lane and on the basis of its position will update the number of fp or fn in given queue
+"""
+macro uploadLocalfpFNCounters()
+   return esc(quote
+     atomicallyAddOne(localQuesValues[getIndexOfQueue(x,y,z,datBdim,boolSegm)])   
+    end)
+end   
+
+
+"""
+invoked after we gone through data block and now we save data into shared memory
+"""
+macro uploadMinMaxesToShmem()
+    return  esc(quote
+        @ifXY 3 1 if(isAnyPositive[1]) minX[1]= min(minX[1],xOuter) end
+        @ifXY 4 1 if(isAnyPositive[1]) maxX[1]= max(maxX[1],xOuter) end
+        @ifXY 5 1 if(isAnyPositive[1]) minY[1]= min(minY[1],yOuter) end
+        @ifXY 6 1 if(isAnyPositive[1]) maxY[1]= max(maxY[1],yOuter) end
+        @ifXY 7 1 if(isAnyPositive[1]) minZ[1]= min(minZ[1],zOuter) end
+        @ifXY 8 1 if(isAnyPositive[1]) maxZ[1]= max(maxZ[1],zOuter) end 
+    end)
+
+end
+
+"""
+invoked after we gone through data block and now we save data into appropriate spots in metadata of this metadata block
+"""
+macro uploadDataToMetaData()
+    esc(quote
+    @ifXY 1 1 if(isAnyPositive[1]) setMetaDataFpCount(locArrB[2], xOuter,yOuter,zOuter) end   
+    @ifXY 2 1 if(isAnyPositive[1]) setMetaDataFnCount(locArrB[1], xOuter,yOuter,zOuter) end
+    end)
+
+end#uploadDataToMetaData
+
+"""
+invoked after all of the data was scanned so after we will do atomics between blocks we will know 
+    the minimal and maximal in each dimensions
+"""
+macro  finalGlobalSet()
+    esc(quote
+        @redWitAct(offsetIter,shmemSum,  locArr[1],+,     locArr[2],+   )
+        @addAtomic(shmemSum,fn,fp)
+
+        @ifXY 1 1 atomicMinSet(minxRes[1],minX[1])
+        @ifXY 2 2 atomicMaxSet(maxxRes[1],maxX[1])
+
+        @ifXY 3 3 atomicMinSet(minyRes[1],minY[1])
+        @ifXY 4 4 atomicMaxSet(maxyRes[1],maxY[1])
+
+        @ifXY 5 5 atomicMinSet(minzRes[1],minY[1])
+        @ifXY 6 6 atomicMaxSet(maxzRes[1],maxZ[1])
+    end)
+end
+
+
+
+
+
+
+
+
 """
 we need to give back number of false positive and false negatives and min,max x,y,x of block containing all data 
 adapted from https://github.com/JuliaGPU/CUDA.jl/blob/afe81794038dddbda49639c8c26469496543d831/src/mapreduce.jl
@@ -60,7 +257,7 @@ function getBoolCubeKernel(goldBoolGPU3d
         ,datBdim
         ,metaDataDims
         ,mainArrDims
-        ,loopXMeta,loopYMeta,loopZmeta
+        ,loopXMeta,loopYMeta,yTimesZmeta
         ,inBlockLoopX,inBlockLoopY,inBlockLoopZ
 ) where T
     @localAllocations()
@@ -70,28 +267,15 @@ function getBoolCubeKernel(goldBoolGPU3d
     @iter3dOuter(metaDataDims,xOuter,yOuter , zOuter, loopXMeta,loopYMeta,loopZmeta,
          begin
          #inner loop is over the data indicated by metadata
-         @iterDataBlock(mainArrDims, inBlockLoopX,inBlockLoopY,inBlockLoopZ, xOuter*datBdim[1] ,yOuter*datBdim[2], zOuter*datBdim[3]
+         @iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ, xOuter*datBdim[1] ,yOuter*datBdim[2], zOuter*datBdim[3]
                          ,begin 
                                 boolGold=goldBoolGPU3d[x,y,z]==numberToLooFor
                                 boolSegm=segmBoolGPU3d[x,y,z]==numberToLooFor                                    
                                 @inbounds locArr[boolGold+ boolSegm+ boolSegm]+=(boolGold  ⊻ boolSegm)
+                                @inbounds locArrB[boolGold+ boolSegm+ boolSegm]+=(boolGold  ⊻ boolSegm)
                                 #we need to also collect data about how many fp and fn we have in main part and borders
                                 #important in case of corners we will first analyze z and y dims and z dim on last resort only !
-                                if(xdim ==1) #left
-                                
-                                elseif(xdim == inBlockLoopDims[1] )  # right   
-
-                                elseif(ydim == 0 )  # posterior   
-                        
-                                elseif(ydim == inBlockLoopDims[2] )  # anterior                           
-
-                                elseif(zdim == 0 )  # top   
-                        
-                                elseif(zdim == inBlockLoopDims[3] )  # bottom  
-                                
-                                else #main part
-                        
-                                end   
+                                @uploadLocalfpFNCounters()
                     
                                 #in case some is positive we can go futher with looking for max,min in dims and add to the new reduced boolean arrays waht we are intrested in  
                                 if(boolGold  || boolSegm)
@@ -104,28 +288,22 @@ function getBoolCubeKernel(goldBoolGPU3d
                                     reducedGoldB[x,y,z]=boolGold    
                                     reducedSegmB[x,y,z]=boolSegm 
                                 end#if boolGold  || boolSegm
-                            end)#ex
-                
-             #       IMPORTANT we need to set also the amount of the main part fp and fn by subtracting from totla block count the  border counts
-
-            #now we are just after we iterated over a single data block  we need to
-
-                #we save data about border data blocks 
+                            end)#ex                
+                #now we are just after we iterated over a single data block  we need to we save data about border data blocks 
                 sync_threads()
-                #we want to invoke this only once 
+                #we want to invoke this only once per data block
+                #save the data about number of fp and fn of this block and accumulate also this sum for global sum 
+                @uploadDataToMetaData()            
 
-               #save the data about number of fp and fn of this block and accumulate also this sum for global sum 
-                @ifXY 1 1 if(isAnyPositive[1]) setMetaDataFpCount(locArr[2], xOuter,yOuter,zOuter) end   
-                @ifXY 2 1 if(isAnyPositive[1]) setMetaDataFnCount(locArr[1], xOuter,yOuter,zOuter) end
+                #invoked after we gone through data block and now we save data into shared memory
+                @uploadMinMaxesToShmem()            
+
                 
-                @ifXY 3 1 if(isAnyPositive[1]) minX[1]= min(minX[1],xOuter) end
-                @ifXY 4 1 if(isAnyPositive[1]) maxX[1]= max(maxX[1],xOuter) end
-                @ifXY 5 1 if(isAnyPositive[1]) minY[1]= min(minY[1],yOuter) end
-                @ifXY 6 1 if(isAnyPositive[1]) maxY[1]= max(maxY[1],yOuter) end
-                @ifXY 7 1 if(isAnyPositive[1]) minZ[1]= min(minZ[1],zOuter) end
-                @ifXY 8 1 if(isAnyPositive[1]) maxZ[1]= max(maxZ[1],zOuter) end
                 sync_warp()
-                @ifXY 9 1 if(isAnyPositive[1]) isAnyPositive[1]= false end #reset     
+                #resetting
+                @ifXY 1 1 isAnyPositive[1]= false  #reset     
+                @ifXY 2 1  locArrB[1]= false  #reset     
+                @ifXY 3 1  locArrB[2]= false  #reset     
      end) #outer loop        
                 #consider ceating tuple structure where we will have  number of outer tuples the same as z dim then inner tuples the same as y dim and most inner tuples will have only the entries that are fp or fn - this would make us forced to put results always in correct spots 
                 
@@ -133,59 +311,12 @@ function getBoolCubeKernel(goldBoolGPU3d
     #in order to have global data 
 
 
-    @redWitAct(offsetIter,shmemSum,  locArr[1],+,     locArr[2],+   )
-    @addAtomic(shmemSum,fn,fp)
-
-    @ifXY 1 1 atomicMinSet(minxRes[1],minX[1])
-    @ifXY 2 2 atomicMaxSet(maxxRes[1],maxX[1])
-
-    @ifXY 3 3 atomicMinSet(minyRes[1],minY[1])
-    @ifXY 4 4 atomicMaxSet(maxyRes[1],maxY[1])
-
-    @ifXY 5 5 atomicMinSet(minzRes[1],minY[1])
-    @ifXY 6 6 atomicMaxSet(maxzRes[1],maxZ[1])
+    @finalGlobalSet()
 
 
    return  
    end
 
-"""
-allocates in the local, register in shared memory
-"""
-macro localAllocations()
-
-    return esc(quote
-    anyPositive = false # true If any bit will bge positive in this array - we are not afraid of data race as we can set it multiple time to true
-    #creates shared memory and initializes it to 0
-    shmemSum = @cuStaticSharedMem(Float32,(32,2))
-    #incrementing appropriate number of times  
-     
-     #1 - false negative; 2- false positive
-     locArr= (Float32(0.0), Float32(0.0))
- 
-     minX =@cuStaticSharedMem(Float32, 1)
-     maxX= @cuStaticSharedMem(Float32, 1)
-     minY = @cuStaticSharedMem(Float32, 1)
-     maxY= @cuStaticSharedMem(Float32, 1)
-     minZ = @cuStaticSharedMem(Float32, 1)
-     maxZ= @cuStaticSharedMem(Float32, 1)      
-     
-     
-     isAnyPositive = @cuStaticSharedMem(Bool, 1)
-     #resetting
-     minX[1]= Float32(1110.0)
-     maxX[1]= Float32(0.0)
-     minY[1]= Float32(1110.0)
-     maxY[1]= Float32(0.0)    
-     minZ[1]= Float32(1110.0)
-     maxZ[1]= Float32(0.0) 
-     @ifXY 1 1 isAnyPositive[1]= false
-     #in shared memory
- 
-     
-     sync_threads()
-end)
-end
 
 
 

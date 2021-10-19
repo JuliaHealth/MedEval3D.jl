@@ -105,12 +105,17 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
   ,yAdd= :(threadIdxY())
   ,xOffset= :(xdim * blockDimX())
    ,xAdd= :(threadIdxX())
-  ,xCheck = :(x <= $arrDims[1])
-  ,yCheck = :(y <= $arrDims[2])
-  ,zCheck = :(z <= $arrDims[3])    
+  ,xCheck = :($xname <= $arrDims[1])
+  ,yCheck = :($yname <= $arrDims[2])
+  ,zCheck = :($zname <= $arrDims[3])    
   ,additionalActionAfterZ= :()
    ,additionalActionAfterY= :()
    ,additionalActionAfterX = :()
+   ,additionalActionBeforeZ= :()
+   ,additionalActionBeforeY= :()
+   ,additionalActionBeforeX = :()
+
+
    , is3d = true
    ,ex 
    ,isFullBoundaryCheckX =false
@@ -149,6 +154,7 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
     exp1 = quote
       @unroll for $loopIterNameX in 0:$loopXdim
           $xname= $xOffset +$xAdd
+          $additionalActionBeforeX  
           if( $xCheck)
             $valExp
             $ex
@@ -160,6 +166,7 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
     exp1 = quote
       @unroll for $loopIterNameX in 0:$loopXdim
           $xname= $xOffset +$xAdd
+          $additionalActionBeforeX 
           $valExp
           $ex
         $additionalActionAfterX  
@@ -171,6 +178,7 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
     exp1 = quote
       @unroll for $loopIterNameX in 0:$loopXdim-1
           $xname= $xOffset +$xAdd
+          $additionalActionBeforeX 
           $valExp
           $ex
           $additionalActionAfterX 
@@ -178,6 +186,7 @@ function generalizedItermultiDim(; #we keep all as keyword arguments
       
       $loopIterNameX=$loopXdim
       $xname= $xOffset +$xAdd
+      $additionalActionBeforeX 
         if( $xCheck)
           $valExp
           $ex
@@ -193,6 +202,7 @@ if(isFullBoundaryCheckY)
     exp2= quote
       @unroll for $loopIterNameY in  0:$loopYdim
         $yname = $yOffset +$yAdd
+        $additionalActionBeforeY
           if($yCheck)
             $exp1
           end#if y
@@ -203,6 +213,7 @@ elseif(nobundaryCheckY)
   exp2= quote
     @unroll for $loopIterNameY in  0:$loopYdim
       $yname = $yOffset +$yAdd
+      $additionalActionBeforeY
           $exp1
         $additionalActionAfterY
         end#for  yLoops 
@@ -211,11 +222,14 @@ else
   exp2= quote
     @unroll for $loopIterNameY in  0:$loopYdim-1
       $yname = $yOffset +$yAdd
+      $additionalActionBeforeY
         $exp1
         $additionalActionAfterY
     end#for  yLoops 
         $loopIterNameY=$loopYdim
         $yname = $yOffset +$yAdd
+        $additionalActionBeforeY
+
         if($yCheck)
           $exp1
         end#if y
@@ -228,6 +242,7 @@ if(isFullBoundaryCheckZ)
         exp3= quote
           @unroll for $loopIterNameZ in 0:$loopZdim
             $zname = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
+            $additionalActionBeforeZ
             if($zCheck)          
               $exp2
             end#if z 
@@ -239,7 +254,8 @@ elseif(nobundaryCheckZ)
         exp3= quote
           @unroll for $loopIterNameZ in 0:$loopZdim
             $zname = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
-              $exp2
+            $additionalActionBeforeZ
+            $exp2
             $additionalActionAfterZ  
         end#for z dim
         end 
@@ -247,10 +263,12 @@ elseif(nobundaryCheckZ)
         exp3= quote
           @unroll for $loopIterNameZ in 0:$loopZdim-1
             $zname = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
+            $additionalActionBeforeZ
             $exp2
             $additionalActionAfterZ  
         end#for z dim
         $loopIterNameZ=$loopZdim
+        $additionalActionBeforeZ
         $zname = $zOffset + $zAdd
         if($zCheck)          
           $exp2
