@@ -1,55 +1,155 @@
 """
+order of queues
+1)   Left FP  
+2)   Left FN  
+3)   Right FP  
+4)   Right FN  
+5)   Posterior FP  
+6)   Posterior FN  
+7)   Anterior FP  
+8)   Anterior FN  
+9)   Top FP  
+10)   Top FN  
+11)   Bottom FP  
+12)   Bottom FN  
+13)   Total block Fp  
+14)   Total block Fn  
+
+In order to simplify the structure all will be represented as the UInt32  even values that are really booleans
+in those cases false will be 0 and true 32 ...
+
+
+
+
+"""
+
+"""
+it will be 4 dimensional array - where fourth dimension will store actual data  in UInt32 format 
+    -even Bool will be UInt32 for simplicity
+1)activeInGold::Bool
+2)activeInSegm::Bool
+3)fullInGold::Bool
+4)fullInSegm::Bool
+
+5)isToBectivatedGold::Bool
+6)isToBeActivatedSegm::Bool
+7-9)x,y,z coordinates ::UInt32
+10-24) isToBeAnalyzed::Bool
+25-29) fpFNcounts::UInt32
+30-31) totalfpAndFnCount::UInt32
+
+32-45) resOffsets::UInt32
+46-47) totalOffsetBeginingAndEnd UInt32
+48-54) oldCounters ::UInt32
+55-60) new counters::UInt32
+
+arrDims - dimensions of the main data array
+dataBDims - dimensions of the data block - part of the main array that is to be analyzed by single block
+creates empty metadata on the basis of the main array dimensions and data block dimensions
+"""
+function allocateMetadata(arrDims,dataBDims)
+    return CUDA.zeros(cld(arrDims[1],dataBDims[1] ) 
+            ,cld(arrDims[2,dataBDims[2] )
+            ,cld(arrDims[3],dataBDims[3])
+            ,60 )
+end
+
+
+"""
+given linear index that is telling us about x,y,z location in one number (linIndex) and number that is the position in fourth dimesnsion (locFourthDim)
+it will give us back this entryin meta data (metaData) 
+for reducing the need of recalculations we will supply also the 
+"""
+function getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
+ krowa - need to experiment if we just add  two  together wheather we will get wheatherwhat we need we get 
+end
+
+
+"""
+given linear index that is telling us about x,y,z location in one number (linIndex) and number that is the position in fourth dimesnsion (locFourthDim)
+it will set  this entry in meta data (metaData) to value (valuee)
+"""
+function setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+
+end
+
+
+    
+"""
 sets is active of given block to true for gold standard pass
 """
-setBlockToActiveInGold(metaData,linIndex)
+function setBlockToActiveInGold(metaData,linIndex)
+    setMetaDataFieldFromLin(metaData,linIndex,1,UInt32(1))
+end
 
+    
+       
+    """
+is block set to be activated for gold standard pass
+"""
+function isBlockToBeActivatedInGold(metaData, linIndex)
+   return getMetaDataFieldFromLin(metaData,5,locFourthDim)
+end
+    
+   
+    
 """
 true if block is full for gold standard pass
 """
-isBlockFullInGold(metaData, linIndex)
-
-"""
-is block set to be activated for gold standard pass
-"""
-isBlockToBeActivatedInGold(metaData, linIndex)
+function isBlockFullInGold(metaData, linIndex)
+  return  getMetaDataFieldFromLin(metaData,linIndex,3)    
+end
 
 """
 is block currently Active for gold standard pass
 """
-isBlockCurrentlyActiveInGold(metaData, linIndex)
-
+function isBlockCurrentlyActiveInGold(metaData, linIndex)
+   getMetaDataFieldFromLin(metaData,1,locFourthDim)    
+    end
 """
 make is block currently active to true for gold standard pass
 """
-setBlockasCurrentlyActiveInGold(metaData, linIndex)
-
+function setBlockasCurrentlyActiveInGold(metaData, linIndex)
+    setMetaDataFieldFromLin(metaData,1,locFourthDim,UInt32(1))
+ end
 
 
 """
 sets is active of given block to true for not gold pass
 """
-setBlockToActiveInSegm(metaData,linIndex)
-
+function setBlockToActiveInSegm(metaData,linIndex)
+    setMetaDataFieldFromLin(metaData,2,locFourthDim,UInt32(1))    
+    end
+            
 """
 true if block is full for not gold pass
 """
-isBlockFullInSegm(metaData, linIndex)
-
+function isBlockFullInSegm(metaData, linIndex)
+   getMetaDataFieldFromLin(metaData,linIndex,4)
+    
+    end
 """
 is block set to be activated for not gold pass
 """
-isBlockToBeActivatedInSegm(metaData, linIndex)
+function isBlockToBeActivatedInSegm(metaData, linIndex)
 
+   getMetaDataFieldFromLin(metaData,6,locFourthDim)
+    
+    end
 """
 is block currently Active for not gold pass
 """
-isBlockCurrentlyActiveInSegm(metaData, linIndex)
-
+function isBlockCurrentlyActiveInSegm(metaData, linIndex)
+   getMetaDataFieldFromLin(metaData,2,locFourthDim)
+    
+    end
 """
 make is block currently active to true for not gold pass
 """
-setBlockasCurrentlyActiveInSegm(metaData, linIndex)
-
+function setBlockasCurrentlyActiveInSegm(metaData, linIndex)
+    setMetaDataFieldFromLin(metaData,2,locFourthDim,UInt32(1))
+    
+    end
 
 
 """
@@ -72,12 +172,14 @@ and sets appropriate variable isTpBeAnalyzed
 Important!!! we need to take into account corners so if we look from the top we only care of the top process  
     or we also needs tops of the sides and anterior posterior paddings? - this needs to be adressed
 """
-macro setIstoBeAnalyzed() 
+macro setIstoBeAnalyzed(numb, mataData,linIndex,resShmem) 
 
+krowa
 
-
-
-end
+   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
+    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+    
+    end
 
 
 """
@@ -102,8 +204,10 @@ basically give back the booleans that were calculated in setIstoBeAnalyzed
 we will store the results in a corner of res shmem
 """
 macro getIstoBeAnalyzed(resShmem,metaData,linIndex,isGold)
-
-end
+   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
+    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+    
+    end
 
 
 """
@@ -112,87 +216,72 @@ and loaded into res shmem in getIstoBeAnalyzed
 this function only return boolean from resshmem that tell us about wheather it makes sense to analyze the data inside
     the data block - so it cares about total data block fp or fn not yet covered
 """
-function getIsTotalFPorFNnotYetCovered(resshmem )
-
-end
+function getIsTotalFPorFNnotYetCovered(resshmem ,isGold)
+   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
+    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+    
+    end
 
 
 """
 We just access data from res shmem that was loaded into resshmem in getIstoBeAnalyzed
 dim can be 1,2,3 and tell in what dimension is the plane of our analysis
-numb may be either 1 or 34  - on this basis we can establish which padding is of our intrest ...
+            isStart may be either 1 or end of data block   - on this basis we can establish which padding is of our intrest ...
 """
-function isPaddingToBeAnalyzed(resShmem,dim,numb )
+function isPaddingToBeAnalyzed(resShmem,dim,isStart )
+
+   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
+    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+    
+    end
 
 
-end
 
 """
-sets given block is full property of either gold or other pass 
-    as true
+1)   Left FP  
+2)   Left FN  
+3)   Right FP  
+4)   Right FN  
+5)   Posterior FP  
+6)   Posterior FN  
+7)   Anterior FP  
+8)   Anterior FN  
+9)   Top FP  
+10)   Top FN  
+11)   Bottom FP  
+12)   Bottom FN  
+13)   Total block Fp  
+14)   Total block Fn  
+sets values for amount of fp and fn in all of the ques specified above
 """
-function setBlockAsFull(metaData,linIndex, isGoldPass)
-
-end
-
-#first argument metadata second value from shared memory
-setMetaLeftFP
-setMetaLeftFN
-setMetaRightFP
-setMetaRightFN
-setMetaPosteriorFP
-setMetaPosteriorFN
-setMetaAnteriorFP
-setMetaAnteriorFN
-setMetaTopFP
-setMetaTopFN
-setMetaBottomFP
-setMetaBottomFN
-
-#sets  count of fp, fn in main part
-
-setMetaDataMainFpCount
-setMetaDataMainFnCount
-
-
-setMetaDataTotalFpCount
-setMetaDataTotalFnCount
-
-setMetaDataFnCount(metaData,locArr[1], xOuter,yOuter,zOuter) 
-
-
+function setMetaFPandFN(numb, mataData,linIndex,valuee)
+    
+    setMetaDataFieldFromLin(metaData,linIndex,numb+24,valuee)
+    
+    end
 
 #set the x,y,z coordinates - so we will able to query it efficiently also with linear index
 #what is important later as we will use only part of meta data this indicies will need to be updated
-setMetaDataXYZ(metaData, xOuter,yOuter,zOuter  )
+function setMetaDataXYZ(metaData, xOuter,yOuter,zOuter  )
+    setMetaDataFieldFromLin(metaData,linIndex,7,UInt32(xOuter))
+    setMetaDataFieldFromLin(metaData,linIndex,8,UInt32(yOuter))
+    setMetaDataFieldFromLin(metaData,linIndex,9,UInt32(zOuter))
+
+    end
+                
+                
+                
+                
 """
 reduce the values of selected metadata block by the supplied values
 """
-reduceMetaDataXYZ(metaData, minX,minY,minZ, linIndex  )
+function reduceMetaDataXYZ(metaData, minX,minY,minZ, linIndex  )
+                    krowa ...
+    setMetaDataFieldFromLin(metaData,linIndex,7,UInt32(xOuter))
+    setMetaDataFieldFromLin(metaData,linIndex,8,UInt32(yOuter))
+    setMetaDataFieldFromLin(metaData,linIndex,9,UInt32(zOuter))
+    end
 
-
-
-#getters for metaData
-getMetaLeftFP
-getMetaLeftFN
-getMetaRightFP
-getMetaRightFN
-getMetaPosteriorFP
-getMetaPosteriorFN
-getMetaAnteriorFP
-getMetaAnteriorFN
-getMetaTopFP
-getMetaTopFN
-getMetaBottomFP
-getMetaBottomFN
-
-#gets  count of fp, fn in main part
-
-getMetaDataMainFpCount
-getMetaDataMainFnCount
-
-getMetaDataTotalFpCount
-getMetaDataTotalFnCount
 
 
 """
@@ -220,7 +309,10 @@ accordin numb will invoke function that will give the number of fp and fn in giv
 
 """
 function getMetaResFPOrFNcount(numb, mataData,linIndex )
-end
+   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
+    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+    
+    end
 
 
 
@@ -248,7 +340,10 @@ accordin numb will invoke function that will give the result offset associated w
 
 """
 function getMetaResOffsets(numb, mataData,linIndex )
-end
+   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
+    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+    
+    end
 
 
 """
@@ -276,7 +371,10 @@ accordin numb will invoke function that will set  the result offset associated w
 
 """
 function setMetaResOffsets(numb, mataData,linIndex,value )
-end
+   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
+    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+    
+    end
 
 
 
@@ -299,8 +397,11 @@ end
 14)   Data Main Fn  
 get old result counters for the result lsts as seen above 
 """
-getOldCount(numb, mataData,linIndex)
-
+function getOldCount(numb, mataData,linIndex)
+   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
+    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+    
+    end
 """
 1)   Left FP  
 2)   Left FN  
@@ -318,8 +419,11 @@ getOldCount(numb, mataData,linIndex)
 14)   Data Main Fn  
 get new counter value of result queues as specified above
 """
-geNewCount(numb, mataData,linIndex)
-
+function getNewCount(numb, mataData,linIndex)
+   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
+    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+    
+    end
 
 """
 1)   Left FP  
@@ -342,7 +446,10 @@ will return the diffrence between current counter value and old one for the resu
 """
 function getCounterDiffrence(numb, mataData,linIndex)
 
-end    
+   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
+    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+    
+    end
 
 
 
@@ -367,8 +474,10 @@ decrement value of a associated counter (look above ) by 1
 """
 function decrCounterByOne(numb, mataData,linIndex)
 
-end   
-
+   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
+    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+    
+    end
 """
 on the basis of linear index we will find the  metadata x,y,Z
 then on the basis of available maxX, maxY, maxZ of metadata we will establish is
@@ -376,15 +485,19 @@ in dimension supplied and in direction known from numb we will return boolean
  that will e true if we have some block existing 
 """
 function isNextBlockExists(metaData,dim, numb ,linIter, isPassGold, maxX,maxY,maxZ)::Bool
+   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
+    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
     
-end
+    end
 
 """
 set block is to be activated property to be true 
 """
 function  setAsToBeActivated(metaData,linIndex,isPassGold)
-
-end   
+   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
+    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+    
+    end 
 
 
 """
@@ -394,8 +507,10 @@ given metadata it pushes the result to the result list
 """
 function appendResultPadding(metaData, linIndex, x,y,z,iterationnumber, dim,numb)
 
-
-end
+   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
+    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+    
+    end
 
 
 """
@@ -403,40 +518,8 @@ we are adding the result to appropriate spot in the result list
 on the basis of the main part offset from the  metadata
 """
 function appendResultMainPart(metaData, linIndex, x,y,z,iterationnumber, direction)
+   getMetaDataFieldFromLin(metaData,linIndex,locFourthDim)
+    setMetaDataFieldFromLin(metaData,linIndex,locFourthDim,valuee)
+    
+    end
 
-end #appendResultMainPart
-
-
-
-getMetaLeftFPOffset
-getMetaLeftFNOffset
-getMetaRightFPOffset
-getMetaRightFNOffset
-getMetaPosteriorFPOffset
-getMetaPosteriorFNOffset
-getMetaAnteriorFPOffset
-getMetaAnteriorFNOffset
-getMetaTopFPOffset
-getMetaTopFNOffset
-getMetaBottomFPOffset
-getMetaBottomFNOffset
-getMetaDataMainFpCountOffset
-getMetaDataMainFnCountOffset
-
-
-
-
-setMetaLeftFPOffset
-setMetaLeftFNOffset
-setMetaRightFPOffset
-setMetaRightFNOffset
-setMetaPosteriorFPOffset
-setMetaPosteriorFNOffset
-setMetaAnteriorFPOffset
-setMetaAnteriorFNOffset
-setMetaTopFPOffset
-setMetaTopFNOffset
-setMetaBottomFPOffset
-setMetaBottomFNOffset
-setMetaDataMainFpCountOffset
-setMetaDataMainFnCountOffset
