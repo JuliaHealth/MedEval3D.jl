@@ -96,20 +96,26 @@ end #iter3dOuter
 """
 will enable iterating over the data of data block
 """
-macro iterDataBlock(mainArrDims,dataBlockDims,loopXdim ,loopYdim,loopZdim,xOffset,yOffset,zOffset,ex)
-    mainExp = generalizedItermultiDim(;arrDims=dataBlockDims
+macro iterDataBlock(mainArrDims,dataBlockDims,loopXdim ,loopYdim,loopZdim,ex)
+    mainExp = generalizedItermultiDim(;arrDims=mainArrDims
     ,loopXdim
     ,loopYdim
     ,loopZdim
-    ,xCheck = :((xMeta* $dataBlockDims[1]+x)<=$mainArrDims[1] )
-    ,yCheck = :((yMeta* $dataBlockDims[2]+y)<=$mainArrDims[2])
-    ,zCheck = :( (zMeta* $dataBlockDims[3]+z)<=$mainArrDims[3])
-    ,zOffset= :(zMeta* $dataBlockDims[3])
+    # ,xCheck = :((xMeta* $dataBlockDims[1]+x)<=$mainArrDims[1] )
+    # ,yCheck = :((yMeta* $dataBlockDims[2]+y)<=$mainArrDims[2])
+    # ,zCheck = :( (zMeta* $dataBlockDims[3]+z)<=$mainArrDims[3])
+    ,xCheck = :(((xdim * blockDimX())+threadIdxX()  )<= $dataBlockDims[1] && x<=$mainArrDims[1] )
+    ,yCheck = :(((ydim * blockDimY())+threadIdxY()  )<= $dataBlockDims[2] &&  y<=$mainArrDims[2])
+    ,zCheck = :((zdim+1)<= $dataBlockDims[3]  &&   z<=$mainArrDims[3])
+    ,zOffset= :(zMeta* ( ($dataBlockDims[3])  ) )
     ,zAdd =:(zdim+1)
    ,yOffset = :(ydim* blockDimY()+yMeta* $dataBlockDims[2])
    ,yAdd= :(threadIdxY())
-   ,xOffset= :(xdim * blockDimX()+xMeta* $dataBlockDims[1])
+   ,xOffset= :( (xdim * blockDimX()) +xMeta* $dataBlockDims[1])
     ,xAdd= :(threadIdxX())
+    ,isFullBoundaryCheckX =true
+    , isFullBoundaryCheckY=true
+    , isFullBoundaryCheckZ=true
     , ex = ex)  
     return esc(:( $mainExp))
 
@@ -261,7 +267,7 @@ function getBoolCubeKernel(goldBoolGPU3d
     @iter3dOuter(metaDataDims, loopXMeta,loopYMeta,loopZmeta,
          begin
          #inner loop is over the data indicated by metadata
-         @iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ, xMeta*datBdim[1] ,yMeta*datBdim[2], zMeta*datBdim[3]
+         @iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ
                          ,begin 
                                 boolGold=goldBoolGPU3d[x,y,z]==numberToLooFor
                                 boolSegm=segmBoolGPU3d[x,y,z]==numberToLooFor                                    

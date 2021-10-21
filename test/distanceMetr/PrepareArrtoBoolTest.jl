@@ -117,16 +117,24 @@ using CUDA
 
 
 ##### iter data block
-singleVal = CUDA.zeros(14)
-
+singleVal = CUDA.zeros(Int64,14)
+indices = CUDA.zeros(900,15)
 threads=(32,5)
-blocks =2
-mainArrDims= (7,15,13)
-datBdim = (2,3,2)
+blocks =1
+# mainArrDims= (3,2,3)
+# datBdim = (2,1,2)
 # blocks =7
-# mainArrDims= (317,268,239)
-# datBdim = (33,40,37)
-mainArrDims= (7,15,13)
+#mainArrDims= (317,268,239)
+#datBdim = (8,8,8)
+
+mainArrDims= (178,345,327)
+datBdim = (42,19,17)
+
+# mainArrDims= (178,345,327)
+# datBdim = (42,4,2)
+# mainArrDims= (3,3,3)
+# datBdim = (2,2,2)
+# mainArrDims= (7,15,13)
 
 metaDataDims= (cld(mainArrDims[1],datBdim[1] ),cld(mainArrDims[2],datBdim[2]),cld(mainArrDims[3],datBdim[3]))
 
@@ -135,65 +143,72 @@ inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(datBdim[1] ,threads[1]),fld(datBdim
 loopXMeta,loopYZMeta= (metaDataDims[1],fld(metaDataDims[2]*metaDataDims[3] ,blocks)  )
 yTimesZmeta= metaDataDims[2]*metaDataDims[3]
 
-function iterDataBlocksKernel(mainArrDims,singleVal,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ )
+function iterDataBlocksKernel(mainArrDims,singleVal,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ ,indices)
     PrepareArrtoBool.@iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
     begin 
-        @ifXY 1 1    CUDA.@cuprint "  xMeta $(xMeta) yMeta $(yMeta)  zMeta $(zMeta) \n"   
+        #@ifXY 1 1    CUDA.@cuprint "  xMeta $(xMeta) yMeta $(yMeta)  zMeta $(zMeta) \n"   
 
-        PrepareArrtoBool.@iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ, xMeta*datBdim[1] ,yMeta*datBdim[2], zMeta*datBdim[3],
+        PrepareArrtoBool.@iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
         begin
-         @atomic singleVal[]+=1
-         #CUDA.@cuprint "x $(x)  y $(y) z $(z)  xMeta $(xMeta) yMeta $(yMeta)  zMeta $(zMeta) \n"   
-
+         @atomic singleVal[1]+=1
     end)end)
     
     return
 end
-@cuda threads=threads blocks=blocks iterDataBlocksKernel(mainArrDims,singleVal,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ)
+@cuda threads=threads blocks=blocks iterDataBlocksKernel(mainArrDims,singleVal,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,indices)
 @test singleVal[1]==mainArrDims[1]*mainArrDims[2]*mainArrDims[3]
-
-
-
-
-
-
+Int64(singleVal[1])
 
 
 ##### uploadLocalfpFNCounters
-localQuesValuesDummy = CUDA.zeros(14)
 
-threads=(32,20)
-blocks =7
-metaDataDims= (8,9,7)
-datBdim = (33,40,37)
-mainArrDims= (317,268,239)
+
+
+##### iter data block
+singleVal = CUDA.zeros(Int64,14)
+indices = CUDA.zeros(900,15)
+threads=(32,5)
+blocks =1
+# mainArrDims= (3,2,3)
+# datBdim = (2,1,2)
+# blocks =7
+#mainArrDims= (317,268,239)
+#datBdim = (8,8,8)
+
+mainArrDims= (178,345,327)
+datBdim = (42,19,17)
+
+# mainArrDims= (178,345,327)
+# datBdim = (42,4,2)
+# mainArrDims= (3,3,3)
+# datBdim = (2,2,2)
+# mainArrDims= (7,15,13)
+
+metaDataDims= (cld(mainArrDims[1],datBdim[1] ),cld(mainArrDims[2],datBdim[2]),cld(mainArrDims[3],datBdim[3]))
+
 inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(datBdim[1] ,threads[1]),fld(datBdim[2] ,threads[2]),datBdim[3]    )
 #we are iterating here block by block sequentially
 loopXMeta,loopYZMeta= (metaDataDims[1],fld(metaDataDims[2]*metaDataDims[3] ,blocks)  )
 yTimesZmeta= metaDataDims[2]*metaDataDims[3]
-datBdim
 
-function iter3dOuterKernel(mainArrDims,localQuesValues,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ )
+function iterDataBlocksKernel(mainArrDims,singleVal,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ ,indices)
     PrepareArrtoBool.@iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
-    begin
-    #inner loop is over the data indicated by metadata
-    # PrepareArrtoBool.@iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ, xOuter*datBdim[1] ,yOuter*datBdim[2], zOuter*datBdim[3]
-    #                 ,begin 
-    #                 if(blockIdx.x=4)#4 as arbitrary number
-    #                       #  PrepareArrtoBool.@uploadDataToMetaData() 
-    
-    # end end)
+    begin 
+        #@ifXY 1 1    CUDA.@cuprint "  xMeta $(xMeta) yMeta $(yMeta)  zMeta $(zMeta) \n"   
 
-
-end)
+        PrepareArrtoBool.@iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
+        begin
+            if(blockIdx.x=4)#4 as arbitrary number
+                     PrepareArrtoBool.@uploadDataToMetaData() 
+                
+        end #if
+    end) end)    
     
     return
 end
-@cuda threads=threads blocks=blocks iter3dOuterKernel(mainArrDims,localQuesValuesDummy,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ)
-@test localQuesValuesDummy[1]>0
-
-
-
+@cuda threads=threads blocks=blocks iterDataBlocksKernel(mainArrDims,singleVal,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,indices)
+@test singleVal[1]==mainArrDims[1]*mainArrDims[2]*mainArrDims[3]
+Int64(singleVal[1])
 
 
 
