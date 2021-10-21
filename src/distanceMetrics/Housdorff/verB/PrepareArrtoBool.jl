@@ -3,7 +3,7 @@ this kernel will prepare da
 """
 module PrepareArrtoBool
 export getIndexOfQueue
-using CUDA, Logging,Main.CUDAGpuUtils, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils
+using CUDA, Logging,Main.CUDAGpuUtils, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils
 
 
 
@@ -151,7 +151,7 @@ function getIndexOfQueue(xpos,ypos,zpos, datBdim,boolSegm)
     +(ypos==1 && xpos!=1 && xpos!=datBdim[1] )*5
     +(ypos==datBdim[2] && xpos!=1 && xpos!=datBdim[1]  )*7
     +(zpos==1  && xpos!=1 && xpos!=datBdim[1]  && ypos!=1 && ypos!=datBdim[2] )*9
-    +(zpos==datBdim[2] && xpos!=1 && xpos!=datBdim[1]  && ypos!=1 && ypos!=datBdim[2])*11
+    +(zpos==datBdim[3] && xpos!=1 && xpos!=datBdim[1]  && ypos!=1 && ypos!=datBdim[2])*11
     +(xpos>1 && xpos<datBdim[1] &&  ypos>1 && ypos<datBdim[2] && zpos>1 && zpos<datBdim[3])*13
     )+boolSegm# in that way we will get odd for fp an even for fn
 
@@ -162,7 +162,8 @@ invoked on each lane and on the basis of its position will update the number of 
 """
 macro uploadLocalfpFNCounters()
    return esc(quote
-     atomicallyAddOne(localQuesValues[getIndexOfQueue(x,y,z,datBdim,boolSegm)])   
+   coord=PrepareArrtoBool.getIndexOfQueue((xdim * blockDimX())+threadIdxX() ,(ydim * blockDimY())+threadIdxY(),(zdim+1),datBdim,boolSegm)
+   atomicallyAddToSpot(Float32,localQuesValues,coord,1)
     end)
 end   
 

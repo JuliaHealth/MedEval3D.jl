@@ -120,7 +120,7 @@ using CUDA
 singleVal = CUDA.zeros(Int64,14)
 indices = CUDA.zeros(900,15)
 threads=(32,5)
-blocks =1
+blocks =17
 # mainArrDims= (3,2,3)
 # datBdim = (2,1,2)
 # blocks =7
@@ -160,29 +160,28 @@ end
 Int64(singleVal[1])
 
 
-##### uploadLocalfpFNCounters
+##### @uploadLocalfpFNCounters
 
+using Revise, Parameters, Logging, Test
+using CUDA
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
+#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
+#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
+includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
+using Main.PrepareArrtoBool, Main.CUDAGpuUtils, Main.PrepareArrtoBool, Main.CUDAAtomicUtils
+using CUDA
 
-
-##### iter data block
-singleVal = CUDA.zeros(Int64,14)
-indices = CUDA.zeros(900,15)
+localQuesValues = CUDA.zeros(Float32,14)
 threads=(32,5)
-blocks =1
-# mainArrDims= (3,2,3)
-# datBdim = (2,1,2)
-# blocks =7
-#mainArrDims= (317,268,239)
-#datBdim = (8,8,8)
+blocks =3
 
-mainArrDims= (178,345,327)
-datBdim = (42,19,17)
-
-# mainArrDims= (178,345,327)
-# datBdim = (42,4,2)
-# mainArrDims= (3,3,3)
-# datBdim = (2,2,2)
-# mainArrDims= (7,15,13)
+mainArrDims= (67,78,90)
+datBdim = (17,7,12)
 
 metaDataDims= (cld(mainArrDims[1],datBdim[1] ),cld(mainArrDims[2],datBdim[2]),cld(mainArrDims[3],datBdim[3]))
 
@@ -191,31 +190,52 @@ inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(datBdim[1] ,threads[1]),fld(datBdim
 loopXMeta,loopYZMeta= (metaDataDims[1],fld(metaDataDims[2]*metaDataDims[3] ,blocks)  )
 yTimesZmeta= metaDataDims[2]*metaDataDims[3]
 
-function iterDataBlocksKernel(mainArrDims,singleVal,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ ,indices)
+
+
+function uploadLocalfpFNCountersKernel(mainArrDims,localQuesValues,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ)
+    # localQuesValues= @cuStaticSharedMem(Float32, 14)   
+
     PrepareArrtoBool.@iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
     begin 
         #@ifXY 1 1    CUDA.@cuprint "  xMeta $(xMeta) yMeta $(yMeta)  zMeta $(zMeta) \n"   
 
         PrepareArrtoBool.@iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
         begin
-            if(blockIdx.x=4)#4 as arbitrary number
-                     PrepareArrtoBool.@uploadDataToMetaData() 
+                if(xMeta==2 && yMeta==2 && zMeta==4)
+                    boolGold=true
+                    boolSegm=true
+                    coord=PrepareArrtoBool.getIndexOfQueue((xdim * blockDimX())+threadIdxX() ,(ydim * blockDimY())+threadIdxY(),(zdim+1),datBdim,false)
+                    # CUDA.@cuprint " spot $(coord)  x $((xdim * blockDimX())+threadIdxX()  )) y $((ydim * blockDimY())+threadIdxY()  )) z $((zdim+1)) datBdim $(datBdim[1]),$(datBdim[2]),$(datBdim[3]) \n"    
+                    CUDA.atomic_add!(pointer(localQuesValues, coord),Float32(1))
+                end
+
+                #@inbounds @atomic localQuesValues[coord]+=Float32(1)
+                #CUDAAtomicUtils.atomicallyAddToSpot(Float32,localQuesValues,getIndexOfQueue(x,y,z,datBdim,boolSegm),1)
+                #PrepareArrtoBool.@uploadLocalfpFNCounters() 
                 
-        end #if
-    end) end)    
+                end)end)
     
     return
 end
-@cuda threads=threads blocks=blocks iterDataBlocksKernel(mainArrDims,singleVal,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,indices)
-@test singleVal[1]==mainArrDims[1]*mainArrDims[2]*mainArrDims[3]
-Int64(singleVal[1])
 
 
 
+@cuda threads=threads blocks=blocks uploadLocalfpFNCountersKernel(mainArrDims,localQuesValues,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ)
+@test sum(localQuesValues)>0
+
+@test localQuesValues[1]==datBdim[2]*datBdim[3]
+@test localQuesValues[3]==datBdim[2]*datBdim[3]
+
+@test localQuesValues[5]==datBdim[1]*datBdim[3]-2*datBdim[3]
+@test localQuesValues[7]==datBdim[1]*datBdim[3]-2*datBdim[3]
+
+@test localQuesValues[9]==(datBdim[1]-2)*(datBdim[2]-2) 
+@test localQuesValues[11]==(datBdim[1]-2)*(datBdim[2]-2) 
+
+@test localQuesValues[13]==datBdim[1]*datBdim[2]*datBdim[3] - sum(localQuesValues[1:12])
 
 
-
-
+########### uploadDataToMetaData
 
 
 
