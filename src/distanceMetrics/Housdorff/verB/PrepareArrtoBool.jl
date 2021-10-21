@@ -74,22 +74,16 @@ specialization of 2 dim iteration  for iterating over 3 dimensional metadata
 macro iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta, ex)
     mainExp = generalizedItermultiDim(;xname=:(xMeta)
     ,yname= :(yzSpot)
-    #,zname
     ,arrDims=metaDataDims
     ,loopXdim=loopXMeta 
     ,loopYdim=loopYZMeta
-    #,loopZdim=loopZmeta
-    ,isFullBoundaryCheckY=true
-    ,isFullBoundaryCheckX =true
-    #,zOffset= :(zdim*gridDim().x)
-    #,zAdd =:(blockIdxX())
+    ,isFullBoundaryCheckY=false
+    ,isFullBoundaryCheckX =false
     ,yOffset = :(ydim*gridDim().x)
-    #here we are hackin a bit so we put couple lines
     ,yAdd=  :(blockIdxX()-1) 
     ,additionalActionBeforeY= :( yMeta= rem(yzSpot,$metaDataDims[2]) ; zMeta= fld(yzSpot,$metaDataDims[2]) )
     ,yCheck = :(yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] )
     ,xCheck = :(xMeta < $metaDataDims[1])
-
     #so each block will iterate over all xses
     ,xOffset= :(0)
     ,xAdd= :(xdim)
@@ -107,14 +101,14 @@ macro iterDataBlock(mainArrDims,dataBlockDims,loopXdim ,loopYdim,loopZdim,xOffse
     ,loopXdim
     ,loopYdim
     ,loopZdim
-    ,xCheck = :(x <= $dataBlockDims[1] && (xOuter* $dataBlockDims[1]+x)<mainArrDims[1] )
-    ,yCheck = :(y <= $dataBlockDims[2] && (yOuter* $dataBlockDims[2]+y)<mainArrDims[2])
-    ,zCheck = :(z <= $dataBlockDims[3] && (zOuter* $dataBlockDims[3]+z)<mainArrDims[3])
-    ,zOffset= :(zOuter* $dataBlockDims[3])
-    ,zAdd =:(zdim)
-   ,yOffset = :(ydim* blockDimY()+yOuter* $dataBlockDims[2])
+    ,xCheck = :((xMeta* $dataBlockDims[1]+x)<=$mainArrDims[1] )
+    ,yCheck = :((yMeta* $dataBlockDims[2]+y)<=$mainArrDims[2])
+    ,zCheck = :( (zMeta* $dataBlockDims[3]+z)<=$mainArrDims[3])
+    ,zOffset= :(zMeta* $dataBlockDims[3])
+    ,zAdd =:(zdim+1)
+   ,yOffset = :(ydim* blockDimY()+yMeta* $dataBlockDims[2])
    ,yAdd= :(threadIdxY())
-   ,xOffset= :(xdim * blockDimX()+xOuter* $dataBlockDims[1])
+   ,xOffset= :(xdim * blockDimX()+xMeta* $dataBlockDims[1])
     ,xAdd= :(threadIdxX())
     , ex = ex)  
     return esc(:( $mainExp))
@@ -172,12 +166,12 @@ invoked after we gone through data block and now we save data into shared memory
 """
 macro uploadMinMaxesToShmem()
     return  esc(quote
-        @ifXY 3 1 if(isAnyPositive[1]) minX[1]= min(minX[1],xOuter) end
-        @ifXY 4 1 if(isAnyPositive[1]) maxX[1]= max(maxX[1],xOuter) end
-        @ifXY 5 1 if(isAnyPositive[1]) minY[1]= min(minY[1],yOuter) end
-        @ifXY 6 1 if(isAnyPositive[1]) maxY[1]= max(maxY[1],yOuter) end
-        @ifXY 7 1 if(isAnyPositive[1]) minZ[1]= min(minZ[1],zOuter) end
-        @ifXY 8 1 if(isAnyPositive[1]) maxZ[1]= max(maxZ[1],zOuter) end 
+        @ifXY 3 1 if(isAnyPositive[1]) minX[1]= min(minX[1],xMeta) end
+        @ifXY 4 1 if(isAnyPositive[1]) maxX[1]= max(maxX[1],xMeta) end
+        @ifXY 5 1 if(isAnyPositive[1]) minY[1]= min(minY[1],yMeta) end
+        @ifXY 6 1 if(isAnyPositive[1]) maxY[1]= max(maxY[1],yMeta) end
+        @ifXY 7 1 if(isAnyPositive[1]) minZ[1]= min(minZ[1],zMeta) end
+        @ifXY 8 1 if(isAnyPositive[1]) maxZ[1]= max(maxZ[1],zMeta) end 
     end)
 
 end
@@ -187,8 +181,8 @@ invoked after we gone through data block and now we save data into appropriate s
 """
 macro uploadDataToMetaData()
     esc(quote
-    @ifXY 1 1 if(isAnyPositive[1]) setMetaDataFpCount(locArrB[2], xOuter,yOuter,zOuter) end   
-    @ifXY 2 1 if(isAnyPositive[1]) setMetaDataFnCount(locArrB[1], xOuter,yOuter,zOuter) end
+    @ifXY 1 1 if(isAnyPositive[1]) setMetaDataFpCount(locArrB[2], xMeta,yMeta,zMeta) end   
+    @ifXY 2 1 if(isAnyPositive[1]) setMetaDataFnCount(locArrB[1], xMeta,yMeta,zMeta) end
     end)
 
 end#uploadDataToMetaData
@@ -264,10 +258,10 @@ function getBoolCubeKernel(goldBoolGPU3d
     #we need nested x,y,z iterations so we will iterate over the matadata and on its basis over the  data in the main arrays 
     #first loop over the metadata 
     #datBdim - indicats dimensions of data blocks
-    @iter3dOuter(metaDataDims,xOuter,yOuter , zOuter, loopXMeta,loopYMeta,loopZmeta,
+    @iter3dOuter(metaDataDims, loopXMeta,loopYMeta,loopZmeta,
          begin
          #inner loop is over the data indicated by metadata
-         @iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ, xOuter*datBdim[1] ,yOuter*datBdim[2], zOuter*datBdim[3]
+         @iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ, xMeta*datBdim[1] ,yMeta*datBdim[2], zMeta*datBdim[3]
                          ,begin 
                                 boolGold=goldBoolGPU3d[x,y,z]==numberToLooFor
                                 boolSegm=segmBoolGPU3d[x,y,z]==numberToLooFor                                    

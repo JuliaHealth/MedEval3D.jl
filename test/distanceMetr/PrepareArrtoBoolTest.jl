@@ -63,14 +63,20 @@ end
 singleVal = CUDA.zeros(14)
 
 threads=(32,20)
-blocks =2
-metaDataDims= (2,2,3)
 
-# threads=(32,20)
+
+threads=(32,5)
+blocks =2
+mainArrDims= (7,15,13)
+datBdim = (2,3,2)
+
 # blocks =7
 # metaDataDims= (8,9,7)
-datBdim = (33,40,37)
-mainArrDims= (317,268,239)
+# datBdim = (33,40,37)
+mainArrDims= (7,15,13)
+
+metaDataDims= (cld(mainArrDims[1],datBdim[1] ),cld(mainArrDims[2],datBdim[2]),cld(mainArrDims[3],datBdim[3]))
+
 inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(datBdim[1] ,threads[1]),fld(datBdim[2] ,threads[2]),datBdim[3]    )
 #we are iterating here block by block sequentially
 loopXMeta,loopYZMeta= (metaDataDims[1],fld(metaDataDims[2]*metaDataDims[3] ,blocks)  )
@@ -80,8 +86,8 @@ datBdim
 function iter3dOuterKernel(mainArrDims,singleVal,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ )
     PrepareArrtoBool.@iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
     begin
-     @ifXY 1 1  @atomic singleVal[]+=1
-     @ifXY 1 1    CUDA.@cuprint "zMeta $(zMeta)  yMeta$(yMeta) xMeta$(xMeta)  idX $(blockIdxX()) \n"   
+    @ifXY 1 1  @atomic singleVal[]+=1
+    @ifXY 1 1    CUDA.@cuprint "zMeta $(zMeta)  yMeta$(yMeta) xMeta$(xMeta)  idX $(blockIdxX()) \n"   
 
 end)
     
@@ -89,6 +95,63 @@ end)
 end
 @cuda threads=threads blocks=blocks iter3dOuterKernel(mainArrDims,singleVal,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ)
 @test singleVal[1]==metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
+
+
+
+
+
+
+using Revise, Parameters, Logging, Test
+using CUDA
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
+includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
+using Main.PrepareArrtoBool, Main.CUDAGpuUtils, Main.PrepareArrtoBool
+using CUDA
+
+
+
+##### iter data block
+singleVal = CUDA.zeros(14)
+
+threads=(32,5)
+blocks =2
+mainArrDims= (7,15,13)
+datBdim = (2,3,2)
+# blocks =7
+# mainArrDims= (317,268,239)
+# datBdim = (33,40,37)
+mainArrDims= (7,15,13)
+
+metaDataDims= (cld(mainArrDims[1],datBdim[1] ),cld(mainArrDims[2],datBdim[2]),cld(mainArrDims[3],datBdim[3]))
+
+inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(datBdim[1] ,threads[1]),fld(datBdim[2] ,threads[2]),datBdim[3]    )
+#we are iterating here block by block sequentially
+loopXMeta,loopYZMeta= (metaDataDims[1],fld(metaDataDims[2]*metaDataDims[3] ,blocks)  )
+yTimesZmeta= metaDataDims[2]*metaDataDims[3]
+
+function iterDataBlocksKernel(mainArrDims,singleVal,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ )
+    PrepareArrtoBool.@iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
+    begin 
+        @ifXY 1 1    CUDA.@cuprint "  xMeta $(xMeta) yMeta $(yMeta)  zMeta $(zMeta) \n"   
+
+        PrepareArrtoBool.@iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ, xMeta*datBdim[1] ,yMeta*datBdim[2], zMeta*datBdim[3],
+        begin
+         @atomic singleVal[]+=1
+         #CUDA.@cuprint "x $(x)  y $(y) z $(z)  xMeta $(xMeta) yMeta $(yMeta)  zMeta $(zMeta) \n"   
+
+    end)end)
+    
+    return
+end
+@cuda threads=threads blocks=blocks iterDataBlocksKernel(mainArrDims,singleVal,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ)
+@test singleVal[1]==mainArrDims[1]*mainArrDims[2]*mainArrDims[3]
+
 
 
 
