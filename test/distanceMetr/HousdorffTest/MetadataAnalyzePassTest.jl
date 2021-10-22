@@ -14,21 +14,6 @@ using Main.MetadataAnalyzePass
 
 #########metaDataWarpIter
 
-threads=(17,13)
-blocks=(27)
-
-function testmetaDataWarpIterKernelA(metaData)
-    
-MetadataAnalyzePass.metaDataWarpIter(metaData,
-  ,begin
-end)
-        return
-    end
-
-    @cuda threads=threads blocks=blocks testmetaDataWarpIterKernelA(args...)
-
-    @test 1==1
-
 
 ####### exOnWarpIfNotFull
 threads=(17,13)
