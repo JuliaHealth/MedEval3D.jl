@@ -63,7 +63,7 @@ macro mainLoopKernelAllocations()
  #storing values loaded from analyzed array ...
  sourceShmem =  @cuStaticSharedMem(Bool,(32,32,32))
  #for storing sums for reductions
- shmemSum =  @cuStaticSharedMem(Float32,35,14) # we need this additional 33th an 34th spots
+ shmemSum =  @cuStaticSharedMem(Float32,35,16) # we need this additional 33th an 34th spots
 
  
  #coordinates of data in main array

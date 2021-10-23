@@ -340,9 +340,18 @@ function getBoolCubeKernel(goldBoolGPU3d
                     @uploadMinMaxesToShmem()            
 
                     sync_threads()
+                    ### set x y z needed in case we will use later linear indexing
+                    @ifXY 2 1 metaData[xMeta+1,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+1]= xMeta+1
+                    @ifXY 3 1 metaData[xMeta+1,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+2]= yMeta+1
+                    @ifXY 4 1 metaData[xMeta+1,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+3]= zMeta+1
+
+
                     #resetting
-                    @ifXY 1 1 isAnyPositive[1]= false  #reset     
-                    if(threadIdxX()<15)
+                    @ifXY 1 1 isAnyPositive[1]= false  #reset   
+
+                 
+                    
+                    @ifY 2 if(threadIdxX()<15)
                         localQuesValues[threadIdxX()]=0
                     end
                sync_threads()
@@ -361,5 +370,6 @@ function getBoolCubeKernel(goldBoolGPU3d
 
    end
 
+end
 
 

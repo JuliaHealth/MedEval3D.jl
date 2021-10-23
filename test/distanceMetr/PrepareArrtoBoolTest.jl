@@ -641,12 +641,8 @@ metaData = MetaDataUtils.allocateMetadata(mainArrDims,datBdim);
       @test  Int64( minZ[])==2
       @test  Int64( maxZ[])==6
 
-      CuArray(arrGold)[3,3,4]
-filter(el->el==2,arrGold)
 
-#      vv =  collect(view(reducedGoldA,Int64(minxRes[]) : Int64( maxxRes[]) , Int64(minyRes[]) : Int64(maxyRes[]),Int64( minZres[]) :Int64( maxZres[]) ))
-# typeof(vv)
-# size(vv)
+
 
 
       @test  reducedGoldA[9,2,5]==true
@@ -831,10 +827,33 @@ metaData = MetaDataUtils.allocateMetadata(mainArrDims,datBdim);
     arrGold[12,12,17]= 2
     arrSegm[12,12,16]= 2
 
+########### some noise around 
 
-    # 15)   total block Fp  
-    # 16)   total block Fn  
-    
+
+arrGold[22,15,13]= 2
+arrSegm[18,22,13]= 2
+
+arrGold[19,22,13]= 2
+arrSegm[22,16,13]= 2
+
+arrGold[19,22,13]= 2
+arrSegm[19,12,22]= 2
+
+arrGold[12,12,17]= 2
+arrSegm[12,12,22]= 2    
+
+arrGold[9,15,13]= 2
+arrSegm[18,9,13]= 2
+
+arrGold[19,22,9]= 2
+arrSegm[9,16,13]= 2
+
+arrGold[19,9,13]= 2
+arrSegm[19,12,9]= 2
+
+arrGold[9,12,17]= 2
+arrSegm[12,9,22]= 2
+
    
    
     fn=CuArray([UInt32(0)]);     fp=CuArray([UInt32(0)]);   
@@ -879,21 +898,10 @@ metaData = MetaDataUtils.allocateMetadata(mainArrDims,datBdim);
       ,inBlockLoopY
       ,inBlockLoopZ
           );
+          @test   metaData[2,2,2,getBeginingOfFpFNcounts()+1]==2
+          @test   metaData[2,3,2,getBeginingOfFpFNcounts()+2]==3
+          @test   metaData[2,2,4,getBeginingOfFpFNcounts()+3]==4
 
-          Int64(sum(metaData))==(1+2+3+4+5+6+7)*2
-          Int64(sum(metaData[2,2,2,getBeginingOfFpFNcounts():55]))
-          Int64(maximum(metaData[2,2,2,getBeginingOfFpFNcounts():55]))
-          sum(arrGold)
-          sum(arrSegm)
-          using Logging
-         metad= metaData;
-         for i in  24:60
-            entry =metad[2,2,2,i]
-            if(entry>0)
-            @info "i $(i) entry $(entry) "
-          end  
-         end       
-        #   1)   Left FP  
 
         @test Int64(metaData[2,2,2,getBeginingOfFpFNcounts()+1])==1
         @test Int64(metaData[2,2,2,getBeginingOfFpFNcounts()+2])==1

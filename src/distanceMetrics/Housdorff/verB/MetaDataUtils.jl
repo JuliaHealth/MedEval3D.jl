@@ -27,7 +27,7 @@ in those cases false will be 0 and true 32 ...
 """
 module MetaDataUtils
 using CUDA
-export getBeginingOfFpFNcounts
+export getBeginingOfFpFNcounts,getBeginingOfXYZ
 
 """
 it will be 4 dimensional array - where fourth dimension will store actual data  in UInt32 format 
@@ -64,6 +64,13 @@ it is begining -1 as we will add thread idx to it ...
 """
 function getBeginingOfFpFNcounts()::UInt32
     return UInt32(24)
+end
+"""
+value pointing out where we start in 4th dimension x y z position (usfull when we have access only to linear index)
+it is begining -1 as we will add thread idx to it ...
+"""
+function getBeginingOfXYZ()::UInt32
+    return UInt32(6)
 end
 
 
