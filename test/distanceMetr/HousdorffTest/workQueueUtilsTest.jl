@@ -24,7 +24,7 @@ isGold = true
 threads=(32,4)
 blocks =1
 
-workQueueFp= WorkQueueUtils.allocateWork_Fp_Fn_Queues(fpTotal,fnTotal)
+workQueueFp= WorkQueueUtils.allocateWorkQueue(fpTotal,fnTotal)
 workQueaueAcounterFp = CUDA.zeros(UInt32,1)
 
 function addToWorkQueueKernel(workQueueFp,workQueaueAcounterFp, metaX,metaY,metaZ,isGold)

@@ -24,8 +24,8 @@ we synchronize
 """
 
 module  MetadataAnalyzePass     
-using CUDA, Logging,Main.CUDAGpuUtils, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils
-
+using CUDA, Logging,Main.CUDAGpuUtils,Main.WorkQueueUtils, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils
+export @metaDataWarpIter, @loadCounters
 
 
 
@@ -88,9 +88,24 @@ macro loadCounters()
         #now in order to get offsets we need to atomially access the resOffsetCounter - we add to them total fp or fn cout so next blocks will not overwrite the 
         #area that is scheduled for this particular metadata block
         # we need to supply linear coordinate for atomicallyAddToSpot
-        @exOnWarp 15 shmemSum[threadIdxX(),15]=  atomicAdd(globalFpResOffsetCounter,  ceil(metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ 16]*1.5)  )
-        @exOnWarp 16 shmemSum[threadIdxX(),16]= atomicAdd(globalFnResOffsetCounter,  ceil(metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ 17] *1.5 )  )
-         end)#quote
+        @exOnWarp 15 begin 
+            count = metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ 16]
+            if(count>0)     
+                shmemSum[threadIdxX(),15]= atomicAdd(globalFpResOffsetCounter,  ceil(count*1.5)  )
+            else
+                shmemSum[threadIdxX(),15]= Float32(0.0)
+            end    
+        end
+        @exOnWarp 16 begin 
+            count = metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ 17]
+            if(count>0)     
+                shmemSum[threadIdxX(),16]= atomicAdd(globalFnResOffsetCounter,  ceil( count*1.5 )  )
+            else
+                shmemSum[threadIdxX(),16]= Float32(0.0)
+            end    
+        end   
+            
+        end)#quote
 end #loadCounters
 
 """
@@ -122,33 +137,44 @@ end
 
             @loadCounters()
 
-             sync_threads()
-             ######  we need to establish is block is active at the first pass block is active simply  when total count of fp and fn is greater than 0 
-            #we are adding 1 to meta y z becouse those are 0 based ...           
-            @exOnWarp 1 if((shmemSum[threadIdxX(),15]) >0 )  appendToWorkQueue(workQueaue,workQueaueCounter, metaX,metaY+1,metaZ+1, false )      end 
-            @exOnWarp 2 if((shmemSum[threadIdxX(),16]) >0 )  appendToWorkQueue(workQueaue,workQueaueCounter, metaX,metaY+1,metaZ+1, true )      end 
-             
-            @exOnWarp 3 if((shmemSum[threadIdxX(),15]) >0 ) setBlockasCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)    end 
-            @exOnWarp 4 if((shmemSum[threadIdxX(),16]) >0 ) setBlockasCurrentlyActiveInGold(metaData, xMeta,yMeta+1,zMeta+1)     end 
+            sync_threads()
+
+            #  ######  we need to establish is block is active at the first pass block is active simply  when total count of fp and fn is greater than 0 
+            # #we are adding 1 to meta y z becouse those are 0 based ...           
+#            @exOnWarp 1 if(shmemSum[threadIdxX(),15]>0 ) appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 ) end        
+ #           @exOnWarp 2 if(shmemSum[threadIdxX(),16]>0 ) appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 ) end        
+            
+            @ifY 1 if(shmemSum[threadIdxX(),15]>0.0 ) begin  
+                CUDA.@cuprint "in fn counterxMeta $(xMeta) yMeta+1 $(yMeta+1) zMeta+1 $(zMeta+1) \n"
+                appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 ) end   end     
+            @ifY 2 if(shmemSum[threadIdxX(),16]>0.0 ) appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 ) end        
+           # @exOnWarp 2 CUDA.@cuprint "is true $((shmemSum[threadIdxX(),16]>0.0 ))"   #if(shmemSum[threadIdxX(),16]>0.0 ) appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 ) end        
+            
+            @exOnWarp 3 if((shmemSum[threadIdxX(),15]) >0.0 ) setBlockasCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)    end 
+            @exOnWarp 4 if((shmemSum[threadIdxX(),16]) >0.0 ) setBlockasCurrentlyActiveInGold(metaData, xMeta,yMeta+1,zMeta+1)     end 
  
  
             #####3set offsets
              #now we will calculate and set the result queue offsets for each offset we need to synchronize warps in order to have unique offsets 
              #we can not parallalize it more as we need to sequentially set offsets             
              
-            @exOnWarp 5 @unroll for i in 0:6
+            @exOnWarp 5 begin if((shmemSum[threadIdxX(),15]) >0 ) @unroll for i in 0:6
                      #set fp
                    value=shmemSum[threadIdxX(),15]+ round(shmemSum[threadIdxX(),i*2+1]*1.4)
                    shmemSum[threadIdxX(),15]= value
-                   metaData[xMeta,yMeta,zMeta,(getResOffsetsBeg()-1) +i*2+1  ]=value
+                   metaData[xMeta,yMeta+1,zMeta+1,((getResOffsetsBeg()-1) +i*2+1)  ]=value
                      end#for
+                    end #if
+                end
  
-            @exOnWarp 6 @unroll for i in 0:6
+            @exOnWarp 6 begin if((shmemSum[threadIdxX(),16]) >0 ) @unroll for i in 0:6
                  #set fn
                  value=shmemSum[threadIdxX(),16]+ round(shmemSum[threadIdxX(),i*2+2]*1.4) #multiply as we can have some entries potentially repeating
                  shmemSum[threadIdxX(),16]= value
-                 metaData[xMeta,yMeta,zMeta,(getResOffsetsBeg()-1) +i*2+2  ]=value
+                 metaData[xMeta,yMeta+1,zMeta+1,((getResOffsetsBeg()-1) +i*2+2)  ]=value
                 end#for
+            end#if
+        end
  
  
          end)# outer loop expession  )

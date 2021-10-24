@@ -24,7 +24,7 @@ in those cases false will be 0 and true 32 ...
 """
 module MetaDataUtils
 using CUDA
-export getActiveGoldNumb,getActiveSegmNumb,getResOffsetsBeg,getOldCountersBeg,getNewCountersBeg,getBeginingOfFpFNcounts,getBeginingOfXYZ,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm
+export setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm,getActiveGoldNumb,getActiveSegmNumb,getResOffsetsBeg,getOldCountersBeg,getNewCountersBeg,getBeginingOfFpFNcounts,getBeginingOfXYZ,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm
 
 """
 it will be 4 dimensional array - where fourth dimension will store actual data  in UInt32 format 
@@ -50,7 +50,7 @@ dataBDims - dimensions of the data block - part of the main array that is to be 
 creates empty metadata on the basis of the main array dimensions and data block dimensions
 """
 function allocateMetadata(arrDims,dataBDims)
-    return CUDA.zeros(cld(arrDims[1],dataBDims[1] ) 
+    return CUDA.zeros(UInt32,cld(arrDims[1],dataBDims[1] ) 
             ,cld(arrDims[2],dataBDims[2] )
             ,cld(arrDims[3],dataBDims[3])
             ,60 )
@@ -77,6 +77,8 @@ getResOffsetsBeg() = 42
 getOldCountersBeg() = 60
 getNewCountersBeg() = 75
 
+
+
 """
 make is block currently active to true for gold standard pass
 """
@@ -88,8 +90,8 @@ end
 """
 sets is active of given block to true for not gold pass
 """
-function setBlockasCurrentlyActiveInSegm(metaData,linIndex)
-    metaData[xMeta,yMeta,zMeta,xMeta,yMeta,zMeta]=1
+function setBlockasCurrentlyActiveInSegm(metaData, xMeta,yMeta,zMeta)
+    metaData[xMeta,yMeta,zMeta,getActiveSegmNumb()]=1
  end
  
 

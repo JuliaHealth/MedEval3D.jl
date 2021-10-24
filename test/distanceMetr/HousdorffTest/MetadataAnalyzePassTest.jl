@@ -223,18 +223,14 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
 #includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\WorkQueueUtils.jl")
 
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\MetadataAnalyzePass.jl")
 using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
-using Main.MetadataAnalyzePass,Main.MetaDataUtils
-
-
-metaData ,globalFpResOffsetCounter, globalFnResOffsetCounter
-
-
+using Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils
 
 threads=(32,4)
-blocks =1
+blocks =3
 mainArrDims= (516,523,826)
 datBdim = (43,21,17)
  metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:3,2:5,4:6,: );
@@ -242,19 +238,63 @@ datBdim = (43,21,17)
 metaDataDims=size(metaData)
 loopXMeta= fld(metaDataDims[1],threads[1])
 loopYZMeta= fld(metaDataDims[2]*metaDataDims[3],blocks )
-
+fpTotal=150
+fnTotal=125
 globalFpResOffsetCounter= CUDA.zeros(UInt32,1)
 globalFnResOffsetCounter= CUDA.zeros(UInt32,1)
 
+workQueaue= WorkQueueUtils.allocateWorkQueue(fpTotal,fnTotal)
+
+metaData[2,2,2,2]=UInt32(1)
+
+workQueaueCounter= CUDA.zeros(UInt32,1)
+
 shmemSum =  CUDA.zeros(Float32,35,16) # we need this additional 33th an 34th 35th spots
 
-#as we have counters we check in shmem are they correct
+for j in 1:2 
+  ii = 0
+  for i in 1:14
+    ii+=i
+    metaData[j,j,j, getBeginingOfFpFNcounts()+i]=i
+  end
+  metaData[j,j,j, getBeginingOfFpFNcounts()+16]=15+j
+  metaData[j,j,j, getBeginingOfFpFNcounts()+17]=16+j
+end  
 
-function analyzeMetadataFirstPassKernel(metaData,metaDataDims,loopXMeta,loopYZMeta,globalFpResOffsetCounter, globalFnResOffsetCounter)
-  shmemSum =  @cuStaticSharedMem(Float32,35,16) # we need this additional 33th an 34th spots
-
+function analyzeMetadataFirstPassKernel(workQueaue,workQueaueCounter,metaData,metaDataDims,loopXMeta,loopYZMeta,globalFpResOffsetCounter, globalFnResOffsetCounter)
+  shmemSum =  @cuStaticSharedMem(Float32,(35,16)) # we need this additional 33th an 34th spots
   MetadataAnalyzePass.@analyzeMetadataFirstPass()
     
     return
 end
-@cuda threads=threads blocks=blocks analyzeMetadataFirstPassKernel(metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
+@cuda threads=threads blocks=blocks analyzeMetadataFirstPassKernel(workQueaue,workQueaueCounter,metaData,metaDataDims,loopXMeta,loopYZMeta,globalFpResOffsetCounter, globalFnResOffsetCounter)
+#check are all required blocks in the work queue
+
+Int64(sum(workQueaue))
+Int64(workQueaueCounter[1])
+Int64.(workQueaue[1,:])
+
+maximum(sort(Array(workQueaue[:,1]))) ==metaDataDims[1]
+maximum(sort(Array(workQueaue[:,2]))) ==metaDataDims[2]
+maximum(sort(Array(workQueaue[:,3]))) ==metaDataDims[3]
+
+length(filter(it-> it>0,Array(workQueaue[:,3])))== metaDataDims[1]*metaDataDims[2]*metaDataDims[3]*2
+
+Int64(sum(workQueaue))
+workQueaue[1,1]==1 
+workQueaue[1,1]==1 
+workQueaue[1,2]==1 
+workQueaue[1,3]==1 
+#workQueaue[1,4]==0 
+
+workQueaue[2,1]==1 
+workQueaue[2,2]==1 
+workQueaue[2,3]==1 
+#workQueaue[2,4]==1
+
+workQueaue[3,2]== 2
+workQueaue[3,2]==2
+workQueaue[3,2]==2 
+#workQueaue[3,4]==0 
+metaData[2,2,2,2]
+#check if offsets are calculated correctly
