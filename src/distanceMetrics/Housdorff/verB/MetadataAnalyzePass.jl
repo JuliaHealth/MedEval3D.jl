@@ -203,6 +203,20 @@ end
         end )
  end      
 
+"""
+establish is the  block  is active full or be activated, and we are saving this information into resshmem
+"""
+macro checkIsActiveOrFullOr()
+    return esc(quote
+        @exOnWarp 30 resShmem[threadIdxX()+1,2,2] = isBlockFulliInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 31 resShmem[threadIdxX()+1,3,2] = isBlockToBeActivatediInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 32 resShmem[threadIdxX()+1,4,2] = isBlockCurrentlyActiveiInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 33 resShmem[threadIdxX()+1,5,2] = isBlockFullInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 34 resShmem[threadIdxX()+1,6,2] = isBlockToBeActivatedInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 35 resShmem[threadIdxX()+1,7,2] = isBlockCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+end)#quote
+end#checkIsActiveOrFullOr
+
 
 """
 will be invoked in order to iterate over the metadata  after some dilatations were already done - we need to 
@@ -213,31 +227,26 @@ will be invoked in order to iterate over the metadata  after some dilatations we
         - it could be the case that neighbouring blocks concurently added the same results - in this case we need to set one of those to 0 and reduce the counter    
     we will do all by using single warp per metadata block     
 """
-macro setMEtaDataOtherPasses()
+macro setMEtaDataOtherPasses(locArr,offsetIter)
     return esc(quote
     $locArr=0
-    offsetIter=0
+    $offsetIter=0
     isMaskFull=false
     @metaDataWarpIter(metaDataIterLoops, threadsPerBlock,threadsPerGrid, maxLinIndex  ,begin
     isMaskOkForProcessing=false
-        #first two threads tell about wheather 
-        @exOnWarp 30 resShmem[threadIdxX()+1,2,2] = isBlockFulliInGold(metaData, linIndex)
-        @exOnWarp 31 resShmem[threadIdxX()+1,3,2] = isBlockToBeActivatediInGold(metaData, linIndex)
-        @exOnWarp 32 resShmem[threadIdxX()+1,4,2] = isBlockCurrentlyActiveiInGold(metaData, linIndex)
-        @exOnWarp 33 resShmem[threadIdxX()+1,5,2] = isBlockFullInSegm(metaData, linIndex)
-        @exOnWarp 34 resShmem[threadIdxX()+1,6,2] = isBlockToBeActivatedInSegm(metaData, linIndex)
-        @exOnWarp 35 resShmem[threadIdxX()+1,7,2] = isBlockCurrentlyActiveInSegm(metaData, linIndex)
+        #first we will check is block full active or be activated and we will set 
+    
         #now we will load the diffrence between old and current counter
-        @unroll for i in 1:12#12 not 14 as we are intrested onli in border result queues
+        @unroll for i in 1:14
             @exOnWarp i begin
                 #store result in registers
                 #store result in registers (we are reusing some variables)
                 #old count
                 $locArr = getOldCount(numb, mataData,linIndex)
                 #diffrence new - old 
-                offsetIter= geNewCount(numb, mataData,linIndex)- $locArr
+                $offsetIter= geNewCount(numb, mataData,linIndex)- $locArr
                 # enable access to information is it bigger than 0 to all threads in block
-                resShmem[threadIdxX()+1,i+1,3] = offsetIter>0
+                resShmem[threadIdxX()+1,i+1,3] = $offsetIter>0
                 end #@exOnWarp
         end#for
 
@@ -255,14 +264,14 @@ macro setMEtaDataOtherPasses()
         #after previous sync threads we already have the number of how much we increased number of results  relative to previous dilatation step
         #now we need to go through  those numbers and in case some of the border queues were incremented we need to analyze those added entries to establish is there 
         # any duplicate in case there will be we need to decrement counter and set the corresponding duplicated entry to 0 
-        @scanForDuplicates($locArr, offsetIter) 
+        @scanForDuplicates($locArr, $offsetIter) 
     end    )
         sync_threads()
         clearMainShmem(resShmem)
 
         clearSharedMemWarpLong(shmemSum, UInt8(14), Float32(0.0))
         $locArr=0
-        offsetIter=0
+        $offsetIter=0
     end )
 end
 

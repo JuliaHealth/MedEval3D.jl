@@ -1,6 +1,6 @@
 module ProcessMainDataVerB
 using CUDA, Logging,Main.CUDAGpuUtils,Main.WorkQueueUtils, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils
-export processMaskData
+export @processMaskData
 
 
 
@@ -48,24 +48,7 @@ end#establishIsFull
 
 
 
-"""
-   loads main values from analyzed array into shared memory and to locArr - which live in registers   
-   it all works under the assumption that x and y dimension of the thread block and data block is the same           
-"""                
-                
-macro loadMainValues()
-    return esc(quote
-        @iter3dWithVal  dataBlockDims loopX loopY loopZ blockBeginingX blockBeginingY blockBeginingZ analyzedArr begin
-        #val is given by macro as value of this x,y,z 
-        locArr|= val << (zIter-1)
-        processMaskData( val, zIter, resShmem) 
-        #zIter given in macro as we are iterating in this spot
-        #we add to source shmem also becouse 
-        sourceShmem[threadIdxX(), threadIdxY(), zIter]                
-    end  
-end)              
-end #loadMainValues
-                
+
                 
 """
  validates data is of our intrest               
@@ -149,6 +132,8 @@ macro processMaskData( maskBool) #::CUDA.CuRefValue{Int32}
     #locArr.x|= maskBool << zIter
     return esc(quote
         if($maskBool)
+            sourceShmem[xpos,ypos, zpos]= true          
+
             @inbounds resShmem[xpos+1,ypos+1,zpos]=true #up
             @inbounds resShmem[xpos+1,ypos+1,zpos+2]=true #down
         
@@ -160,6 +145,26 @@ macro processMaskData( maskBool) #::CUDA.CuRefValue{Int32}
         end#if    
     end)
 end#processMaskData
+
+
+"""
+   loads main values from analyzed array into shared memory and to locArr - which live in registers   
+   it all works under the assumption that x and y dimension of the thread block and data block is the same           
+"""                
+                
+macro loadMainValues(mainArrGPU)
+    return esc(quote
+    @iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ, begin
+
+     maskBool=$mainArrGPU[x,y,z]
+     @processMaskData( maskBool) 
+
+        #we add to source shmem also becouse 
+
+    end  )#iterDataBlock
+end) #quote              
+end #loadMainValues
+                
 
 """
 now in case we  want later to establish source of the data - would like to find the true distances  not taking the assumption of isometric voxels
@@ -173,14 +178,14 @@ we will record first found true voxel from each of six directions
                 posterior 4
 """
 function getDir(sourceShmem)
-    if( @inbounds sourceShmem[xpos,threadIdxY(),zIter-1]) return 6  end  #up
-    if( @inbounds  sourceShmem[xpos,threadIdxY(),zIter+1]) return 5  end #down
+    if( @inbounds sourceShmem[xpos,ypos,zpos-1]) return 6  end  #up
+    if( @inbounds  sourceShmem[xpos,ypos,zpos+1]) return 5  end #down
 
-    if( @inbounds  sourceShmem[xpos-1,threadIdxY(),zIter]) return 2  end #left
-    if( @inbounds   sourceShmem[xpos+1,threadIdxY(),zIter]) return 1  end #right
+    if( @inbounds  sourceShmem[xpos-1,ypos,zpos]) return 2  end #left
+    if( @inbounds   sourceShmem[xpos+1,ypos,zpos]) return 1  end #right
 
-    if(  @inbounds  sourceShmem[xpos,threadIdxY()+1,zIter]) return 3  end #front
-    if( @inbounds  sourceShmem[xpos,threadIdxY()-1,zIter]) return 4  end #back
+    if(  @inbounds  sourceShmem[xpos,ypos+1,zpos]) return 3  end #front
+    if( @inbounds  sourceShmem[xpos,ypos-1,zpos]) return 4  end #back
 
 end#getDir
 
