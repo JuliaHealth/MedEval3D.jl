@@ -3,7 +3,7 @@ this kernel will prepare da
 """
 module PrepareArrtoBool
 export getIndexOfQueue
-using CUDA, Logging,Main.CUDAGpuUtils, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils
+using CUDA, Logging,Main.CUDAGpuUtils, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils,Main.HFUtils
 
 
 
@@ -70,60 +70,6 @@ macro localAllocations()
 end)
 end
 
-
-"""
-specialization of 2 dim iteration  for iterating over 3 dimensional metadata
-    we join y and z iterations in order to increase occupancy for potentially small arrays
-"""
-macro iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta, ex)
-    mainExp = generalizedItermultiDim(;xname=:(xMeta)
-    ,yname= :(yzSpot)
-    ,arrDims=metaDataDims
-    ,loopXdim=loopXMeta 
-    ,loopYdim=loopYZMeta
-    ,isFullBoundaryCheckY=false
-    ,isFullBoundaryCheckX =false
-    ,yOffset = :(ydim*gridDim().x)
-    ,yAdd=  :(blockIdxX()-1) 
-    ,additionalActionBeforeY= :( yMeta= rem(yzSpot,$metaDataDims[2]) ; zMeta= fld(yzSpot,$metaDataDims[2]) )
-    ,yCheck = :(yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] )
-    ,xCheck = :(xMeta < $metaDataDims[1])
-    #so each block will iterate over all xses
-    ,xOffset= :(0)
-    ,xAdd= :(xdim)
-    ,is3d = false
-    , ex = ex)  
-    return esc(:( $mainExp))
-
-end #iter3dOuter
-
-"""
-will enable iterating over the data of data block
-"""
-macro iterDataBlock(mainArrDims,dataBlockDims,loopXdim ,loopYdim,loopZdim,ex)
-    mainExp = generalizedItermultiDim(;arrDims=mainArrDims
-    ,loopXdim
-    ,loopYdim
-    ,loopZdim
-    # ,xCheck = :((xMeta* $dataBlockDims[1]+x)<=$mainArrDims[1] )
-    # ,yCheck = :((yMeta* $dataBlockDims[2]+y)<=$mainArrDims[2])
-    # ,zCheck = :( (zMeta* $dataBlockDims[3]+z)<=$mainArrDims[3])
-    ,xCheck = :(((xdim * blockDimX())+threadIdxX()  )<= $dataBlockDims[1] && x<=$mainArrDims[1] )
-    ,yCheck = :(((ydim * blockDimY())+threadIdxY()  )<= $dataBlockDims[2] &&  y<=$mainArrDims[2])
-    ,zCheck = :((zdim+1)<= $dataBlockDims[3]  &&   z<=$mainArrDims[3])
-    ,zOffset= :(zMeta* ( ($dataBlockDims[3])  ) )
-    ,zAdd =:(zdim+1)
-   ,yOffset = :(ydim* blockDimY()+yMeta* $dataBlockDims[2])
-   ,yAdd= :(threadIdxY())
-   ,xOffset= :( (xdim * blockDimX()) +xMeta* $dataBlockDims[1])
-    ,xAdd= :(threadIdxX())
-    ,isFullBoundaryCheckX =true
-    , isFullBoundaryCheckY=true
-    , isFullBoundaryCheckZ=true
-    , ex = ex)  
-    return esc(:( $mainExp))
-
-end
 
 """
 1)   Left FP  

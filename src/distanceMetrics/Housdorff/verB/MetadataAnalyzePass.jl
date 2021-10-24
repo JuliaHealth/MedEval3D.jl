@@ -83,23 +83,31 @@ so warp will execute the same function just with varying data as it should be
 macro loadCounters()
     return esc(quote
         @unroll for i in 1:14
-           @exOnWarp i  shmemSum[threadIdxX(),i]= metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ threadIdxX()]
+           @exOnWarp i begin 
+             shmemSum[threadIdxX(),i]= metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ i]
+            #  if(shmemSum[threadIdxX(),i]>0)
+            #     CUDA.@cuprint "i $(i) shmem loaded $(shmemSum[threadIdxX(),i]) \n"
+            #  end
+           end
         end#for
+
         #now in order to get offsets we need to atomially access the resOffsetCounter - we add to them total fp or fn cout so next blocks will not overwrite the 
         #area that is scheduled for this particular metadata block
         # we need to supply linear coordinate for atomicallyAddToSpot
         @exOnWarp 15 begin 
             count = metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ 16]
             if(count>0)     
-                shmemSum[threadIdxX(),15]= atomicAdd(globalFpResOffsetCounter,  ceil(count*1.5)  )
+                shmemSum[threadIdxX(),15]= atomicAdd(globalFpResOffsetCounter,  ceil(count*1.5)  )+1
             else
                 shmemSum[threadIdxX(),15]= Float32(0.0)
             end    
+
+
         end
         @exOnWarp 16 begin 
             count = metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ 17]
             if(count>0)     
-                shmemSum[threadIdxX(),16]= atomicAdd(globalFnResOffsetCounter,  ceil( count*1.5 )  )
+                shmemSum[threadIdxX(),16]= atomicAdd(globalFnResOffsetCounter,  ceil( count*1.5 )  )+1
             else
                 shmemSum[threadIdxX(),16]= Float32(0.0)
             end    
@@ -143,15 +151,21 @@ end
             # #we are adding 1 to meta y z becouse those are 0 based ...           
 #            @exOnWarp 1 if(shmemSum[threadIdxX(),15]>0 ) appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 ) end        
  #           @exOnWarp 2 if(shmemSum[threadIdxX(),16]>0 ) appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 ) end        
-            
-            @ifY 1 if(shmemSum[threadIdxX(),15]>0.0 ) begin  
-                CUDA.@cuprint "in fn counterxMeta $(xMeta) yMeta+1 $(yMeta+1) zMeta+1 $(zMeta+1) \n"
-                appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 ) end   end     
-            @ifY 2 if(shmemSum[threadIdxX(),16]>0.0 ) appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 ) end        
+#  if(shmemSum[threadIdxX(),15]>0.0 )   
+#     CUDA.@cuprint "in fn counterxMeta $(xMeta) yMeta+1 $(yMeta+1) zMeta+1 $(zMeta+1) \n"
+
+#  end
+            @ifY 1 if(shmemSum[threadIdxX(),15]>0.1 ) begin  
+                    appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 ) 
+                end   
+            end     
+            @ifY 2 if(shmemSum[threadIdxX(),16]>0.1 ) begin 
+                 appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 ) end  
+                end      
            # @exOnWarp 2 CUDA.@cuprint "is true $((shmemSum[threadIdxX(),16]>0.0 ))"   #if(shmemSum[threadIdxX(),16]>0.0 ) appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 ) end        
             
-            @exOnWarp 3 if((shmemSum[threadIdxX(),15]) >0.0 ) setBlockasCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)    end 
-            @exOnWarp 4 if((shmemSum[threadIdxX(),16]) >0.0 ) setBlockasCurrentlyActiveInGold(metaData, xMeta,yMeta+1,zMeta+1)     end 
+            @exOnWarp 3 if((shmemSum[threadIdxX(),15]) >0.1 ) setBlockasCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)    end 
+            @exOnWarp 4 if((shmemSum[threadIdxX(),16]) >0.1 ) setBlockasCurrentlyActiveInGold(metaData, xMeta,yMeta+1,zMeta+1)     end 
  
  
             #####3set offsets
@@ -160,7 +174,10 @@ end
              
             @exOnWarp 5 begin if((shmemSum[threadIdxX(),15]) >0 ) @unroll for i in 0:6
                      #set fp
-                   value=shmemSum[threadIdxX(),15]+ round(shmemSum[threadIdxX(),i*2+1]*1.4)
+                   value=floor(shmemSum[threadIdxX(),15])+1
+                   if(i>0)
+                    value+= ceil(shmemSum[threadIdxX(),((i-1)*2+1)]*1.45)
+                   end
                    shmemSum[threadIdxX(),15]= value
                    metaData[xMeta,yMeta+1,zMeta+1,((getResOffsetsBeg()-1) +i*2+1)  ]=value
                      end#for
@@ -169,7 +186,10 @@ end
  
             @exOnWarp 6 begin if((shmemSum[threadIdxX(),16]) >0 ) @unroll for i in 0:6
                  #set fn
-                 value=shmemSum[threadIdxX(),16]+ round(shmemSum[threadIdxX(),i*2+2]*1.4) #multiply as we can have some entries potentially repeating
+                 value=shmemSum[threadIdxX(),16]
+                 if(i>0)
+                    value+= ceil(shmemSum[threadIdxX(),((i-1)*2+2)]*1.45)+1 #multiply as we can have some entries potentially repeating
+                 end
                  shmemSum[threadIdxX(),16]= value
                  metaData[xMeta,yMeta+1,zMeta+1,((getResOffsetsBeg()-1) +i*2+2)  ]=value
                 end#for

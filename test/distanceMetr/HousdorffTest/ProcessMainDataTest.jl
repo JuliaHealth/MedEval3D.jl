@@ -1,22 +1,92 @@
-using  Test, Revise 
+using Revise, Parameters, Logging, Test
+using CUDA
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\mainHouseDorffKernel\\HFUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\mainHouseDorffKernel\\ProcessMainData.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
+includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
+#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\HFUtils.jl")
+
+includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\WorkQueueUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\ProcessMainDataVerB.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\GPUtestUtils.jl")
-
-using Main.HFUtils
-using Main.CUDAGpuUtils,Cthulhu,BenchmarkTools , CUDA, StaticArrays
-
-using Main.HFUtils, Main.ProcessMainData,CUDA,Main.CUDAGpuUtils,StaticArrays
-using Main.CUDAGpuUtils,Cthulhu,BenchmarkTools , CUDA, StaticArrays
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\MetadataAnalyzePass.jl")
+using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
+using Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils
 
 
-@testset "processMaskData" begin 
+
+##### iter data block
+indices = CUDA.zeros(900,15);
+threads=(32,5);
+blocks =17;
+mainArrDims= (67,177,90);
+datBdim = (43,21,17);
+mainArrCPU= falses(mainArrDims);
+mainArrCPU[5,5,5]= true;
+mainArrGPU = CuArray(mainArrCPU);
+metaData = MetaDataUtils.allocateMetadata(mainArrDims,datBdim);
+metaDataDims= size(metaData);
+inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(datBdim[1] ,threads[1]),fld(datBdim[2] ,threads[2]),datBdim[3]    );
+#we are iterating here block by block sequentially
+loopXMeta,loopYZMeta= (1,1)#(metaDataDims[1],fld(metaDataDims[2]*metaDataDims[3] ,blocks)  )
+
+resShmem = CUDA.zeros(Bool,(datBdim[1]+2,datBdim[2]+2,datBdim[3]+2 ));
+sourceShmem = CUDA.zeros(Bool,(datBdim));
+
+function processDataKernel(mainArrGPU,sourceShmem,resShmem,mainArrDims,metaDataDims,loopXMeta,loopYZMeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ )
+    @iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
+    begin 
+        #@ifXY 1 1    CUDA.@cuprint "  xMeta $(xMeta) yMeta $(yMeta)  zMeta $(zMeta) \n"   
+
+        @iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
+        begin
+            maskBool=mainArrGPU[x,y,z]
+            ProcessMainDataVerB.@processMaskData( maskBool)
+
+    end)end)
+    
+    return
+end
+
+
+@cuda threads=threads blocks=blocks processDataKernel(mainArrGPU,sourceShmem,resShmem,mainArrDims,metaDataDims,loopXMeta,loopYZMeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ )
+@test  resShmem[5+1,5+1,5+1]==false
+@test  resShmem[7,6,6]==true
+@test  resShmem[4+1,5+1,5+1]==true
+@test  resShmem[5+1,4+1,5+1]==true
+@test  resShmem[5+1,6+1,5+1]==true
+@test  resShmem[5+1,5+1,4+1]==true
+@test  resShmem[5+1,5+1,6+1]==true
+
+sum(resShmem)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# @testset "processMaskData" begin 
 
 
     ####### first it should be zeros 
     testArrIn = CUDA.zeros(Bool,34,34,34);
     testArrOut = CUDA.zeros(Bool,34,34,34);
+
+
+    
     function testKernprocessMaskData(testArrInn,testArrOut)
         resShmem =  @cuStaticSharedMem(Bool,(34,34,34))#+2 in order to get the one padding 
         clearMainShmem(resShmem)
@@ -37,6 +107,8 @@ using Main.CUDAGpuUtils,Cthulhu,BenchmarkTools , CUDA, StaticArrays
     end    
     @cuda threads=(32,32) blocks=1 testKernprocessMaskData(testArrIn,testArrOut) 
     @test  sum(testArrOut)==0
+
+
     ########### now  we get one arbitrary point it should lead to 6 in output
     testArrIn = CUDA.zeros(Bool,32,32,32);
     testArrOut = CUDA.zeros(Bool,34,34,34);

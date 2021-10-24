@@ -1,30 +1,14 @@
+module ProcessMainDataVerB
+using CUDA, Logging,Main.CUDAGpuUtils,Main.WorkQueueUtils, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils
+export processMaskData
 
-macro executeDataIterWithPadding()
-  #some data cleaning
-  locArr::UInt32 = UInt32(0)
-  # locFloat::Float32 = Float32(0.0)
-  isMaskFull::Bool= true
-  isMaskOkForProcessing::Bool = true
-  offset = 1
-  ############## upload data
-  @loadMainValues                                        
-  sync_threads()
-  ########## check data aprat from padding
-  #can be skipped if we have the block with already all results analyzed 
-  if(getIsTotalFPorFNnotYetCovered(resshmem )   )
-      @validateData() 
-  end                  
-  #processing padding
-  @processPadding()
-  #now in case to establish is the block full we need to reduce the isMaskFull information
-  @establishIsFull()
-  
-end#executeDataIterWithPadding
+
 
 """
 we are processing padding 
 """
 macro processPadding()
+    return esc(quote
     #so here we utilize iter3 with 1 dim fixed 
     @unroll for  dim in 1:3, numb in [1,34]              
         @iter3dFixed dim numb if( isPaddingToBeAnalyzed(resShmem,dim,numb ))
@@ -45,7 +29,7 @@ macro processPadding()
             end # if isPaddingToBeAnalyzed   
         end#iter3dFixed       
     end#for
-
+end)
 end
 
 
@@ -54,10 +38,12 @@ end
 we need to establish is the block full after dilatation step 
 """
 macro establishIsFull()
+    return esc(quote
     @redWitAct(offsetIter,shmemSum,  isMaskFull,& )
     sync_threads()
     #now if it evaluated to 1 we should save it to metadata 
     @ifXY 2 2 setBlockAsFull(metaData,linIndex, isGoldPass)
+end)
 end#establishIsFull
 
 
@@ -68,6 +54,7 @@ end#establishIsFull
 """                
                 
 macro loadMainValues()
+    return esc(quote
         @iter3dWithVal  dataBlockDims loopX loopY loopZ blockBeginingX blockBeginingY blockBeginingZ analyzedArr begin
         #val is given by macro as value of this x,y,z 
         locArr|= val << (zIter-1)
@@ -75,7 +62,8 @@ macro loadMainValues()
         #zIter given in macro as we are iterating in this spot
         #we add to source shmem also becouse 
         sourceShmem[threadIdxX(), threadIdxY(), zIter]                
-    end                
+    end  
+end)              
 end #loadMainValues
                 
                 
@@ -83,6 +71,7 @@ end #loadMainValues
  validates data is of our intrest               
 """                
 macro validateData()
+    return esc(quote
     @iter3dW  dataBlockDims loopX loopY loopZ blockBeginingX blockBeginingY blockBeginingZ resShemVal begin
         locVal::Bool = @inbounds  (locArr>>(zIter-1) & 1)
         resShemVal::Bool = @inbounds resShmem[threadIdxX()+1,threadIdxY()+1,zIter+1]             
@@ -94,7 +83,7 @@ macro validateData()
               innerValidate(analyzedArr,referenceArray,x,y,z,privateResArray,privateResCounter,iterationnumber,sourceShmem  )
         end#if
      end#3d iter 
-    
+    end)
     
  end  #validateData                  
 
@@ -153,25 +142,23 @@ uploaded data from shared memory in amask of intrest gets processed in this func
             - as we also have padding we generally start from spot 2,2 as up and to the left we have 1 padding
             - also we need to make sure that in corner cases we are getting to correct spot
 """
-function processMaskData(maskBool::Bool
-                         ,zIter::UInt8
-                         ,resShmem
-                          ) #::CUDA.CuRefValue{Int32}
+macro processMaskData( maskBool) #::CUDA.CuRefValue{Int32}
     # save it to registers - we will need it later
     #locArr[zIter]=maskBool
     #now we are saving results evrywhere we are intrested in so around without diagonals (we use supremum norm instead of euclidean)
     #locArr.x|= maskBool << zIter
-    if(maskBool)
-        @inbounds resShmem[threadIdxX()+1,threadIdxY()+1,zIter]=true #up
-        @inbounds  resShmem[threadIdxX()+1,threadIdxY()+1,zIter+2]=true #down
-    
-        @inbounds  resShmem[threadIdxX(),threadIdxY()+1,zIter+1]=true #left
-        @inbounds   resShmem[threadIdxX()+2,threadIdxY()+1,zIter+1]=true #right
+    return esc(quote
+        if($maskBool)
+            @inbounds resShmem[xpos+1,ypos+1,zpos]=true #up
+            @inbounds resShmem[xpos+1,ypos+1,zpos+2]=true #down
+        
+            @inbounds  resShmem[xpos,ypos+1,zpos+1]=true #left
+            @inbounds  resShmem[xpos+2,ypos+1,zpos+1]=true #right
 
-        @inbounds  resShmem[threadIdxX()+1,threadIdxY()+2,zIter+1]=true #front
-        @inbounds  resShmem[threadIdxX()+1,threadIdxY(),zIter+1]=true #back
-    end#if    
-    
+            @inbounds  resShmem[xpos+1,ypos+2,zpos+1]=true #front
+            @inbounds  resShmem[xpos+1,ypos,zpos+1]=true #back
+        end#if    
+    end)
 end#processMaskData
 
 """
@@ -186,12 +173,40 @@ we will record first found true voxel from each of six directions
                 posterior 4
 """
 function getDir(sourceShmem)
-if( @inbounds sourceShmem[threadIdxX(),threadIdxY(),zIter-1]) return 6  end  #up
-if( @inbounds  sourceShmem[threadIdxX(),threadIdxY(),zIter+1]) return 5  end #down
+    if( @inbounds sourceShmem[xpos,threadIdxY(),zIter-1]) return 6  end  #up
+    if( @inbounds  sourceShmem[xpos,threadIdxY(),zIter+1]) return 5  end #down
 
-if( @inbounds  sourceShmem[threadIdxX()-1,threadIdxY(),zIter]) return 2  end #left
-if( @inbounds   sourceShmem[threadIdxX()+1,threadIdxY(),zIter]) return 1  end #right
+    if( @inbounds  sourceShmem[xpos-1,threadIdxY(),zIter]) return 2  end #left
+    if( @inbounds   sourceShmem[xpos+1,threadIdxY(),zIter]) return 1  end #right
 
-if(  @inbounds  sourceShmem[threadIdxX(),threadIdxY()+1,zIter]) return 3  end #front
- if( @inbounds  sourceShmem[threadIdxX(),threadIdxY()-1,zIter]) return 4  end #back
+    if(  @inbounds  sourceShmem[xpos,threadIdxY()+1,zIter]) return 3  end #front
+    if( @inbounds  sourceShmem[xpos,threadIdxY()-1,zIter]) return 4  end #back
+
 end#getDir
+
+
+macro executeDataIterWithPadding()
+    return esc(quote
+  #some data cleaning
+  locArr::UInt32 = UInt32(0)
+  # locFloat::Float32 = Float32(0.0)
+  isMaskFull::Bool= true
+  isMaskOkForProcessing::Bool = true
+  offset = 1
+  ############## upload data
+  @loadMainValues()                                       
+  sync_threads()
+  ########## check data aprat from padding
+  #can be skipped if we have the block with already all results analyzed 
+  if(getIsTotalFPorFNnotYetCovered(resshmem )   )
+      @validateData() 
+  end                  
+  #processing padding
+  @processPadding()
+  #now in case to establish is the block full we need to reduce the isMaskFull information
+  @establishIsFull()
+end)
+end#executeDataIterWithPadding
+
+
+end#ProcessMainDataVerB

@@ -268,24 +268,41 @@ function analyzeMetadataFirstPassKernel(workQueaue,workQueaueCounter,metaData,me
     return
 end
 @cuda threads=threads blocks=blocks analyzeMetadataFirstPassKernel(workQueaue,workQueaueCounter,metaData,metaDataDims,loopXMeta,loopYZMeta,globalFpResOffsetCounter, globalFnResOffsetCounter)
-#check are all required blocks in the work queue
 
-Int64(sum(workQueaue))
-Int64(workQueaueCounter[1])
-Int64.(workQueaue[1,:])
 
-maximum(sort(Array(workQueaue[:,1]))) ==metaDataDims[1]
-maximum(sort(Array(workQueaue[:,2]))) ==metaDataDims[2]
-maximum(sort(Array(workQueaue[:,3]))) ==metaDataDims[3]
+@test length(filter(it-> it>0,Array(workQueaue[:,3])))== 4
+@test workQueaueCounter[1]== 4
 
-length(filter(it-> it>0,Array(workQueaue[:,3])))== metaDataDims[1]*metaDataDims[2]*metaDataDims[3]*2
+@test metaData[1,1,1,1]==1
+@test metaData[1,1,1,2]==1
+@test metaData[1,1,2,2]==0
+@test metaData[2,2,2,1]==1
+@test metaData[2,2,2,2]==1
 
-Int64(sum(workQueaue))
-workQueaue[1,1]==1 
-workQueaue[1,1]==1 
-workQueaue[1,2]==1 
-workQueaue[1,3]==1 
+previous = 0
+for i in 1:14
+  @info  metaData[1,1,1,(getResOffsetsBeg()-1)+i]
+  #  @test metaData[1,1,1,(getResOffsetsBeg()-1)+i] > (previous+ metaData[1,1,1, getBeginingOfFpFNcounts()+i-1]*1.4)
+  #  previous= metaData[1,1,1,(getResOffsetsBeg()-1)+i]
+end
+
+first = Int64(metaData[1,1,1,(getResOffsetsBeg()-1)+1])
+sec = Int64(metaData[1,1,1,(getResOffsetsBeg()-1)+3])
+thir = Int64(metaData[1,1,1,(getResOffsetsBeg()-1)+5])
+fourth = Int64(metaData[1,1,1,(getResOffsetsBeg()-1)+7])
+fifth = Int64(metaData[1,1,1,(getResOffsetsBeg()-1)+9])
+sixth = Int64(metaData[1,1,1,(getResOffsetsBeg()-1)+11])
+seventh = Int64(metaData[1,1,1,(getResOffsetsBeg()-1)+13])
+@test sec-first >metaData[1,1,1, getBeginingOfFpFNcounts()+1-1]
+@test thir-sec>metaData[1,1,1, getBeginingOfFpFNcounts()+3-1]
+@test fourth-thir>metaData[1,1,1, getBeginingOfFpFNcounts()+5-1]
+@test fifth-fourth>metaData[1,1,1, getBeginingOfFpFNcounts()+7-1]
+@test sixth-fifth>metaData[1,1,1, getBeginingOfFpFNcounts()+11-1]
+@test seventh-sixth>metaData[1,1,1, getBeginingOfFpFNcounts()+13-1]
+
+
 #workQueaue[1,4]==0 
+
 
 workQueaue[2,1]==1 
 workQueaue[2,2]==1 

@@ -2,17 +2,17 @@ using Revise, Parameters, Logging, Test
 using CUDA
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
 
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\HFUtils.jl")
 
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
-using Main.PrepareArrtoBool, Main.CUDAGpuUtils, Main.PrepareArrtoBool
+using Main.PrepareArrtoBool, Main.CUDAGpuUtils, Main.PrepareArrtoBool,Main.HFUtils
 using CUDA
 
 
@@ -70,18 +70,20 @@ end
 using Revise, Parameters, Logging, Test
 using CUDA
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
-#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
+
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\HFUtils.jl")
 
-#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
-using Main.PrepareArrtoBool, Main.CUDAGpuUtils, Main.PrepareArrtoBool, Main.CUDAAtomicUtils
+using Main.PrepareArrtoBool, Main.CUDAGpuUtils, Main.PrepareArrtoBool,Main.HFUtils
 using CUDA
+
 
 singleVal = CUDA.zeros(14)
 
@@ -108,7 +110,7 @@ yTimesZmeta= metaDataDims[2]*metaDataDims[3]
 datBdim
 
 function iter3dOuterKernel(mainArrDims,singleVal,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ )
-    PrepareArrtoBool.@iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
+    @iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
     begin
     @ifXY 1 1  @atomic singleVal[]+=1
     @ifXY 1 1    CUDA.@cuprint "zMeta $(zMeta)  yMeta$(yMeta) xMeta$(xMeta)  idX $(blockIdxX()) \n"   
@@ -127,17 +129,19 @@ end
 
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
+
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\HFUtils.jl")
 
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
-using Main.PrepareArrtoBool, Main.CUDAGpuUtils, Main.PrepareArrtoBool
+using Main.PrepareArrtoBool, Main.CUDAGpuUtils, Main.PrepareArrtoBool,Main.HFUtils
 using CUDA
 
 
@@ -176,11 +180,11 @@ loopXMeta,loopYZMeta= (metaDataDims[1],fld(metaDataDims[2]*metaDataDims[3] ,bloc
 yTimesZmeta= metaDataDims[2]*metaDataDims[3]
 
 function iterDataBlocksKernel(mainArrDims,singleVal,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ ,indices)
-    PrepareArrtoBool.@iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
+    @iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
     begin 
         #@ifXY 1 1    CUDA.@cuprint "  xMeta $(xMeta) yMeta $(yMeta)  zMeta $(zMeta) \n"   
 
-        PrepareArrtoBool.@iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
+        @iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
         begin
          @atomic singleVal[1]+=1
     end)end)
@@ -193,21 +197,21 @@ Int64(singleVal[1])
 
 
 ##### @uploadLocalfpFNCounters
-
 using Revise, Parameters, Logging, Test
 using CUDA
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
-#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
+
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\HFUtils.jl")
 
-#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
-using Main.PrepareArrtoBool, Main.CUDAGpuUtils, Main.PrepareArrtoBool, Main.CUDAAtomicUtils
+using Main.PrepareArrtoBool, Main.CUDAGpuUtils, Main.PrepareArrtoBool,Main.HFUtils
 using CUDA
 
 localQuesValues = CUDA.zeros(Float32,14)
@@ -229,11 +233,11 @@ yTimesZmeta= metaDataDims[2]*metaDataDims[3]
 function uploadLocalfpFNCountersKernel(mainArrDims,localQuesValues,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ)
     # localQuesValues= @cuStaticSharedMem(Float32, 14)   
 
-    PrepareArrtoBool.@iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
+    @iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
     begin 
         #@ifXY 1 1    CUDA.@cuprint "  xMeta $(xMeta) yMeta $(yMeta)  zMeta $(zMeta) \n"   
 
-        PrepareArrtoBool.@iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
+        @iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
         begin
                     boolGold=true
                     boolSegm=false
@@ -273,7 +277,7 @@ end
 
 
 using Revise, Parameters, Logging, Test
-using CUDA
+using CUDA,Main.HFUtils
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
 #includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
@@ -282,6 +286,8 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\HFUtils.jl")
+
 #includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
 
@@ -306,10 +312,10 @@ metaData = MetaDataUtils.allocateMetadata(mainArrDims,datBdim);
 function uploadDataToMetaDataKernel(mainArrDims,localQuesValuesB,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaData)
     localQuesValues= @cuStaticSharedMem(UInt32, 14)   
     localBool=false
-    PrepareArrtoBool.@iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
+    @iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
     begin 
 
-        PrepareArrtoBool.@iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
+        @iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
         begin
                     boolGold=true
                     boolSegm=true
@@ -366,7 +372,6 @@ metaData[3,3,5,getBeginingOfFpFNcounts()+1]+ metaData[3,3,5,getBeginingOfFpFNcou
 
 
 using Revise, Parameters, Logging, Test
-using CUDA
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
 #includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
@@ -375,11 +380,13 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\HFUtils.jl")
+
 #includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
 
 using Main.PrepareArrtoBool, Main.CUDAGpuUtils, Main.PrepareArrtoBool, Main.CUDAAtomicUtils, Main.MetaDataUtils
-using CUDA
+using CUDA,Main.HFUtils
 
 localQuesValues = CUDA.zeros(Float32,14)
 threads=(32,5)
@@ -395,14 +402,14 @@ inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(datBdim[1] ,threads[1]),fld(datBdim
 loopXMeta,loopYZMeta= (metaDataDims[1],fld(metaDataDims[2]*metaDataDims[3] ,blocks)  )
 yTimesZmeta= metaDataDims[2]*metaDataDims[3]
 metaData = MetaDataUtils.allocateMetadata(mainArrDims,datBdim);
-
+metaDataDims
 function uploadDataToMetaDataKernel(mainArrDims,localQuesValuesB,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaData)
     localQuesValues= @cuStaticSharedMem(UInt32, 14)   
     localBool=false
-    PrepareArrtoBool.@iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
+    @iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
     begin 
 
-        PrepareArrtoBool.@iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
+        @iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
         begin
                     boolGold=false
                     boolSegm=false
@@ -462,7 +469,6 @@ metaData[3,3,5,getBeginingOfFpFNcounts()+1]+ metaData[3,3,5,getBeginingOfFpFNcou
 
 
 using Revise, Parameters, Logging, Test
-using CUDA
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
 #includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
@@ -471,11 +477,13 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\HFUtils.jl")
+
 #includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
 
 using Main.PrepareArrtoBool, Main.CUDAGpuUtils, Main.PrepareArrtoBool, Main.CUDAAtomicUtils, Main.MetaDataUtils
-using CUDA
+using CUDA,Main.HFUtils
 
 localQuesValues = CUDA.zeros(Float32,14)
 threads=(32,5)
@@ -504,10 +512,10 @@ maxZ= CuArray([Float32(0.0) ])
 function uploadDataToMetaDataKernel(minX, maxX, minY,maxY,minZ,maxZ,mainArrDims,localQuesValuesB,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaData)
     localQuesValues= @cuStaticSharedMem(UInt32, 14)   
     isAnyPositive=true
-    PrepareArrtoBool.@iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
+    @iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
     begin 
 
-        PrepareArrtoBool.@iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
+        @iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
         begin
                    
                     if(xMeta>=2 && yMeta>=1 && zMeta>=3 && xMeta<=4 && yMeta<=5 && zMeta<=6  )
@@ -540,7 +548,7 @@ end
 ###########################   getBoolCubeKernel
 
 using Revise, Parameters, Logging, Test
-using CUDA
+using CUDA,Main.HFUtils
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
 #includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
@@ -550,6 +558,8 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
 #includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\HFUtils.jl")
+
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
 
 using Main.PrepareArrtoBool, Main.CUDAGpuUtils, Main.PrepareArrtoBool, Main.CUDAAtomicUtils, Main.MetaDataUtils
@@ -680,7 +690,7 @@ metaData = MetaDataUtils.allocateMetadata(mainArrDims,datBdim);
 ###########################   getBoolCubeKernel  2
 
 using Revise, Parameters, Logging, Test
-using CUDA
+using CUDA,Main.HFUtils
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
 #includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
@@ -690,6 +700,8 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
 #includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\HFUtils.jl")
+
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
 
 using Main.PrepareArrtoBool, Main.CUDAGpuUtils, Main.PrepareArrtoBool, Main.CUDAAtomicUtils, Main.MetaDataUtils
