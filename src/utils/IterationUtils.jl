@@ -12,7 +12,7 @@ we need also to supply functions of iterating the 3 dimensional data but with ch
 module IterationUtils
 using CUDA,Logging
 export generalizedItermultiDim
-export @iter3d, @iter3dAdditionalxyzActsAndZcheck, @iter3dAdditionalxyzActs, @iter3dAdditionalzActs,@iter3dWithVal
+export @exOnWarp,@exOnWarpIfBool, @iter3d, @iter3dAdditionalxyzActsAndZcheck, @iter3dAdditionalxyzActs, @iter3dAdditionalzActs,@iter3dWithVal
 
 """
 arrDims- dimensions of main arrya
@@ -370,6 +370,41 @@ function getSubLoopPartialCheck(loopIterName,loopDim,defineVariable, additionalA
 end
 
 
+"""
+macro will know about the number of available warps as this will equall the  y dimension of thread block
+    now we will supply on what warp we want to execute the function  if the number will be smaller than number of warps 
+    it will be executed on chosen warp otherwise macro will perform modulus operation to establish index that is indicating some 
+    warp that exists     
+"""
+macro exOnWarp(numb,ex)
+    return  esc(quote
+        if($numb<=blockDimY())
+            @ifY $numb $ex
+        else
+            @ifY (mod($numb,blockDimY())+1) $ex    
+        end 
+    end)
+ end       
+ 
+"""
+macro will know about the number of available warps as this will equall the  y dimension of thread block
+    now we will supply on what warp we want to execute the function  if the number will be smaller than number of warps 
+    it will be executed on chosen warp otherwise macro will perform modulus operation to establish index that is indicating some 
+    warp that exists  
+    we execute only if isMaskFull is false what indicates that there is a metadata block that is associated with this idX
+        tobeEx - indicates is it to be executed 
+"""
+macro exOnWarpIfBool(tobeEx,numb, ex)
+    return  esc(quote
+        if($tobeEx)
+            if($numb<=blockDimY())
+                @ifY $numb $ex
+            else
+                @ifY (mod($numb,blockDimY())+1) $ex    
+            end 
+        end    
+    end)
+end
 
 """
 iteration through 3 dimensional data but  with one dimension fixed - ie we will analyze plane or part of the plane where value of given dimension is as we supply it 

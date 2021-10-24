@@ -52,6 +52,7 @@ macro metaDataWarpIter(metaDataDims,loopXMeta,loopYZMeta,ex)
     ,additionalActionBeforeY= :( yMeta= rem(yzSpot,$metaDataDims[2]) ; zMeta= fld(yzSpot,$metaDataDims[2]) )
     ,yCheck = :(yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] )
     ,xCheck = :(xMeta <= $metaDataDims[1])
+    # ,xAdd= :(threadIdxX()-1)# to keep all 0 based
     ,is3d = false
     , ex = ex)  
     return esc(:( $mainExp))
@@ -72,43 +73,6 @@ macro metaDataWarpIter(metaDataDims,loopXMeta,loopYZMeta,ex)
     # end )
 
 end
-"""
-macro will know about the number of available warps as this will equall the  y dimension of thread block
-    now we will supply on what warp we want to execute the function  if the number will be smaller than number of warps 
-    it will be executed on chosen warp otherwise macro will perform modulus operation to establish index that is indicating some 
-    warp that exists     
-"""
-macro exOnWarp(numb,ex)
-    return  esc(quote
-        if($numb<=blockDimY())
-            @ifY $numb $ex
-        else
-            @ifY (mod($numb,blockDimY())+1) $ex    
-        end 
-    end)
- end       
-
-
-
-"""
-macro will know about the number of available warps as this will equall the  y dimension of thread block
-    now we will supply on what warp we want to execute the function  if the number will be smaller than number of warps 
-    it will be executed on chosen warp otherwise macro will perform modulus operation to establish index that is indicating some 
-    warp that exists  
-    we execute only if isMaskFull is false what indicates that there is a metadata block that is associated with this idX
-        tobeEx - indicates is it to be executed 
-"""
-macro exOnWarpIfBool(tobeEx,numb, ex)
-    return  esc(quote
-        if($tobeEx)
-            if($numb<=blockDimY())
-                @ifY $numb $ex
-            else
-                @ifY (mod($numb,blockDimY())+1) $ex    
-            end 
-        end    
-    end)
-end
 
 """
 now we upload all data related to amount of data that is of our intrest 
@@ -116,17 +80,27 @@ as we need to perform basically the same work across all warps - instead on spec
 so warp will execute the same function just with varying data as it should be 
 
 """
-macro loadCounters(tobeEx,locArr)
+macro loadCounters()
     return esc(quote
         @unroll for i in 1:14
-            @exOnWarpIfBool $tobeEx i  shmemSum[threadIdxX(),i]= getMetaResFPOrFNcount(threadIdxX(), mataData,linIndex )
+           @exOnWarp i  shmemSum[threadIdxX(),i]= metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ threadIdxX()]
         end#for
         #now in order to get offsets we need to atomially access the resOffsetCounter - we add to them total fp or fn cout so next blocks will not overwrite the 
         #area that is scheduled for this particular metadata block
-        @exOnWarpIfBool $tobeEx 15 shmemSum[threadIdxX(),15]=   atomicAdd(globalFpResOffsetCounter,   round(getMetaDataTotalFpCount(metadat,linIndex) *1,5)  )
-        @exOnWarpIfBool $tobeEx 16 shmemSum[threadIdxX(),16]=   atomicAdd( globalFnResOffsetCounter,  round(getMetaDataTotalFnCount(metadat,linIndex) *1,5 )  )
-    end)#quote
+        # we need to supply linear coordinate for atomicallyAddToSpot
+        @exOnWarp 15 shmemSum[threadIdxX(),15]=  atomicAdd(globalFpResOffsetCounter,  ceil(metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ 16]*1.5)  )
+        @exOnWarp 16 shmemSum[threadIdxX(),16]= atomicAdd(globalFnResOffsetCounter,  ceil(metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ 17] *1.5 )  )
+         end)#quote
 end #loadCounters
+
+"""
+helps in calculating linear index in meta data 
+"""
+function getLinearIndexInMeta(xMeta,yMeta,zMeta,metaDataDims,toAddInForthDim )
+return 
+
+end
+
 
  """
  we analyze metadate as described above 
@@ -138,50 +112,48 @@ end #loadCounters
  workQueaueA, workQueaueAcounter
  tobeEx - some register boolean that we will reuse
  """
- macro analyzeMetadataFirstPass( metaData ,globalFpResOffsetCounter, globalFnResOffsetCounter,tobeEx,locArr )
+ macro analyzeMetadataFirstPass()
          return esc(quote
          # we need to iterate over all metadata blocks with checks so the blocks can not be  outside the area of intrest defined by  minX, minY,minZ and maxX,maxY,maxZ
-         @metaDataWarpIter(metaDataIterLoops,maxLinIndex  ,begin
+         @metaDataWarpIter(metaDataDims,loopXMeta,loopYZMeta ,begin
              #now we upload all data related to amount of data that is of our intrest 
              #as we need to perform basically the same work across all warps - instead on specializing threads in warp we will execute the same fynction across all warps
              # so warp will execute the same function just with varying data as it should be 
 
-            @loadCounters(tobeEx,locArr)
+            @loadCounters()
 
-             #as we reduced the metadata size we need now to update x,y,z coordinates 
-             @exOnWarpIfBool $tobeEx 17 reduceMetaDataXYZ(metaData, minX,minY,minZ, linIndex  )
-                     
- 
              sync_threads()
              ######  we need to establish is block is active at the first pass block is active simply  when total count of fp and fn is greater than 0 
-             @exOnWarpIfBool $tobeEx 1 if((shmemSum[idY,1]) >0 )  appendToWorkQueue(workQueaueA,workQueaueAcounter, linIndex, false )      end 
-             @exOnWarpIfBool $tobeEx 2 if((shmemSum[idY,2]) >0 )  appendToWorkQueue(workQueaueA,workQueaueAcounter, linIndex, true )      end 
-             @exOnWarpIfBool $tobeEx 3 if((shmemSum[idY,1]+shmemSum[idY,2] ) >0 )  setBlockToActive(metaData,linIndex)     end 
+            #we are adding 1 to meta y z becouse those are 0 based ...           
+            @exOnWarp 1 if((shmemSum[threadIdxX(),15]) >0 )  appendToWorkQueue(workQueaue,workQueaueCounter, metaX,metaY+1,metaZ+1, false )      end 
+            @exOnWarp 2 if((shmemSum[threadIdxX(),16]) >0 )  appendToWorkQueue(workQueaue,workQueaueCounter, metaX,metaY+1,metaZ+1, true )      end 
+             
+            @exOnWarp 3 if((shmemSum[threadIdxX(),15]) >0 ) setBlockasCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)    end 
+            @exOnWarp 4 if((shmemSum[threadIdxX(),16]) >0 ) setBlockasCurrentlyActiveInGold(metaData, xMeta,yMeta+1,zMeta+1)     end 
  
  
             #####3set offsets
              #now we will calculate and set the result queue offsets for each offset we need to synchronize warps in order to have unique offsets 
-             #we can not parallalize it mote            
+             #we can not parallalize it more as we need to sequentially set offsets             
              
-             @exOnWarpIfBool $tobeEx 4 @unroll for i in 0:7
+            @exOnWarp 5 @unroll for i in 0:6
                      #set fp
-                   value=shmemSum[threadIdxX(),1]+ round($locArr*1.4)
-                   shmemSum[threadIdxX(),1]= value
-                   setMetaResOffsets(i*2+1, mataData,linIndex,value )
+                   value=shmemSum[threadIdxX(),15]+ round(shmemSum[threadIdxX(),i*2+1]*1.4)
+                   shmemSum[threadIdxX(),15]= value
+                   metaData[xMeta,yMeta,zMeta,(getResOffsetsBeg()-1) +i*2+1  ]=value
                      end#for
  
-             @exOnWarpIfBool $tobeEx 5 @unroll for i in 0:7
+            @exOnWarp 6 @unroll for i in 0:6
                  #set fn
-                 value=shmemSum[threadIdxX(),2]+ round($locArr*1.4) #multiply as we can have some entries potentially repeating
-                 shmemSum[threadIdxX(),1]= value
-                 setMetaResOffsets(i*2+2, mataData,linIndex,value )
-             end#for
+                 value=shmemSum[threadIdxX(),16]+ round(shmemSum[threadIdxX(),i*2+2]*1.4) #multiply as we can have some entries potentially repeating
+                 shmemSum[threadIdxX(),16]= value
+                 metaData[xMeta,yMeta,zMeta,(getResOffsetsBeg()-1) +i*2+2  ]=value
+                end#for
  
  
          end)# outer loop expession  )
-         sync_threads()
-         clearSharedMemWarpLong(shmemSum, UInt8(2), Float32(0.0))
-         $locArr=0
+         # probably we do not need to clear as we assign not adding values ...
+         #clearSharedMemWarpLong(shmemSum, UInt8(14), Float32(0.0))
         end )
  end      
 

@@ -14,7 +14,7 @@ end
 """
 atomically add given value to the coordinate (linear) of supplied array
 """
-function atomicallyAddToSpot(typ::Type, arr,coord,value=typ(1))
+function atomicallyAddToSpot( arr,coord,value)
 #    return CUDA.atomic_add!(pointer(arr, coord),typ(value))
 return  @inbounds @atomic arr[coord]+=value
 end

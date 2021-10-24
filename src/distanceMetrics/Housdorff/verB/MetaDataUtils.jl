@@ -21,13 +21,10 @@ order of queues
 In order to simplify the structure all will be represented as the UInt32  even values that are really booleans
 in those cases false will be 0 and true 32 ...
 
-
-
-
 """
 module MetaDataUtils
 using CUDA
-export getBeginingOfFpFNcounts,getBeginingOfXYZ
+export getActiveGoldNumb,getActiveSegmNumb,getResOffsetsBeg,getOldCountersBeg,getNewCountersBeg,getBeginingOfFpFNcounts,getBeginingOfXYZ,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm
 
 """
 it will be 4 dimensional array - where fourth dimension will store actual data  in UInt32 format 
@@ -46,7 +43,7 @@ it will be 4 dimensional array - where fourth dimension will store actual data  
 42-56) resOffsets::UInt32
 57-59) totalOffsetBeginingAndEnd UInt32
 60-74) oldCounters ::UInt32
-75-89) new counters::UInt32
+75-89) newCounters::UInt32
 
 arrDims - dimensions of the main data array
 dataBDims - dimensions of the data block - part of the main array that is to be analyzed by single block
@@ -73,8 +70,28 @@ function getBeginingOfXYZ()::UInt32
     return UInt32(6)
 end
 
+getActiveGoldNumb() = 1
+getActiveSegmNumb() = 2
+getResOffsetsBeg() = 42
+
+getOldCountersBeg() = 60
+getNewCountersBeg() = 75
+
+"""
+make is block currently active to true for gold standard pass
+"""
+function setBlockasCurrentlyActiveInGold(metaData, xMeta,yMeta,zMeta)
+    metaData[xMeta,yMeta,zMeta,getActiveGoldNumb()]=1
+end
 
 
+"""
+sets is active of given block to true for not gold pass
+"""
+function setBlockasCurrentlyActiveInSegm(metaData,linIndex)
+    metaData[xMeta,yMeta,zMeta,xMeta,yMeta,zMeta]=1
+ end
+ 
 
 """
 given linear index that is telling us about x,y,z location in one number (linIndex) and number that is the position in fourth dimesnsion (locFourthDim)
@@ -128,20 +145,7 @@ is block currently Active for gold standard pass
 function isBlockCurrentlyActiveInGold(metaData, linIndex)
    getMetaDataFieldFromLin(metaData,1,locFourthDim)    
     end
-"""
-make is block currently active to true for gold standard pass
-"""
-function setBlockasCurrentlyActiveInGold(metaData, linIndex)
-    setMetaDataFieldFromLin(metaData,1,locFourthDim,UInt32(1))
- end
 
-
-"""
-sets is active of given block to true for not gold pass
-"""
-function setBlockToActiveInSegm(metaData,linIndex)
-    setMetaDataFieldFromLin(metaData,2,locFourthDim,UInt32(1))    
-    end
             
 """
 true if block is full for not gold pass

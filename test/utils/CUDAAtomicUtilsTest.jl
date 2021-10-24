@@ -32,7 +32,7 @@ end
 
 resultB = CUDA.zeros(3)
 function testAddAtomicKernelB(resultB)
-    atomicallyAddToSpot(Float32,resultB,2,1)
+    atomicallyAddToSpot(resultB,2,1)
     # CUDA.atomic_add!(pointer(resultB, 2), Float32(1))
     
     return

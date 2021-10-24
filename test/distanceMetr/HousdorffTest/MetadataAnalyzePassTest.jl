@@ -29,7 +29,6 @@ datBdim = (43,21,17)
 metaDataDims=size(metaData)
 loopXMeta= fld(metaDataDims[1],threads[1])
 loopYZMeta= fld(metaDataDims[2]*metaDataDims[3],blocks )
-metaDataDims,loopXMeta,loopYZMeta
 
 function metaDataWarpIterKernel(singleVal,metaDataDims,loopXMeta,loopYZMeta)
 
@@ -155,35 +154,107 @@ includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/Met
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
 
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\MetadataAnalyzePass.jl")
-using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils
-using Main.MetadataAnalyzePass
+using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
+using Main.MetadataAnalyzePass,Main.MetaDataUtils
 
 
-#########metaDataWarpIter
+#########loadCounters
 singleVal = CUDA.zeros(14)
 
-threads=(32,5)
-blocks =8
+threads=(32,4)
+blocks =1
 mainArrDims= (516,523,826)
 datBdim = (43,21,17)
- metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:7,2:11,4:13,: );
+ metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:3,2:5,4:6,: );
 #metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:9,2:3,4:6,: );
 metaDataDims=size(metaData)
-maxLinIndex = metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
-metaDataIterLoops = cld( maxLinIndex,blocks*32)
-function metaDataWarpIterKernel(singleVal,metaDataIterLoops, maxLinIndex)
+loopXMeta= fld(metaDataDims[1],threads[1])
+loopYZMeta= fld(metaDataDims[2]*metaDataDims[3],blocks )
 
-  
-    MetadataAnalyzePass.@metaDataWarpIter( metaDataIterLoops, maxLinIndex,
+globalFpResOffsetCounter= CUDA.zeros(UInt32,1)
+globalFnResOffsetCounter= CUDA.zeros(UInt32,1)
+
+shmemSum =  CUDA.zeros(Float32,35,16) # we need this additional 33th an 34th 35th spots
+
+# setting some counters in blocks of metadata that are on diagonal
+
+for j in 1:2 
+  ii = 0
+  for i in 1:14
+    ii+=i
+    metaData[j,j,j, getBeginingOfFpFNcounts()+i]=i
+  end
+  metaData[j,j,j, getBeginingOfFpFNcounts()+16]=15+j
+  metaData[j,j,j, getBeginingOfFpFNcounts()+17]=16+j
+end  
+
+#as we have counters we check in shmem are they correct
+
+function loadCountersKernel(metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
+
+  tobeEx= true
+  locArr= UInt32(0)
+    MetadataAnalyzePass.@metaDataWarpIter(metaDataDims,loopXMeta,loopYZMeta,
     begin
-      @ifY 1 @atomic singleVal[]+=1
-    # @ifXY 1 1    CUDA.@cuprint "linIndex $(linIndex)"
+      MetadataAnalyzePass.@loadCounters(tobeEx,locArr)
+    #@ifY 1    CUDA.@cuprint "xMeta $(xMeta) yMeta $(xMeta) zMeta $(zMeta)" 
     #CUDA.@cuprint "linIndex $(linIndex) \n "
 end)
     
     return
 end
-@cuda threads=threads blocks=blocks metaDataWarpIterKernel(singleVal,metaDataIterLoops, maxLinIndex)
-@test singleVal[1]==metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
+@cuda threads=threads blocks=blocks loadCountersKernel(metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
+sum(shmemSum)
+
+@test Int64(globalFpResOffsetCounter[1]) ==Int64(ceil((16*1.5)+(17*1.5)))
+@test  Int64(globalFnResOffsetCounter[1])==Int64(ceil((18*1.5)+(17*1.5)))
 
 
+############ analyzeMetadataFirstPass
+using Revise, Parameters, Logging, Test
+using CUDA
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
+#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
+includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
+#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
+includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
+
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\MetadataAnalyzePass.jl")
+using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
+using Main.MetadataAnalyzePass,Main.MetaDataUtils
+
+
+metaData ,globalFpResOffsetCounter, globalFnResOffsetCounter
+
+
+
+threads=(32,4)
+blocks =1
+mainArrDims= (516,523,826)
+datBdim = (43,21,17)
+ metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:3,2:5,4:6,: );
+#metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:9,2:3,4:6,: );
+metaDataDims=size(metaData)
+loopXMeta= fld(metaDataDims[1],threads[1])
+loopYZMeta= fld(metaDataDims[2]*metaDataDims[3],blocks )
+
+globalFpResOffsetCounter= CUDA.zeros(UInt32,1)
+globalFnResOffsetCounter= CUDA.zeros(UInt32,1)
+
+shmemSum =  CUDA.zeros(Float32,35,16) # we need this additional 33th an 34th 35th spots
+
+#as we have counters we check in shmem are they correct
+
+function analyzeMetadataFirstPassKernel(metaData,metaDataDims,loopXMeta,loopYZMeta,globalFpResOffsetCounter, globalFnResOffsetCounter)
+  shmemSum =  @cuStaticSharedMem(Float32,35,16) # we need this additional 33th an 34th spots
+
+  MetadataAnalyzePass.@analyzeMetadataFirstPass()
+    
+    return
+end
+@cuda threads=threads blocks=blocks analyzeMetadataFirstPassKernel(metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
