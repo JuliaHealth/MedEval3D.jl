@@ -275,6 +275,39 @@ end#for
 end )
 end#setIsToBeValidated
 
+
+"""
+as we are operating under assumption that we do not know how many warps we have - we do not know the y dimension of thread block we need to load data into registers with a loop 
+and within the same loop scan it for duplicates
+so if we have more than 12 warps we will execute the loop once - in case we have more we need to execute it in the loop
+iterThrougWarNumb - indicates how many times we need to  iterate to cover all 12 ques if we have at least 12 warps available (ussually we will) we will execute it once
+"""
+macro loadAndScanForDuplicates(iterThrougWarNumb)
+   @unroll for outerWarpLoop in 0:iterThrougWarNumb     
+        innerWarpNumb = threadidY()+ outerWarpLoop*blockimY()
+           #now we will load the diffrence between old and current counter
+        if(( innerWarpNumb)<13)
+            @ifY innerWarpNumb begin
+                #store result in registers
+                #store result in registers (we are reusing some variables)
+                #old count
+                $locArr = getOldCount(numb, mataData,linIndex)
+                #diffrence new - old 
+                offsetIter= geNewCount(numb, mataData,linIndex)- $locArr
+                # enable access to information is it bigger than 0 to all threads in block
+                resShmem[threadIdxX()+1,innerWarpNumb+1,3] = offsetIter>0
+            end #@ifY
+        end#if
+        
+        
+        
+        
+        
+    end #outerWarpLoop    
+end
+
+
+
 """
 after previous sync threads we already have the number of how much we increased number of results  relative to previous dilatation step
 now we need to go through  those numbers and in case some of the border queues were incremented we need to analyze those added entries to establish is there 
