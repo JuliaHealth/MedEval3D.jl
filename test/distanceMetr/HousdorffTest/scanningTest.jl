@@ -37,11 +37,35 @@ resShmem = CuArray(falses(datBdim[1]+2, datBdim[2]+2, datBdim[3]+2 ))
 xMeta = 1
 yMeta=0
 zMeta=0
-resArray=allocateResArray()
+resArray=CUDA.zeros(UInt32, 9*250*15,4)
 #we set some offsets to make it simple for evaluation we will keeep it  each separated by 50 
+offset = -49
+for metaX in 1:3, metaY in 1:3, metaZ in 1:3
+   for quueueNumb in 1:14
+      offset+=250
+      #set offset
+      metaData[metaX,metaY,metaZ,getResOffsetsBeg()+quueueNumb]=offset
+      #set counter
+   end#for   
+end #for   
+#we are simulating some results in some of the result queues
+offset = -49
+   for quueueNumb in 1:14
+         offset+=250
+      for j in 1:quueueNumb
+        #the bigger the number the more repetitions and more non repeated elements 
+        resList[offset,:]= [j,j,j,1]
+        metaData[1,1,1,getNewCountersBeg()+quueueNumb]+=1     
+   end#for
+end#for   
+
+#should be first queue in block 3,3,3
+resList[9*14*250] = [1,1,1,1]
+resList[9*14*250] = [1,1,1,0]
+resList[9*14*250] = [1,1,1,1]
 
 
-#we are simulating some results
+
 for i in 1:10
     
 end#for    
