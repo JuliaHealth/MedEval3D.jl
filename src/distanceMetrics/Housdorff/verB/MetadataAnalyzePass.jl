@@ -349,7 +349,7 @@ macro scanForDuplicatesMainPart()
     @unroll for scanIter::UInt8 in 0: cld(shmemSum[34,i],32 )
         # here we are loading data about linearized indicies of result in main  array depending on a queue we are analyzing it will tell about gold or other pas
         if(((scanIter*32) + threadIdxX())< shmemSum[34,innerWarpNumb]  )
-            shmemSum[threadIdxX(),innerWarpNumb] = resArray[shmemSum[33,innerWarpNumb]+ (scanIter*32) + threadIdxX(),1]  
+            shmemSum[threadIdxX(),innerWarpNumb] = getResLinIndex(resArray[shmemSum[33,innerWarpNumb]  +shmemSum[35,innerWarpNumb] + (scanIter*32) + threadIdxX(),1]  )
         end
         sync_warp() # now we have 32 linear indicies loaded into the shared memory
         #so we need to load some value into single value into thread and than go over all value in shared memory  
@@ -365,11 +365,11 @@ we need to now
 """
 macro scanWhenDataInShmem()
     return esc(quote
-    @unroll for tempCount::UInt8 in shmemSum[33,innerWarpNumb] :shmemSum[33,innerWarpNumb]+shmemSum[34,innerWarpNumb]
+    @unroll for tempCount in (shmemSum[33,innerWarpNumb]+shmemSum[35,innerWarpNumb] ):(shmemSum[33,innerWarpNumb]+shmemSum[34,innerWarpNumb]+shmemSum[33,innerWarpNumb])
         #now we need to make sure that we are not at spot whre this value is legitimite - so this is first occurence
         if(tempCount!=shmemSum[33,innerWarpNumb]+ (scanIter*32) + threadIdxX()  )
             #finally we iterate over all values in any given thread and compare to associated value in shared memory
-            if(resArray[tempCount,1]  == shmemSum[threadIdxX(),innerWarpNumb] )
+            if( getResLinIndex(resArray[tempCount,1])  == shmemSum[threadIdxX(),innerWarpNumb] )
                  #if we are here it means that we have duplicated value 
                 @manageDuplicatedValue()
             end    
