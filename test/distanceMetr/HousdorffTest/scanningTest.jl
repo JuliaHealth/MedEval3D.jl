@@ -1,32 +1,26 @@
 
 
 
-
-"""
-after previous sync threads we already have the number of how much we increased number of results  relative to previous dilatation step
-now we need to go through  those numbers and in case some of the border queues were incremented we need to analyze those added entries to establish is there 
-any duplicate in case there will be we need to decrement counter and set the corresponding duplicated entry to 0 
-"""
-macro scanForDuplicates(oldCount, countDiff) 
-    return esc(quote
-    @unroll for resQueueNumb in 1:12 #we have diffrent result queues
-        @exOnWarp resQueueNumb begin
-            @unroll for threadNumber in 1:32 # we need to analyze all thread id x 
-                if( resShmem[warpNumb+1,resQueueNumb+1,3]) # futher actions necessary only if counter diffrence is bigger than 0 
-                    if( threadIdxX()==threadNumber ) #now we need some  values that are in the registers  of the associated thread 
-                        #those will be needed to know what we need to iterate over 
-                        shmemSum[33,resQueueNumb]=  $oldCount 
-                        shmemSum[34,resQueueNumb]=  $countDiff
-                        shmemSum[35,resQueueNumb]=  linIndex
-                    end# if ( threadIdxX()==warpNumb )
-                    
-                    sync_warp()# now we should have the required number for scanning of new values for duplicates
-                    @scanForDuplicatesMainPart()
-                end# resShmem[warpNumb+1,i+1,3]
-            end # for warp number  
-        end #@exOnWarp
-    end#for 
-end )
+macro loadAndScanForDuplicates()
+   @unroll for outerWarpLoop::Uint8 in 0:iterThrougWarNumb     
+        innerWarpNumb = (threadidY()+ outerWarpLoop*blockimY()
+           #now we will load the diffrence between old and current counter
+        if(( innerWarpNumb)<13)
+            @ifY innerWarpNumb begin
+                #store result in registers
+                #store result in registers (we are reusing some variables)
+                #old count
+                $locArr = getOldCount(numb, mataData,linIndex)
+                #diffrence new - old 
+                offsetIter= geNewCount(numb, mataData,linIndex)- $locArr
+                #queue result offset
+                localResOffset = metaData[xMeta,yMeta+1,zMeta+1, getBeginnigOfOffsets()+innerWarpNumb] # tis queue offset
+                # enable access to information is it bigger than 0 to all threads in block
+                resShmem[threadIdxX()+1,innerWarpNumb+1,3] = offsetIter>0
+            end #@ifY
+        end#if
+      @scanForDuplicates()                 
+    end #outerWarpLoop    
 end
 
 singleVal = CUDA.zeros(14)
@@ -35,20 +29,30 @@ threads=(32,5)
 blocks =8
 mainArrDims= (516,523,826)
 datBdim = (43,21,17)
- metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:17,2:18,4:10,: );
+metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:17,2:18,4:10,: );
 #metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:9,2:3,4:6,: );
 metaDataDims=size(metaData)
-loopXMeta= fld(metaDataDims[1],threads[1])
-loopYZMeta= fld(metaDataDims[2]*metaDataDims[3],blocks )
+iterThrougWarNumb = cld(blockDimY(),12)
+resShmem = CuArray(falses(datBdim[1]+2, datBdim[2]+2, datBdim[3]+2 ))
+xMeta = 1
+yMeta=0
+zMeta=0
+resArray=allocateResArray()
+#we set some offsets to make it simple for evaluation we will keeep it  each separated by 50 
 
-function metaDataWarpIterKernel(singleVal,metaDataDims,loopXMeta,loopYZMeta)
 
-  
-    MetadataAnalyzePass.@scanForDuplicates()
+#we are simulating some results
+for i in 1:10
     
+end#for    
+
+
+function loadAndSanForDuplKernel(metaData,iterThrougWarNumb ,resShmem,xMeta,yMeta,zMeta)
+   MetadataAnalyzePass.@loadAndScanForDuplicates()  
     return
 end
-@cuda threads=threads blocks=blocks metaDataWarpIterKernel(singleVal,metaDataDims,loopXMeta,loopYZMeta)
+
+@cuda threads=threads blocks=blocks loadAndSanForDuplKernel(metaData,iterThrougWarNumb ,resShmem,xMeta,yMeta,zMeta)
 @test singleVal[1]==metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
 
 
