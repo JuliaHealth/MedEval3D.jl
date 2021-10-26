@@ -208,15 +208,33 @@ establish is the  block  is active full or be activated, and we are saving this 
 """
 macro checkIsActiveOrFullOr()
     return esc(quote
-        @exOnWarp 30 resShmem[threadIdxX()+1,2,2] = isBlockFulliInGold(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 31 resShmem[threadIdxX()+1,3,2] = isBlockToBeActivatediInGold(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 32 resShmem[threadIdxX()+1,4,2] = isBlockCurrentlyActiveiInGold(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 33 resShmem[threadIdxX()+1,5,2] = isBlockFullInSegm(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 34 resShmem[threadIdxX()+1,6,2] = isBlockToBeActivatedInSegm(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 35 resShmem[threadIdxX()+1,7,2] = isBlockCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 30 resShmem[threadIdxX()+1,2,2] = metaData[xMeta,yMeta+1,zMeta+1,getFullInGoldNumb() ] #  isBlockFulliInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 31 resShmem[threadIdxX()+1,3,2] = metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInGoldNumb() ] # isBlockToBeActivatediInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 32 resShmem[threadIdxX()+1,4,2] = metaData[xMeta,yMeta+1,zMeta+1,getActiveGoldNumb() ] # isBlockCurrentlyActiveiInGold(metaData, xMeta,yMeta+1,zMeta+1)
+       
+        @exOnWarp 33 resShmem[threadIdxX()+1,5,2] = metaData[xMeta,yMeta+1,zMeta+1,getFullInSegmNumb() ] # isBlockFullInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 34 resShmem[threadIdxX()+1,6,2] = metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInSegmNumb()() ] # isBlockToBeActivatedInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 35 resShmem[threadIdxX()+1,7,2] = metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb()] # isBlockCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)
 end)#quote
 end#checkIsActiveOrFullOr
 
+"""
+given data in resShmem loaded by checkIsActiveOrFullOr() we will  mark the block as active  ( or not) 
+    and if is to be active add it to work queue
+"""
+macro setIsToBeActive()
+    return esc(quote
+        @exOnWarp 1 if(!resShmem[threadIdxX()+1,2,2]  && (resShmem[threadIdxX()+1,3,2]  ||  resShmem[threadIdxX()+1,4,2])  )  
+                        metaData[xMeta,yMeta+1,zMeta+1,getActiveGoldNumb() ]=1
+                        appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 )
+                    end
+        @exOnWarp 2 if(!resShmem[threadIdxX()+1,5,2]  && (resShmem[threadIdxX()+1,6,2]  ||  resShmem[threadIdxX()+1,7,2])  ) 
+                        metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb() ]=1     
+                        appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 )             
+            end
+    end)#quote
+
+end    
 
 """
 will be invoked in order to iterate over the metadata  after some dilatations were already done - we need to 
@@ -235,7 +253,7 @@ macro setMEtaDataOtherPasses(locArr,offsetIter)
     @metaDataWarpIter(metaDataIterLoops, threadsPerBlock,threadsPerGrid, maxLinIndex  ,begin
     isMaskOkForProcessing=false
         #first we will check is block full active or be activated and we will set 
-    
+        @checkIsActiveOrFullOr()
         #now we will load the diffrence between old and current counter
         @unroll for i in 1:14
             @exOnWarp i begin
@@ -258,9 +276,8 @@ macro setMEtaDataOtherPasses(locArr,offsetIter)
         #increased its  amount of value in last dilatation step if so and  this increase is in some border result list we need to  establish weather we do not have any repeating  results
         sync_threads()
 
-        #we set information that block should be activated in gold segm
-        @exOnWarp 1 if(!resShmem[threadIdxX()+1,2,2]  && (resShmem[threadIdxX()+1,3,2]  ||  resShmem[threadIdxX()+1,4,2])  )   setBlockasCurrentlyActiveInGold(metaData, linIndex)     end
-        @exOnWarp 2 if(!resShmem[threadIdxX()+1,5,2]  && (resShmem[threadIdxX()+1,6,2]  ||  resShmem[threadIdxX()+1,7,2])  )   setBlockasCurrentlyActiveInSegm(metaData, linIndex)     end
+        #we set information that block should be activated in gold  and segm
+        @setIsToBeActive()
         #after previous sync threads we already have the number of how much we increased number of results  relative to previous dilatation step
         #now we need to go through  those numbers and in case some of the border queues were incremented we need to analyze those added entries to establish is there 
         # any duplicate in case there will be we need to decrement counter and set the corresponding duplicated entry to 0 

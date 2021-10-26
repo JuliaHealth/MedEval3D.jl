@@ -24,7 +24,8 @@ in those cases false will be 0 and true 32 ...
 """
 module MetaDataUtils
 using CUDA
-export setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm,getActiveGoldNumb,getActiveSegmNumb,getResOffsetsBeg,getOldCountersBeg,getNewCountersBeg,getBeginingOfFpFNcounts,getBeginingOfXYZ,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm
+export getIsToBeActivatedInSegmNumb,getIsToBeActivatedInGoldNumb,getFullInSegmNumb,getFullInGoldNumb,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm,getActiveGoldNumb,getActiveSegmNumb,getResOffsetsBeg,getOldCountersBeg,getNewCountersBeg,getBeginingOfFpFNcounts,getBeginingOfXYZ,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm
+
 
 """
 it will be 4 dimensional array - where fourth dimension will store actual data  in UInt32 format 
@@ -70,8 +71,17 @@ function getBeginingOfXYZ()::UInt32
     return UInt32(6)
 end
 
+
+######## simple accessors - kept so we can easily can change metadata organisation if needed
 getActiveGoldNumb() = 1
 getActiveSegmNumb() = 2
+
+getFullInGoldNumb() = 3
+getFullInSegmNumb() = 4
+
+getIsToBeActivatedInGoldNumb() = 5
+getIsToBeActivatedInSegmNumb() = 6
+
 getResOffsetsBeg() = 42
 
 getOldCountersBeg() = 60

@@ -315,3 +315,59 @@ workQueaue[3,2]==2
 #workQueaue[3,4]==0 
 metaData[2,2,2,2]
 #check if offsets are calculated correctly
+
+using Revise, Parameters, Logging, Test
+using CUDA
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
+using Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils
+
+
+
+singleVal = CUDA.zeros(14)
+threads=(32,4)
+blocks =1
+mainArrDims= (516,523,826)
+datBdim = (43,21,17)
+metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:3,2:5,4:6,: );
+metaDataDims=size(metaData)
+loopXMeta= fld(metaDataDims[1],threads[1])
+loopYZMeta= fld(metaDataDims[2]*metaDataDims[3],blocks )
+
+globalFpResOffsetCounter= CUDA.zeros(UInt32,1)
+globalFnResOffsetCounter= CUDA.zeros(UInt32,1)
+shmemSum =  CUDA.zeros(Float32,35,16) # we need this additional 33th an 34th 35th spots
+workQueaue= WorkQueueUtils.allocateWorkQueue(fpTotal,fnTotal)
+workQueaueCounter= CUDA.zeros(UInt32,1)
+# simulating diffrent scenario that should lead to active or inactive 
+# blocks and so they should be pushed to work queue or not...
+for j in 1:2 
+  ii = 0
+  for i in 1:14
+    ii+=i
+    metaData[j,j,j, getBeginingOfFpFNcounts()+i]=i
+  end
+  metaData[j,j,j, getBeginingOfFpFNcounts()+16]=15+j
+  metaData[j,j,j, getBeginingOfFpFNcounts()+17]=16+j
+end  
+
+#as we have counters we check in shmem are they correct
+
+function loadCountersKernel(workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
+
+  tobeEx= true
+  locArr= UInt32(0)
+    MetadataAnalyzePass.@metaDataWarpIter(metaDataDims,loopXMeta,loopYZMeta,
+    begin
+      MetadataAnalyzePass.@loadCounters(tobeEx,locArr)
+    #@ifY 1    CUDA.@cuprint "xMeta $(xMeta) yMeta $(xMeta) zMeta $(zMeta)" 
+    #CUDA.@cuprint "linIndex $(linIndex) \n "
+end)
+    
+    return
+end
+@cuda threads=threads blocks=blocks loadCountersKernel(metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
+sum(shmemSum)
+
+@test Int64(globalFpResOffsetCounter[1]) ==Int64(ceil((16*1.5)+(17*1.5)))
+@test  Int64(globalFnResOffsetCounter[1])==Int64(ceil((18*1.5)+(17*1.5)))
