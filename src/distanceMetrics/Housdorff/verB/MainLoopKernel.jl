@@ -12,7 +12,7 @@ function mainLoopKernel()
     # - is amount of results related to gold mask dilatations is equal to false positives
     # - is amount of results related to other  mask dilatations is equal to false negatives
     # - is amount of workQueue that we will want to analyze now is bigger than 0 
-    while(goldToBeDilatated[1] && goldToBeDilatated[1] && workCounterBiggerThan0[1])
+    while(goldToBeDilatated[1] && segmToBeDilatated[1] && workCounterBiggerThan0[1])
         @mainLoop()
     end#while we did not yet finished    
 
@@ -42,7 +42,7 @@ macro mainLoop()
     end
 
     #we are just negiting it so it should be the same in all blocks
-    @IfXY isOddPassShmem[1]= !isOddPassShmem[1]
+    @IfXY 1 1 isOddPassShmem[1]= !isOddPassShmem[1]
     #if we are here it means we had covered all blocks that were marked as active and we need to prepare to next dilatation step
 
     sync_grid(grid_handle)
