@@ -42,7 +42,7 @@ resArray=CUDA.zeros(UInt32, 9*250*15,4)
 offset = -49
 for metaX in 1:3, metaY in 1:3, metaZ in 1:3
    for quueueNumb in 1:14
-      offset+=250
+      offset+=350
       #set offset
       metaData[metaX,metaY,metaZ,getResOffsetsBeg()+quueueNumb]=offset
       #set counter
@@ -51,32 +51,39 @@ end #for
 #we are simulating some results in some of the result queues
 offset = -49
    for quueueNumb in 1:14
-         offset+=250
+         offset+=350
       for j in 1:quueueNumb
+          for innerJ in 1:quueueNumb
         #the bigger the number the more repetitions and more non repeated elements 
-           resList[offset+j,:]= [j,j,j,1]
+           resList[offset+j+innerJ*quueueNumb,:]= [innerJ,innerJ+1,innerJ+2,1,1]
            metaData[1,1,1,getNewCountersBeg()+quueueNumb]+=1 
+      end#inner j 
    end#for
 end#for   
 
 #should be first queue in block 3,3,3
-resList[9*14*250] = [1,1,1,1]
-resList[9*14*250] = [1,1,1,0]
-resList[9*14*250] = [1,1,1,1]
-metaData[3,3,3,getNewCountersBeg()+1]+=3 
+resList[9*14*250] = [1,1,1,1,1]
+resList[9*14*250+1] = [1,1,1,0,1]
+resList[9*14*250+2] = [1,1,1,1,1]#repeat
+resList[9*14*250+3] = [1,2,1,1,1]
+resList[9*14*250+4] = [1,1,2,1,1]
+resList[9*14*250+5] = [2,1,1,1,1]
+
+
+metaData[3,3,3,getNewCountersBeg()+1]+=6 
 
 ####### check is test written well (testing the test)
-@test resList[metaData[3,3,3,getResOffsetsBeg()+1],:] == [1,1,1,1]
-@test metaData[3,3,3,getNewCountersBeg()+1] ==3
+@test metaData[3,3,3,getNewCountersBeg()+1] ==6
 
 
 offset = -49
    for quueueNumb in 1:14
-         offset+=250
-      for j in 1:quueueNumb
+         offset+=350
         #the bigger the number the more repetitions and more non repeated elements 
-         @test metaData[1,1,1,getNewCountersBeg()+quueueNumb]==j*j
-         @test resList[offset+j,:]==[j,j,j,1]
+         @test metaData[1,1,1,getNewCountersBeg()+quueueNumb]==quueueNumb*quueueNumb
+   for j in 1:quueueNumb
+         #we test first entries from innner loop
+         @test resList[offset+j*quueueNumb,:]==[j,j+1,j+2,1,1]
         end#for innerj 
    end#for
 end#for   
@@ -89,20 +96,17 @@ function loadAndSanForDuplKernel(metaData,iterThrougWarNumb ,resShmem,xMeta,yMet
 end
 
 @cuda threads=threads blocks=blocks loadAndSanForDuplKernel(metaData,iterThrougWarNumb ,resShmem,xMeta,yMeta,zMeta)
-@test singleVal[1]==metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
 
-@test metaData[3,3,3,getNewCountersBeg()+1] ==2
+@test metaData[3,3,3,getNewCountersBeg()+1] ==5
 
 
 offset = -49
    for quueueNumb in 1:14
-         offset+=250
-      tempList=[]
-      for j in 1:quueueNumb
+         offset+=350
         #the bigger the number the more repetitions and more non repeated elements 
-         @test metaData[1,1,1,getNewCountersBeg()+quueueNumb]==j#j instead of j*j
-         @test resList[offset+j,:]==[j,j,j,1]
-        end#for innerj 
+         @test metaData[1,1,1,getNewCountersBeg()+quueueNumb]==quueueNumb#j instead of quueueNumb*quueueNumb
+         tempList= resList[offset:offset+350,:]
+          @test length(unique(tempList))==quueueNumb+1#+1 becouse of 0's entry
    end#for
 end#for   
 
