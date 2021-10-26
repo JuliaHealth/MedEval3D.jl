@@ -54,8 +54,8 @@ offset = -49
          offset+=250
       for j in 1:quueueNumb
         #the bigger the number the more repetitions and more non repeated elements 
-        resList[offset,:]= [j,j,j,1]
-        metaData[1,1,1,getNewCountersBeg()+quueueNumb]+=1     
+           resList[offset+j,:]= [j,j,j,1]
+           metaData[1,1,1,getNewCountersBeg()+quueueNumb]+=1 
    end#for
 end#for   
 
@@ -63,12 +63,24 @@ end#for
 resList[9*14*250] = [1,1,1,1]
 resList[9*14*250] = [1,1,1,0]
 resList[9*14*250] = [1,1,1,1]
+metaData[3,3,3,getNewCountersBeg()+1]+=3 
+
+####### check is test written well (testing the test)
+@test resList[metaData[3,3,3,getResOffsetsBeg()+1],:] == [1,1,1,1]
+@test metaData[3,3,3,getNewCountersBeg()+1] ==3
 
 
+offset = -49
+   for quueueNumb in 1:14
+         offset+=250
+      for j in 1:quueueNumb
+        #the bigger the number the more repetitions and more non repeated elements 
+         @test metaData[1,1,1,getNewCountersBeg()+quueueNumb]==j*j
+         @test resList[offset+j,:]==[j,j,j,1]
+        end#for innerj 
+   end#for
+end#for   
 
-for i in 1:10
-    
-end#for    
 
 
 function loadAndSanForDuplKernel(metaData,iterThrougWarNumb ,resShmem,xMeta,yMeta,zMeta)
@@ -78,6 +90,21 @@ end
 
 @cuda threads=threads blocks=blocks loadAndSanForDuplKernel(metaData,iterThrougWarNumb ,resShmem,xMeta,yMeta,zMeta)
 @test singleVal[1]==metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
+
+@test metaData[3,3,3,getNewCountersBeg()+1] ==2
+
+
+offset = -49
+   for quueueNumb in 1:14
+         offset+=250
+      tempList=[]
+      for j in 1:quueueNumb
+        #the bigger the number the more repetitions and more non repeated elements 
+         @test metaData[1,1,1,getNewCountersBeg()+quueueNumb]==j#j instead of j*j
+         @test resList[offset+j,:]==[j,j,j,1]
+        end#for innerj 
+   end#for
+end#for   
 
 
 
