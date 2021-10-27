@@ -24,7 +24,7 @@ in those cases false will be 0 and true 32 ...
 """
 module MetaDataUtils
 using CUDA
-export getIsToBeActivatedInSegmNumb,getIsToBeActivatedInGoldNumb,getFullInSegmNumb,getFullInGoldNumb,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm,getActiveGoldNumb,getActiveSegmNumb,getResOffsetsBeg,getOldCountersBeg,getNewCountersBeg,getBeginingOfFpFNcounts,getBeginingOfXYZ,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm
+export getIsToBeAnalyzedNumb,getIsToBeActivatedInSegmNumb,getIsToBeActivatedInGoldNumb,getFullInSegmNumb,getFullInGoldNumb,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm,getActiveGoldNumb,getActiveSegmNumb,getResOffsetsBeg,getOldCountersBeg,getNewCountersBeg,getBeginingOfFpFNcounts,getBeginingOfXYZ,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm
 
 
 """
@@ -38,7 +38,7 @@ it will be 4 dimensional array - where fourth dimension will store actual data  
 5)isToBectivatedGold::Bool
 6)isToBeActivatedSegm::Bool
 7-9)x,y,z coordinates ::UInt32
-10-24) isToBeAnalyzed::Bool
+10-24) isToBeNotAnalyzed::Bool
 25-41) fpFNcounts::UInt32 last 2 will be totals
 
 42-56) resOffsets::UInt32
@@ -81,6 +81,9 @@ function getFullInSegmNumb()::UInt32 return  4 end
 
 function getIsToBeActivatedInGoldNumb()::UInt32 return  5 end
 function getIsToBeActivatedInSegmNumb()::UInt32 return  6 end
+
+function getIsToBeNotAnalyzedNumb()::UInt32 return  9 end
+
 
 function getResOffsetsBeg()::UInt32 return  42 end
 

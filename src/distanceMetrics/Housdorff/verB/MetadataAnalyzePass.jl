@@ -237,12 +237,15 @@ macro setIsToBeActive()
 end    
 
 
-
+"""
+here we will mark in metadata weather there is anything to be verified - here in given que ie - weather it is possible in given queue to cover anything more in next dilatation step
+so it is important for analysisof this particular block is  there is true - is there is non 0 amount of points to cover in any queue of the block
+simultaneously the border queues should indicate for neighbouring blocks (given they exist ) is there is any point in analyzing the paddings ...
+"""
 macro setIsToBeValidated()
     return esc(quote
-@unroll for i in 15:29
-    @exOnWarp i setIstoBeAnalyzed(numb, mataData,linIndex) 
-end#for
+   @exOnWarp (innerWarpNumb +14) metaData[xMeta,yMeta+1,zMeta+1,getIsToBeNotAnalyzedNumb()+innerWarpNumb ] = ($offsetIter==0) 
+
 end )
 end#setIsToBeValidated
 
@@ -310,7 +313,8 @@ any duplicate in case there will be we need to decrement counter and set the cor
 """
 macro scanForDuplicates(oldCount, countDiff) 
     return esc(quote
-        @ifY innerWarpNumb begin
+    if(innerWarpNumb<13)
+        @exOnWarp innerWarpNumb begin
             @unroll for threadNumber in 1:32 # we need to analyze all thread id x 
                 if( resShmem[threadNumber+1,innerWarpNumb+1,3]) # futher actions necessary only if counter diffrence is bigger than 0 
                     if( threadIdxX()==threadNumber ) #now we need some  values that are in the registers  of the associated thread 
@@ -325,7 +329,8 @@ macro scanForDuplicates(oldCount, countDiff)
                     sync_warp()
                 end# resShmem[warpNumb+1,i+1,3]
             end # for warp number  
-        end #@exOnWarp
+        end #ifY
+    end    
 end )
 end
 
@@ -343,19 +348,22 @@ macro loadAndScanForDuplicates(iterThrougWarNumb,locArr,offsetIter)
     @unroll for outerWarpLoop::Uint8 in 0:$iterThrougWarNumb     
             innerWarpNumb = (threadidY()+ outerWarpLoop*blockimY())
             #now we will load the diffrence between old and current counter
-            if(( innerWarpNumb)<13)
-                @ifY innerWarpNumb begin
+            if(( innerWarpNumb)<15)
+                @exOnWarp innerWarpNumb begin
                     #store result in registers
                     #store result in registers (we are reusing some variables)
                     #old count
                     $locArr = getOldCount(numb, mataData,linIndex)
                     #diffrence new - old 
-                    $offsetIter= geNewCount(numb, mataData,linIndex)- $locArr
+                    $offsetIter= geNewCount(numb, mataData,linIndex) - $locArr
                     # #queue result offset
                     # localResOffset = metaData[xMeta,yMeta+1,zMeta+1, getBeginnigOfOffsets()+innerWarpNumb] # tis queue offset
                     
+                    #### here we will mark in metadata weather there is anything to be verified - here in given que ie - weather it is possible in given queue to cover anything more in next dilatation step
+                    @setIsToBeValidated()
+                
                     # enable access to information is it bigger than 0 to all threads in block
-                    resShmem[(threadIdxX()+1),innerWarpNumb+1,3] = offsetIter>0
+                    resShmem[(threadIdxX()+1)+(innerWarpNumb+6)*33] = $offsetIter >0
                 end #@ifY
             end#if
         end#for  
