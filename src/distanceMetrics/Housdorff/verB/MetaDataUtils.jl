@@ -24,7 +24,7 @@ in those cases false will be 0 and true 32 ...
 """
 module MetaDataUtils
 using CUDA
-export getIsToBeActivatedInSegmNumb,getIsToBeActivatedInGoldNumb,getFullInSegmNumb,getFullInGoldNumb,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm,getActiveGoldNumb,getActiveSegmNumb,getResOffsetsBeg,getOldCountersBeg,getNewCountersBeg,getBeginingOfFpFNcounts,getBeginingOfXYZ,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm
+export getIsToBeAnalyzedNumb,getIsToBeActivatedInSegmNumb,getIsToBeActivatedInGoldNumb,getFullInSegmNumb,getFullInGoldNumb,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm,getActiveGoldNumb,getActiveSegmNumb,getResOffsetsBeg,getOldCountersBeg,getNewCountersBeg,getBeginingOfFpFNcounts,getBeginingOfXYZ,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm
 
 
 """
@@ -81,6 +81,9 @@ function getFullInSegmNumb()::UInt32 return  4 end
 
 function getIsToBeActivatedInGoldNumb()::UInt32 return  5 end
 function getIsToBeActivatedInSegmNumb()::UInt32 return  6 end
+
+function getIsToBeAnalyzedNumb()::UInt32 return  10 end
+
 
 function getResOffsetsBeg()::UInt32 return  42 end
 
