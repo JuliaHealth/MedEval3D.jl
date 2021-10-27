@@ -3,7 +3,7 @@ using Revise, Parameters, Logging, Test
 using CUDA
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
 using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
-using Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils
+using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
 
 
 threads=(32,5)
@@ -19,7 +19,7 @@ resShmem = CuArray(falses(datBdim[1]+2, datBdim[2]+2, datBdim[3]+2 ))
 loopXMeta= fld(metaDataDims[1],threads[1])
 loopYZMeta= fld(metaDataDims[2]*metaDataDims[3],blocks )
 
-resList=CUDA.zeros(UInt32, 9*250*15,5)
+resList=allocateResultList()
 #we set some offsets to make it simple for evaluation we will keeep it  each separated by 50 
 offset = -49
 for metaX in 1:3, metaY in 1:3, metaZ in 1:3
@@ -69,21 +69,26 @@ offset = -49
    end#for quueueNumb
 
 
-function loadAndSanForDuplKernel(metaData,iterThrougWarNumb ,resShmem,loopXMeta,loopYZMeta)
+function loadAndSanForDuplKernel(metaData,iterThrougWarNumb ,resShmem,loopXMeta,loopYZMeta,resList)
    locArr= UInt32(0)
    offsetIter= UInt16(0)
+   shmemSum =  @cuStaticSharedMem(Float32,35,16)
+
    MetadataAnalyzePass.@metaDataWarpIter( metaDataDims,loopXMeta,loopYZMeta,
        begin
-   MetadataAnalyzePass.@loadAndScanForDuplicates(iterThrougWarNumb,locArr,offsetIter)  
+   @loadAndScanForDuplicates(iterThrougWarNumb,locArr,offsetIter)  
+   for i in 1:15
+      resShmem[(threadIdxX())+(i)*33]= false
+   end
        end)
    
-       
+
    return
 end
 
-@cuda threads=threads blocks=blocks loadAndSanForDuplKernel(metaData,iterThrougWarNumb ,resShmem,xMeta,yMeta,zMeta)
+@cuda threads=threads blocks=blocks loadAndSanForDuplKernel(metaData,iterThrougWarNumb ,resShmem,loopXMeta,loopYZMeta,resList)
 
-@test metaData[3,3,3,getNewCountersBeg()+1] ==5
+@test Int64(metaData[3,3,3,getNewCountersBeg()+1]) ==5
 
 
 offset = -49

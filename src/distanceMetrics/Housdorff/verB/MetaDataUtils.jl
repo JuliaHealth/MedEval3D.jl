@@ -87,8 +87,8 @@ function getIsToBeNotAnalyzedNumb()::UInt32 return  9 end
 
 function getResOffsetsBeg()::UInt32 return  42 end
 
-function getOldCountersBeg()::UInt32 return  60 end
-function getNewCountersBeg()::UInt32 return  75 end
+function getOldCountersBeg()::UInt32 return  59 end
+function getNewCountersBeg()::UInt32 return  74 end
 
 
 
