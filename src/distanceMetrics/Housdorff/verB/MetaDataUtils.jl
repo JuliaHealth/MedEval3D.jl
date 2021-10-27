@@ -54,7 +54,7 @@ function allocateMetadata(arrDims,dataBDims)
     return CUDA.zeros(UInt32,cld(arrDims[1],dataBDims[1] ) 
             ,cld(arrDims[2],dataBDims[2] )
             ,cld(arrDims[3],dataBDims[3])
-            ,60 )
+            ,90 )
 end
 """
 value pointing out where we start in 4th dimension counters
@@ -73,19 +73,19 @@ end
 
 
 ######## simple accessors - kept so we can easily can change metadata organisation if needed
-getActiveGoldNumb() = 1
-getActiveSegmNumb() = 2
+function getActiveGoldNumb()::UInt32 return  1 end
+function getActiveSegmNumb()::UInt32 return  2 end
 
-getFullInGoldNumb() = 3
-getFullInSegmNumb() = 4
+function getFullInGoldNumb()::UInt32 return  3 end
+function getFullInSegmNumb()::UInt32 return  4 end
 
-getIsToBeActivatedInGoldNumb() = 5
-getIsToBeActivatedInSegmNumb() = 6
+function getIsToBeActivatedInGoldNumb()::UInt32 return  5 end
+function getIsToBeActivatedInSegmNumb()::UInt32 return  6 end
 
-getResOffsetsBeg() = 42
+function getResOffsetsBeg()::UInt32 return  42 end
 
-getOldCountersBeg() = 60
-getNewCountersBeg() = 75
+function getOldCountersBeg()::UInt32 return  60 end
+function getNewCountersBeg()::UInt32 return  75 end
 
 
 

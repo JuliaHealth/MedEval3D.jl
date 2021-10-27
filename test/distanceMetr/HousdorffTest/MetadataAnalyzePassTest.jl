@@ -316,6 +316,11 @@ workQueaue[3,2]==2
 metaData[2,2,2,2]
 #check if offsets are calculated correctly
 
+
+
+
+
+##################### checkIsActiveOrFullOr and setIsToBeActive
 using Revise, Parameters, Logging, Test
 using CUDA
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
@@ -326,48 +331,127 @@ using Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.Proce
 
 singleVal = CUDA.zeros(14)
 threads=(32,4)
-blocks =1
+blocks =7
 mainArrDims= (516,523,826)
 datBdim = (43,21,17)
-metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:3,2:5,4:6,: );
+metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:3,2:4,1:3,: );
 metaDataDims=size(metaData)
-loopXMeta= fld(metaDataDims[1],threads[1])
-loopYZMeta= fld(metaDataDims[2]*metaDataDims[3],blocks )
 
 globalFpResOffsetCounter= CUDA.zeros(UInt32,1)
 globalFnResOffsetCounter= CUDA.zeros(UInt32,1)
 shmemSum =  CUDA.zeros(Float32,35,16) # we need this additional 33th an 34th 35th spots
-workQueaue= WorkQueueUtils.allocateWorkQueue(fpTotal,fnTotal)
+workQueaue= WorkQueueUtils.allocateWorkQueue(100,100)
 workQueaueCounter= CUDA.zeros(UInt32,1)
 # simulating diffrent scenario that should lead to active or inactive 
 # blocks and so they should be pushed to work queue or not...
-for j in 1:2 
-  ii = 0
-  for i in 1:14
-    ii+=i
-    metaData[j,j,j, getBeginingOfFpFNcounts()+i]=i
-  end
-  metaData[j,j,j, getBeginingOfFpFNcounts()+16]=15+j
-  metaData[j,j,j, getBeginingOfFpFNcounts()+17]=16+j
-end  
+loopXMeta= fld(metaDataDims[1],threads[1])
+loopYZMeta= fld(metaDataDims[2]*metaDataDims[3],blocks )
+
+#first already active
+xMeta, yMeta, zMeta = 1,0,0
+metaData[xMeta,yMeta+1,zMeta+1,getActiveGoldNumb() ]=1
+#to be activated
+xMeta, yMeta, zMeta = 2,1-1,1-1
+metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInGoldNumb() ]=1
+#full should not be active
+xMeta, yMeta, zMeta = 2,2-1,1-1
+metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInGoldNumb() ]=1
+metaData[xMeta,yMeta+1,zMeta+1,getFullInGoldNumb() ]=1
+
+xMeta, yMeta, zMeta = 2,2-1,2-1
+metaData[xMeta,yMeta+1,zMeta+1,getActiveGoldNumb() ]=1
+metaData[xMeta,yMeta+1,zMeta+1,getFullInGoldNumb() ]=1
+
+##### now in segm
+#first already active
+xMeta, yMeta, zMeta = 3,3-1,1-1
+metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb() ]=1
+#to be activated
+xMeta, yMeta, zMeta = 3,1-1,1-1
+metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInSegmNumb() ]=1
+#full should not be active
+xMeta, yMeta, zMeta = 3,2-1,1-1
+metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInSegmNumb() ]=1
+metaData[xMeta,yMeta+1,zMeta+1,getFullInSegmNumb() ]=1
+
+xMeta, yMeta, zMeta = 3,2-1,2-1
+metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb() ]=1
+metaData[xMeta,yMeta+1,zMeta+1,getFullInSegmNumb() ]=1
+
+
 
 #as we have counters we check in shmem are they correct
 
-function loadCountersKernel(workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
-
+function checkIsToBeActive(datBdim,workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
+ 
+  shmemSum =  @cuStaticSharedMem(Float32,(35,16)) # we need this additional 33th an 34th spots
+  sourceShmem =  @cuDynamicSharedMem(Bool,(datBdim[1]+2,datBdim[2]+2,datBdim[3]+2)) # we need this additional 33th an 34th spots
   tobeEx= true
   locArr= UInt32(0)
-    MetadataAnalyzePass.@metaDataWarpIter(metaDataDims,loopXMeta,loopYZMeta,
-    begin
-      MetadataAnalyzePass.@loadCounters(tobeEx,locArr)
-    #@ifY 1    CUDA.@cuprint "xMeta $(xMeta) yMeta $(xMeta) zMeta $(zMeta)" 
-    #CUDA.@cuprint "linIndex $(linIndex) \n "
-end)
+  MetadataAnalyzePass.@metaDataWarpIter( metaDataDims,loopXMeta,loopYZMeta,
+      begin
+       MetadataAnalyzePass.@checkIsActiveOrFullOr()
+      sync_threads()
+      MetadataAnalyzePass.@setIsToBeActive()
+      sync_threads()
+      #resetting
+      @exOnWarp 30 sourceShmem[(threadIdxX()+1)] = false
+      @exOnWarp 31 sourceShmem[(threadIdxX()+1)+33]= false
+      @exOnWarp 32 sourceShmem[(threadIdxX()+1)+33*2] = false     
+      @exOnWarp 33 sourceShmem[(threadIdxX()+1)+33*3] = false
+      @exOnWarp 34 sourceShmem[(threadIdxX()+1)+33*4] = false
+      @exOnWarp 35 sourceShmem[(threadIdxX()+1)+33*5] = false
+    end)
     
     return
 end
-@cuda threads=threads blocks=blocks loadCountersKernel(metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
-sum(shmemSum)
+@cuda threads=threads blocks=blocks checkIsToBeActive(datBdim,workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
+workQueaue[1,:]
+Int64(sum(workQueaue))
+Int64(workQueaueCounter[1])
+ss = 0
+for i in 1:length(workQueaue)
+  if( workQueaue[i,1]>0 )
+    ss+=1
+  end
+end
+ss
+
+
+function testForPresenceInWorkQueue(arr)::Bool
+  outBool = false
+  for i in 1:100
+    if(workQueaue[i,:]==arr )
+      outBool=true
+    end  
+  end  
+return outBool
+end
+
+using Logging
+for i in 1:33
+  @info Int64.(workQueaue[i,:])
+end
+
+metaData[1,0+1,0+1,getFullInGoldNumb() ]
+
+
+@test  testForPresenceInWorkQueue([1,1,1,1])
+@test  testForPresenceInWorkQueue([2,1,1,1])
+
+@test  !testForPresenceInWorkQueue([2,2,1,1])#full
+@test  !testForPresenceInWorkQueue([2,2,2,1])#full
+
+@test  testForPresenceInWorkQueue([3,3,1,0])
+@test  testForPresenceInWorkQueue([3,1,1,0])
+
+@test  !testForPresenceInWorkQueue([3,2,1,0])#full
+@test  !testForPresenceInWorkQueue([3,2,2,0])#full
+
+
+
+@test metaData[xMeta,yMeta+1,zMeta+1,getFullInGoldNumb() ]=1
+
 
 @test Int64(globalFpResOffsetCounter[1]) ==Int64(ceil((16*1.5)+(17*1.5)))
 @test  Int64(globalFnResOffsetCounter[1])==Int64(ceil((18*1.5)+(17*1.5)))

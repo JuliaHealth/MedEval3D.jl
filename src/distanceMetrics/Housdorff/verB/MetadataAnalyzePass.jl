@@ -208,27 +208,27 @@ establish is the  block  is active full or be activated, and we are saving this 
 """
 macro checkIsActiveOrFullOr()
     return esc(quote
-        @exOnWarp 30 resShmem[threadIdxX()+1,2,2] = metaData[xMeta,yMeta+1,zMeta+1,getFullInGoldNumb() ] #  isBlockFulliInGold(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 31 resShmem[threadIdxX()+1,3,2] = metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInGoldNumb() ] # isBlockToBeActivatediInGold(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 32 resShmem[threadIdxX()+1,4,2] = metaData[xMeta,yMeta+1,zMeta+1,getActiveGoldNumb() ] # isBlockCurrentlyActiveiInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 30 sourceShmem[(threadIdxX()+1)] = metaData[xMeta,yMeta+1,zMeta+1,getFullInGoldNumb() ] #  isBlockFulliInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 31 sourceShmem[(threadIdxX()+1)+33] = metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInGoldNumb() ] # isBlockToBeActivatediInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 32 sourceShmem[(threadIdxX()+1)+33*2] = metaData[xMeta,yMeta+1,zMeta+1,getActiveGoldNumb() ] # isBlockCurrentlyActiveiInGold(metaData, xMeta,yMeta+1,zMeta+1)
        
-        @exOnWarp 33 resShmem[threadIdxX()+1,5,2] = metaData[xMeta,yMeta+1,zMeta+1,getFullInSegmNumb() ] # isBlockFullInSegm(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 34 resShmem[threadIdxX()+1,6,2] = metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInSegmNumb()() ] # isBlockToBeActivatedInSegm(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 35 resShmem[threadIdxX()+1,7,2] = metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb()] # isBlockCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 33 sourceShmem[(threadIdxX()+1)+33*3] = metaData[xMeta,yMeta+1,zMeta+1,getFullInSegmNumb() ] # isBlockFullInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 34 sourceShmem[(threadIdxX()+1)+33*4] = metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInSegmNumb() ] # isBlockToBeActivatedInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 35 sourceShmem[(threadIdxX()+1)+33*5] = metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb()] # isBlockCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)
 end)#quote
 end#checkIsActiveOrFullOr
 
 """
-given data in resShmem loaded by checkIsActiveOrFullOr() we will  mark the block as active  ( or not) 
+given data in sourceShmem loaded by checkIsActiveOrFullOr() we will  mark the block as active  ( or not) 
     and if is to be active add it to work queue
 """
 macro setIsToBeActive()
     return esc(quote
-        @exOnWarp 1 if(!resShmem[threadIdxX()+1,2,2]  && (resShmem[threadIdxX()+1,3,2]  ||  resShmem[threadIdxX()+1,4,2])  )  
+        @exOnWarp 1 if(!sourceShmem[(threadIdxX()+1)]  && (sourceShmem[(threadIdxX()+1)+33]  ||  sourceShmem[(threadIdxX()+1)+33*2])  )  
                         metaData[xMeta,yMeta+1,zMeta+1,getActiveGoldNumb() ]=1
                         appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 )
                     end
-        @exOnWarp 2 if(!resShmem[threadIdxX()+1,5,2]  && (resShmem[threadIdxX()+1,6,2]  ||  resShmem[threadIdxX()+1,7,2])  ) 
+        @exOnWarp 2 if(!sourceShmem[(threadIdxX()+1)+33*3]  && (sourceShmem[(threadIdxX()+1)+33*4]  ||  sourceShmem[(threadIdxX()+1)+33*5])  ) 
                         metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb() ]=1     
                         appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 )             
             end
@@ -236,61 +236,6 @@ macro setIsToBeActive()
 
 end    
 
-"""
-will be invoked in order to iterate over the metadata  after some dilatations were already done - we need to 
-    establish is block to be activated or inactivated or left as is
-    if block is active it needs to be added to work queue 
-    using some spare threads we will also housekeeping like for example switching active work queue etc
-    we will check rescounters of border res ques and compare with old ones - if any will be grater than old we will scan for any repeating results 
-        - it could be the case that neighbouring blocks concurently added the same results - in this case we need to set one of those to 0 and reduce the counter    
-    we will do all by using single warp per metadata block     
-"""
-macro setMEtaDataOtherPasses(locArr,offsetIter)
-    return esc(quote
-    $locArr=0
-    $offsetIter=0
-    isMaskFull=false
-    @metaDataWarpIter(metaDataIterLoops, threadsPerBlock,threadsPerGrid, maxLinIndex  ,begin
-    isMaskOkForProcessing=false
-        #first we will check is block full active or be activated and we will set 
-        @checkIsActiveOrFullOr()
-        #now we will load the diffrence between old and current counter
-        @unroll for i in 1:14
-            @exOnWarp i begin
-                #store result in registers
-                #store result in registers (we are reusing some variables)
-                #old count
-                $locArr = getOldCount(numb, mataData,linIndex)
-                #diffrence new - old 
-                $offsetIter= geNewCount(numb, mataData,linIndex)- $locArr
-                # enable access to information is it bigger than 0 to all threads in block
-                resShmem[threadIdxX()+1,i+1,3] = $offsetIter>0
-                end #@exOnWarp
-        end#for
-
-        #here we load data about wheather there is anything to be validated here - we save data so it can be read from the perspective of this block
-        #and the blocks aroud that will want to analyze paddings
-        @setIsToBeValidated()
-
-        #now in some threads we have booleans needed for telling is mask active and in futher sixteen diffrences of counters that will tell us is there a res list that 
-        #increased its  amount of value in last dilatation step if so and  this increase is in some border result list we need to  establish weather we do not have any repeating  results
-        sync_threads()
-
-        #we set information that block should be activated in gold  and segm
-        @setIsToBeActive()
-        #after previous sync threads we already have the number of how much we increased number of results  relative to previous dilatation step
-        #now we need to go through  those numbers and in case some of the border queues were incremented we need to analyze those added entries to establish is there 
-        # any duplicate in case there will be we need to decrement counter and set the corresponding duplicated entry to 0 
-        @scanForDuplicates($locArr, $offsetIter) 
-    end    )
-        sync_threads()
-        clearMainShmem(resShmem)
-
-        clearSharedMemWarpLong(shmemSum, UInt8(14), Float32(0.0))
-        $locArr=0
-        $offsetIter=0
-    end )
-end
 
 
 macro setIsToBeValidated()
@@ -303,39 +248,58 @@ end#setIsToBeValidated
 
 
 """
-as we are operating under assumption that we do not know how many warps we have - we do not know the y dimension of thread block we need to load data into registers with a loop 
-and within the same loop scan it for duplicates
-so if we have more than 12 warps we will execute the loop once - in case we have more we need to execute it in the loop
-iterThrougWarNumb - indicates how many times we need to  iterate to cover all 12 ques if we have at least 12 warps available (ussually we will) we will execute it once
+this will be invoked when we have duplicated value in result queue - so we need to 
+    set this value - of linear index to 0 
+    and reduce the counter value 
 """
-macro loadAndScanForDuplicates(iterThrougWarNumb)
-   @unroll for outerWarpLoop::Uint8 in 0:iterThrougWarNumb     
-        innerWarpNumb = (threadidY()+ outerWarpLoop*blockimY()
-           #now we will load the diffrence between old and current counter
-        if(( innerWarpNumb)<13)
-            @ifY innerWarpNumb begin
-                #store result in registers
-                #store result in registers (we are reusing some variables)
-                #old count
-                $locArr = getOldCount(numb, mataData,linIndex)
-                #diffrence new - old 
-                offsetIter= geNewCount(numb, mataData,linIndex)- $locArr
-                #queue result offset
-                localResOffset = metaData[xMeta,yMeta+1,zMeta+1, getBeginnigOfOffsets()+innerWarpNumb] # tis queue offset
-                
-                # enable access to information is it bigger than 0 to all threads in block
-                resShmem[threadIdxX()+1,innerWarpNumb+1,3] = offsetIter>0
-            end #@ifY
-        end#if
-        
-      @scanForDuplicates(oldCount, countDiff,iterThrougWarNumb)
-        
-        
-        
-        
-        
-    end #outerWarpLoop    
+macro  manageDuplicatedValue()
+    return esc(quote
+    resArray[tempCount,1]=0
+    decrCounterByOne(numb, mataData,shmemSum[35,resQueueNumb])
+    
+end )
 end
+
+
+
+"""
+in this spot we already have 32 (not more at least ) values in shared memory
+we need to now 
+"""
+macro scanWhenDataInShmem()
+    return esc(quote
+    @unroll for tempCount in (shmemSum[33,innerWarpNumb]+shmemSum[35,innerWarpNumb] ):(shmemSum[33,innerWarpNumb]+shmemSum[34,innerWarpNumb]+shmemSum[33,innerWarpNumb])
+        #now we need to make sure that we are not at spot whre this value is legitimite - so this is first occurence
+        if(tempCount!=shmemSum[33,innerWarpNumb]+ (scanIter*32) + threadIdxX()  )
+            #finally we iterate over all values in any given thread and compare to associated value in shared memory
+            if( getResLinIndex(resArray[tempCount,1])  == shmemSum[threadIdxX(),innerWarpNumb] )
+                 #if we are here it means that we have duplicated value 
+                @manageDuplicatedValue()
+            end    
+        end    
+    end     end )
+end #scanWhenDataInShmem
+
+"""
+main part of scanninf we are already on a correct warp; we already have old counter value and new counter value available in shared memory
+now we need to access the result queue starting from old counter 
+"""
+macro scanForDuplicatesMainPart()
+    return esc(quote
+    #as we can analyze 32 numbers at once if the amount of new results is bigger we need to do it in multiple passes 
+    @unroll for scanIter::UInt8 in 0: cld(shmemSum[34,i],32 )
+        # here we are loading data about linearized indicies of result in main  array depending on a queue we are analyzing it will tell about gold or other pas
+        if(((scanIter*32) + threadIdxX())< shmemSum[34,innerWarpNumb]  )
+            shmemSum[threadIdxX(),innerWarpNumb] = getResLinIndex(resArray[(shmemSum[33,innerWarpNumb]  +shmemSum[35,innerWarpNumb] + (scanIter*32) + threadIdxX()  ),1]  )
+        end
+        sync_warp() # now we have 32 linear indicies loaded into the shared memory
+        #so we need to load some value into single value into thread and than go over all value in shared memory  
+        @scanWhenDataInShmem()
+    end# for scanIter 
+end)
+end
+
+
 
 
 
@@ -365,56 +329,104 @@ macro scanForDuplicates(oldCount, countDiff)
 end )
 end
 
-"""
-main part of scanninf we are already on a correct warp; we already have old counter value and new counter value available in shared memory
-now we need to access the result queue starting from old counter 
-"""
-macro scanForDuplicatesMainPart()
-    return esc(quote
-    #as we can analyze 32 numbers at once if the amount of new results is bigger we need to do it in multiple passes 
-    @unroll for scanIter::UInt8 in 0: cld(shmemSum[34,i],32 )
-        # here we are loading data about linearized indicies of result in main  array depending on a queue we are analyzing it will tell about gold or other pas
-        if(((scanIter*32) + threadIdxX())< shmemSum[34,innerWarpNumb]  )
-            shmemSum[threadIdxX(),innerWarpNumb] = getResLinIndex(resArray[shmemSum[33,innerWarpNumb]  +shmemSum[35,innerWarpNumb] + (scanIter*32) + threadIdxX(),1]  )
-        end
-        sync_warp() # now we have 32 linear indicies loaded into the shared memory
-        #so we need to load some value into single value into thread and than go over all value in shared memory  
-        @scanWhenDataInShmem()
-    end# for scanIter 
-end)
-end
-
 
 """
-in this spot we already have 32 (not more at least ) values in shared memory
-we need to now 
+as we are operating under assumption that we do not know how many warps we have - we do not know the y dimension of thread block we need to load data into registers with a loop 
+and within the same loop scan it for duplicates
+so if we have more than 12 warps we will execute the loop once - in case we have more we need to execute it in the loop
+iterThrougWarNumb - indicates how many times we need to  iterate to cover all 12 ques if we have at least 12 warps available (ussually we will) we will execute it once
 """
-macro scanWhenDataInShmem()
+macro loadAndScanForDuplicates(iterThrougWarNumb,locArr,offsetIter)
+        
     return esc(quote
-    @unroll for tempCount in (shmemSum[33,innerWarpNumb]+shmemSum[35,innerWarpNumb] ):(shmemSum[33,innerWarpNumb]+shmemSum[34,innerWarpNumb]+shmemSum[33,innerWarpNumb])
-        #now we need to make sure that we are not at spot whre this value is legitimite - so this is first occurence
-        if(tempCount!=shmemSum[33,innerWarpNumb]+ (scanIter*32) + threadIdxX()  )
-            #finally we iterate over all values in any given thread and compare to associated value in shared memory
-            if( getResLinIndex(resArray[tempCount,1])  == shmemSum[threadIdxX(),innerWarpNumb] )
-                 #if we are here it means that we have duplicated value 
-                @manageDuplicatedValue()
-            end    
-        end    
-    end     end )
-end #scanWhenDataInShmem
 
-"""
-this will be invoked when we have duplicated value in result queue - so we need to 
-    set this value - of linear index to 0 
-    and reduce the counter value 
-"""
-macro  manageDuplicatedValue()
-    return esc(quote
-    resArray[tempCount,1]=0
-    decrCounterByOne(numb, mataData,shmemSum[35,resQueueNumb])
+    @unroll for outerWarpLoop::Uint8 in 0:$iterThrougWarNumb     
+            innerWarpNumb = (threadidY()+ outerWarpLoop*blockimY())
+            #now we will load the diffrence between old and current counter
+            if(( innerWarpNumb)<13)
+                @ifY innerWarpNumb begin
+                    #store result in registers
+                    #store result in registers (we are reusing some variables)
+                    #old count
+                    $locArr = getOldCount(numb, mataData,linIndex)
+                    #diffrence new - old 
+                    $offsetIter= geNewCount(numb, mataData,linIndex)- $locArr
+                    # #queue result offset
+                    # localResOffset = metaData[xMeta,yMeta+1,zMeta+1, getBeginnigOfOffsets()+innerWarpNumb] # tis queue offset
+                    
+                    # enable access to information is it bigger than 0 to all threads in block
+                    resShmem[(threadIdxX()+1),innerWarpNumb+1,3] = offsetIter>0
+                end #@ifY
+            end#if
+        end#for  
+        @scanForDuplicates(oldCount, countDiff)
+    end)#quote
+         
+        
+        
+    end #outerWarpLoop    
+
+
+
+
+    """
+    will be invoked in order to iterate over the metadata  after some dilatations were already done - we need to 
+        establish is block to be activated or inactivated or left as is
+        if block is active it needs to be added to work queue 
+        using some spare threads we will also housekeeping like for example switching active work queue etc
+        we will check rescounters of border res ques and compare with old ones - if any will be grater than old we will scan for any repeating results 
+            - it could be the case that neighbouring blocks concurently added the same results - in this case we need to set one of those to 0 and reduce the counter    
+        we will do all by using single warp per metadata block     
+    """
+    macro setMEtaDataOtherPasses(locArr,offsetIter)
+        return esc(quote
+        $locArr=0
+        $offsetIter=0
+        isMaskFull=false
+        @metaDataWarpIter(metaDataIterLoops, threadsPerBlock,threadsPerGrid, maxLinIndex  ,begin
+        isMaskOkForProcessing=false
+            #first we will check is block full active or be activated and we will set 
+            @checkIsActiveOrFullOr()
+            #now we will load the diffrence between old and current counter
+            @unroll for i in 1:14
+                @exOnWarp i begin
+                    #store result in registers
+                    #store result in registers (we are reusing some variables)
+                    #old count
+                    $locArr = getOldCount(numb, mataData,linIndex)
+                    #diffrence new - old 
+                    $offsetIter= geNewCount(numb, mataData,linIndex)- $locArr
+                    # enable access to information is it bigger than 0 to all threads in block
+                    sourceShmem[(threadIdxX()+1)+33*7] = $offsetIter>0
+                    end #@exOnWarp
+            end#for
     
-end )
-end
+            #here we load data about wheather there is anything to be validated here - we save data so it can be read from the perspective of this block
+            #and the blocks aroud that will want to analyze paddings
+            @setIsToBeValidated()
+    
+            #now in some threads we have booleans needed for telling is mask active and in futher sixteen diffrences of counters that will tell us is there a res list that 
+            #increased its  amount of value in last dilatation step if so and  this increase is in some border result list we need to  establish weather we do not have any repeating  results
+            sync_threads()
+    
+            #we set information that block should be activated in gold  and segm
+            @setIsToBeActive()
+            #after previous sync threads we already have the number of how much we increased number of results  relative to previous dilatation step
+            #now we need to go through  those numbers and in case some of the border queues were incremented we need to analyze those added entries to establish is there 
+            # any duplicate in case there will be we need to decrement counter and set the corresponding duplicated entry to 0 
+            @scanForDuplicates($locArr, $offsetIter) 
+        end    )
+            sync_threads()
+    
+            clearMainShmem(sourceShmem)
+    
+            clearSharedMemWarpLong(shmemSum, UInt8(14), Float32(0.0))
+            $locArr=0
+            $offsetIter=0
+        end )
+    end
+
+
 
 
 
@@ -488,7 +500,7 @@ end
 
 #                     @unroll for zIter::UInt8 in UInt8(1):UInt8(6)
 #                         @ifX 1  resShmem[zIter+1,threadIdxY()+1,3]=  @inbounds  (locArr>>zIter & 1)
-#                         #@ifX 1 CUDA.@cuprint " resShmem[zIter+1,threadIdxX()+1,3]   $(resShmem[zIter+1,threadIdxX()+1,3] )   locArr $(locArr) \n" 
+#                         #@ifX 1 CUDA.@cuprint " resShmem[zIter+1,(threadIdxX()+1),3]   $(resShmem[zIter+1,(threadIdxX()+1),3] )   locArr $(locArr) \n" 
 #                     end#for  
                              
 #              sync_threads()#now we have partially reduced values marking wheather we have any true in padding         
@@ -498,7 +510,7 @@ end
 #                 offset = UInt8(1)
 #                 if(UInt8(threadIdxY())==zIter)
 #                     while(offset <32)                        
-#                         @inbounds  resShmem[zIter+1,threadIdxX()+1,3] = (resShmem[zIter+1,threadIdxX()+1,3] | shfl_down_sync(FULL_MASK,resShmem[zIter+1,threadIdxX()+1,3], offset))
+#                         @inbounds  resShmem[zIter+1,(threadIdxX()+1),3] = (resShmem[zIter+1,(threadIdxX()+1),3] | shfl_down_sync(FULL_MASK,resShmem[zIter+1,(threadIdxX()+1),3], offset))
 #                         offset<<= 1
 #                     end#while
 #                 end#if    
