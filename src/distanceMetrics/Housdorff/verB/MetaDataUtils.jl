@@ -82,7 +82,7 @@ function getFullInSegmNumb()::UInt32 return  4 end
 function getIsToBeActivatedInGoldNumb()::UInt32 return  5 end
 function getIsToBeActivatedInSegmNumb()::UInt32 return  6 end
 
-function getIsToBeAnalyzedNumb()::UInt32 return  10 end
+function getIsToBeAnalyzedNumb()::UInt32 return  9 end
 
 
 function getResOffsetsBeg()::UInt32 return  42 end
