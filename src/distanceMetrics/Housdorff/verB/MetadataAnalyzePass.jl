@@ -378,7 +378,7 @@ macro loadAndScanForDuplicates(iterThrougWarNumb,locArr,offsetIter)
             - it could be the case that neighbouring blocks concurently added the same results - in this case we need to set one of those to 0 and reduce the counter    
         we will do all by using single warp per metadata block     
     """
-    macro setMEtaDataOtherPasses(locArr,offsetIter)
+    macro setMEtaDataOtherPasses(locArr,offsetIter,iterThrougWarNumb)
         return esc(quote
         $locArr=0
         $offsetIter=0
@@ -388,18 +388,18 @@ macro loadAndScanForDuplicates(iterThrougWarNumb,locArr,offsetIter)
             #first we will check is block full active or be activated and we will set 
             @checkIsActiveOrFullOr()
             #now we will load the diffrence between old and current counter
-            @unroll for i in 1:14
-                @exOnWarp i begin
-                    #store result in registers
-                    #store result in registers (we are reusing some variables)
-                    #old count
-                    $locArr = getOldCount(numb, mataData,linIndex)
-                    #diffrence new - old 
-                    $offsetIter= geNewCount(numb, mataData,linIndex)- $locArr
-                    # enable access to information is it bigger than 0 to all threads in block
-                    sourceShmem[(threadIdxX()+1)+33*7] = $offsetIter>0
-                    end #@exOnWarp
-            end#for
+            # @unroll for i in 1:14
+            #     @exOnWarp i begin
+            #         #store result in registers
+            #         #store result in registers (we are reusing some variables)
+            #         #old count
+            #         $locArr = getOldCount(numb, mataData,linIndex)
+            #         #diffrence new - old 
+            #         $offsetIter= geNewCount(numb, mataData,linIndex)- $locArr
+            #         # enable access to information is it bigger than 0 to all threads in block
+            #         sourceShmem[(threadIdxX()+1)+33*7] = $offsetIter>0
+            #         end #@exOnWarp
+            # end#for
     
             #here we load data about wheather there is anything to be validated here - we save data so it can be read from the perspective of this block
             #and the blocks aroud that will want to analyze paddings
@@ -407,8 +407,11 @@ macro loadAndScanForDuplicates(iterThrougWarNumb,locArr,offsetIter)
     
             #now in some threads we have booleans needed for telling is mask active and in futher sixteen diffrences of counters that will tell us is there a res list that 
             #increased its  amount of value in last dilatation step if so and  this increase is in some border result list we need to  establish weather we do not have any repeating  results
-            sync_threads()
-    
+            
+            
+            @loadAndScanForDuplicates(iterThrougWarNumb,locArr,offsetIter)
+
+
             #we set information that block should be activated in gold  and segm
             @setIsToBeActive()
             #after previous sync threads we already have the number of how much we increased number of results  relative to previous dilatation step
