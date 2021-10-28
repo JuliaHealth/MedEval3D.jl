@@ -19,7 +19,7 @@ resShmem = CuArray(falses(datBdim[1]+2, datBdim[2]+2, datBdim[3]+2 ))
 loopXMeta= fld(metaDataDims[1],threads[1])
 loopYZMeta= fld(metaDataDims[2]*metaDataDims[3],blocks )
 
-resList=allocateResultList()
+resList=allocateResultList(100000,1600)
 #we set some offsets to make it simple for evaluation we will keeep it  each separated by 50 
 offset = -49
 for metaX in 1:3, metaY in 1:3, metaZ in 1:3
@@ -37,19 +37,19 @@ offset = -49
       for j in 1:quueueNumb
           for innerJ in 0:(quueueNumb-1)
         #the bigger the number the more repetitions and more non repeated elements 
-           resList[offset+j+innerJ*quueueNumb,:]= [innerJ+1,innerJ+2,innerJ+3,1,1]
+           resList[offset+j+innerJ*quueueNumb,:]= [innerJ+1,innerJ+2,innerJ+3,1,1,1]
            metaData[1,1,1,getNewCountersBeg()+quueueNumb]+=1 
       end#inner j 
    end#for
 end#for   
 
 #should be first queue in block 3,3,3
-resList[9*14*250,:] = [1,1,1,1,1]
-resList[9*14*250+1,:] = [1,1,1,0,1]
-resList[9*14*250+2,:] = [1,1,1,1,1]#repeat
-resList[9*14*250+3,:] = [1,2,1,1,1]
-resList[9*14*250+4,:] = [1,1,2,1,1]
-resList[9*14*250+5,:] = [2,1,1,1,1]
+resList[9*14*250,:] = [1,1,1,1,1,1]
+resList[9*14*250+1,:] = [1,1,1,0,1,1]
+resList[9*14*250+2,:] = [1,1,1,1,1,1]#repeat
+resList[9*14*250+3,:] = [1,2,1,1,1,1]
+resList[9*14*250+4,:] = [1,1,2,1,1,1]
+resList[9*14*250+5,:] = [2,1,1,1,1,1]
 
 
 metaData[3,3,3,getNewCountersBeg()+1]+=6 
@@ -64,15 +64,16 @@ offset = -49
          @test Int64.(metaData[1,1,1,getNewCountersBeg()+quueueNumb])==quueueNumb*quueueNumb
    for j in 1:quueueNumb
          #we test first entries from innner loop
-         @test Int64.(resList[offset+j*quueueNumb,:])==[j,j+1,j+2,1,1]
+         @test Int64.(resList[offset+j*quueueNumb,:])==[j,j+1,j+2,1,1,1]
         end#for j 
    end#for quueueNumb
 
 
-function loadAndSanForDuplKernel(metaData,iterThrougWarNumb ,resShmem,loopXMeta,loopYZMeta,resList)
+function loadAndSanForDuplKernel(metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,datBdim)
    locArr= UInt32(0)
    offsetIter= UInt16(0)
-   shmemSum =  @cuStaticSharedMem(Float32,35,16)
+   shmemSum =  @cuStaticSharedMem(Float32,(35,16))
+   resShmem =  @cuDynamicSharedMem(Bool,(datBdim[1]+2,datBdim[2]+2,datBdim[3]+2)) # we need this additional 33th an 34th spots
 
    MetadataAnalyzePass.@metaDataWarpIter( metaDataDims,loopXMeta,loopYZMeta,
        begin
@@ -86,8 +87,7 @@ function loadAndSanForDuplKernel(metaData,iterThrougWarNumb ,resShmem,loopXMeta,
    return
 end
 
-@cuda threads=threads blocks=blocks loadAndSanForDuplKernel(metaData,iterThrougWarNumb ,resShmem,loopXMeta,loopYZMeta,resList)
-
+@cuda threads=threads blocks=blocks loadAndSanForDuplKernel(metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,datBdim)
 @test Int64(metaData[3,3,3,getNewCountersBeg()+1]) ==5
 
 

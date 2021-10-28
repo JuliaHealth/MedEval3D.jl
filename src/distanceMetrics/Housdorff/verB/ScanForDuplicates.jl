@@ -12,14 +12,14 @@ now we need to access the result queue starting from old counter
 macro scanForDuplicatesMainPart()
     return esc(quote
     #as we can analyze 32 numbers at once if the amount of new results is bigger we need to do it in multiple passes 
-    @unroll for scanIter in 0: cld(shmemSum[34,i],32 )
-        # here we are loading data about linearized indicies of result in main  array depending on a queue we are analyzing it will tell about gold or other pas
-        if(((scanIter*32) + threadIdxX())< shmemSum[34,innerWarpNumb]  )
-            shmemSum[threadIdxX(),innerWarpNumb] = getResLinIndex(resList[(shmemSum[33,innerWarpNumb]  +shmemSum[35,innerWarpNumb] + (scanIter*32) + threadIdxX()  )],mainArrDims  )
-        end
+    @unroll for scanIter in 0: cld(shmemSum[34,innerWarpNumb],32 )
+        # # here we are loading data about linearized indicies of result in main  array depending on a queue we are analyzing it will tell about gold or other pas
+        # if(((scanIter*32) + threadIdxX())< shmemSum[34,innerWarpNumb]  )
+        #     #shmemSum[threadIdxX(),innerWarpNumb] = getResLinIndex(resList[(shmemSum[33,innerWarpNumb]  +shmemSum[35,innerWarpNumb] + (scanIter*32) + threadIdxX()  )],mainArrDims  )
+        # end
         sync_warp() # now we have 32 linear indicies loaded into the shared memory
         #so we need to load some value into single value into thread and than go over all value in shared memory  
-        @scanWhenDataInShmem()
+        #@scanWhenDataInShmem()
     end# for scanIter 
 end)
 end
@@ -70,20 +70,20 @@ macro scanForDuplicatesB(oldCount, countDiff)
     if(innerWarpNumb<13)
         @exOnWarp innerWarpNumb begin
             @unroll for threadNumber in 1:32 # we need to analyze all thread id x 
-                if( resShmem[threadNumber+1,innerWarpNumb+1,3]) # futher actions necessary only if counter diffrence is bigger than 0 
+                if( resShmem[(threadIdxX())+(innerWarpNumb)*33]) # futher actions necessary only if counter diffrence is bigger than 0 
                     if( threadIdxX()==threadNumber ) #now we need some  values that are in the registers  of the associated thread 
                         #those will be needed to know what we need to iterate over 
                         #basically we will start scanning from queaue offset + old count untill queue offset + new count
                         shmemSum[33,innerWarpNumb]=  $oldCount 
                         shmemSum[34,innerWarpNumb]=  $countDiff
-                        shmemSum[35,innerWarpNumb]=  localResOffset
+                        #shmemSum[35,innerWarpNumb]=  localResOffset
                     end# if ( threadIdxX()==warpNumb )
-                    sync_warp()# now we should have the required number for scanning of new values for duplicates important that we are analyzing now given queue with just single warp
-                    @scanForDuplicatesMainPart()
-                    sync_warp()
                 end# resShmem[warpNumb+1,i+1,3]
+                sync_warp()# now we should have the required number for scanning of new values for duplicates important that we are analyzing now given queue with just single warp
+                   @scanForDuplicatesMainPart()
+                sync_warp()
             end # for warp number  
-        end #ifY
+        end #exOnWarp
     end    
 end )
 end
@@ -99,7 +99,7 @@ macro loadAndScanForDuplicates(iterThrougWarNumb,locArr,offsetIter)
         
     return esc(quote
 
-    @unroll for outerWarpLoop::Uint8 in 0:$iterThrougWarNumb     
+    @unroll for outerWarpLoop in 0:$iterThrougWarNumb     
             innerWarpNumb = (threadIdxY()+ outerWarpLoop*blockDimY())
             #now we will load the diffrence between old and current counter
             if(( innerWarpNumb)<15)
@@ -121,8 +121,9 @@ macro loadAndScanForDuplicates(iterThrougWarNumb,locArr,offsetIter)
                     resShmem[(threadIdxX())+(innerWarpNumb)*33] = $offsetIter >0
                 end #@ifY
             end#if
+            sync_threads()
+            @scanForDuplicatesB(locArr, offsetIter) 
         end#for  
-        @scanForDuplicatesB(oldCount, countDiff) 
     end)#quote
          
                 
