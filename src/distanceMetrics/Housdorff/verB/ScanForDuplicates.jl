@@ -13,10 +13,8 @@ any duplicate in case there will be we need to decrement counter and set the cor
 function scanForDuplicatesB(oldCount, countDiff,innerWarpNumb,resShmem,shmemSum,resListIndicies,metaData,xMeta,yMeta,zMeta,metaDataDims,localOffset,maxResListIndex,outerWarpLoop) 
 
     if(innerWarpNumb<13)
-
         @exOnWarp innerWarpNumb begin
-
-            @unroll for threadNumber in 1:32 # we need to analyze all thread id x 
+           @unroll for threadNumber in 1:32 # we need to analyze all thread id x 
                 if( resShmem[(threadIdxX())+(innerWarpNumb)*33]) # futher actions necessary only if counter diffrence is bigger than 0 
                     if( threadIdxX()==threadNumber ) #now we need some  values that are in the registers  of the associated thread 
                         #those will be needed to know what we need to iterate over 
@@ -27,11 +25,9 @@ function scanForDuplicatesB(oldCount, countDiff,innerWarpNumb,resShmem,shmemSum,
                         shmemSum[35,innerWarpNumb]= localOffset
                         #will be used in order to keep track of proper new size of counter
                         shmemSum[36,innerWarpNumb]= 0
-                    # CUDA.@cuprint "scanForDuplicatesB  oldCount $(shmemSum[33,innerWarpNumb]) countDiff $( shmemSum[34,innerWarpNumb])  offset $(shmemSum[35,innerWarpNumb]) innerWarpNumb $(innerWarpNumb) xMeta $(xMeta) yMeta $(yMeta+1) zMeta $(zMeta+1)  \n "
                     end# if ( threadIdxX()==warpNumb )
                 end# 
-                sync_warp()# now we should have the required number for scanning of new values for duplicates important that we are analyzing now given queue with just single warp
-                    
+                sync_warp()# now we should have the required number for scanning of new values for duplicates important that we are analyzing now given queue with just single warp                  
                     # if(xMeta==1 && yMeta==0 && zMeta==0 && innerWarpNumb==2)   
                     #     CUDA.@cuprint "aaa  innerWarpNumb $(innerWarpNumb) local offset $(shmemSum[35,innerWarpNumb])\n"
                     # end
@@ -53,18 +49,17 @@ now we need to access the result queue starting from old counter
 """
 function  scanForDuplicatesMainPart(shmemSum,innerWarpNumb,resListIndicies,metaData,xMeta,yMeta,zMeta,resShmem,metaDataDims,threadNumber,maxResListIndex,outerWarpLoop)
     #as we can analyze 32 numbers at once if the amount of new results is bigger we need to do it in multiple passes 
+
     if(shmemSum[34,innerWarpNumb]>0 )
         @unroll for scanIter in 0:fld(shmemSum[34,innerWarpNumb],32)
                 # here we are loading data about linearized indicies of result in main  array depending on a queue we are analyzing it will tell about gold or other pas
                 if(((scanIter*32) + threadIdxX())< shmemSum[34,innerWarpNumb]  )
                      indexx = (shmemSum[33,innerWarpNumb]  +shmemSum[35,innerWarpNumb] + (scanIter*32) + threadIdxX())
-                    # if(shmemSum[35,innerWarpNumb]==127701)   
-                    #     CUDA.@cuprint "indexx shmem $(indexx)   innerWarpNumb $(innerWarpNumb)   shmemSum[33,innerWarpNumb] $(shmemSum[33,innerWarpNumb])  shmemSum[35,innerWarpNumb] $(shmemSum[35,innerWarpNumb]) threadIdxX() $(threadIdxX())  \n"
-                    # end
                     shmemSum[threadIdxX(),innerWarpNumb] = resListIndicies[indexx]
                 end
             sync_warp() # now we have 32 linear indicies loaded into the shared memory
             #so we need to load some value into single value into thread and than go over all value in shared memory  
+
             scanWhenDataInShmem(shmemSum,innerWarpNumb, scanIter,resListIndicies,metaData,xMeta,yMeta,zMeta,metaDataDims,threadNumber,maxResListIndex,outerWarpLoop  )
             
             sync_warp()
@@ -73,14 +68,14 @@ function  scanForDuplicatesMainPart(shmemSum,innerWarpNumb,resListIndicies,metaD
 
             #if this below it means that we have removed some entries from result list; we also check for thread to get appropriate metadata location
             if( (shmemSum[36,innerWarpNumb]>0 ) && (threadIdxX()==threadNumber)  )
+
                 metaData[xMeta,yMeta+1,zMeta+1,((getNewCountersBeg()) +innerWarpNumb) ]= (shmemSum[33,innerWarpNumb]+shmemSum[34,innerWarpNumb])-shmemSum[36,innerWarpNumb]
-                #  if(shmemSum[35,innerWarpNumb]==127701)                    
-                #         CUDA.@cuprint " innnn  shmemSum[36,innerWarpNumb] $(shmemSum[36,innerWarpNumb])  innerWarpNumb $(innerWarpNumb )    idX $(threadIdxX())  idY $(threadIdxY())   \n "
-                #   end         
+      
                   shmemSum[34,innerWarpNumb]= 0
                   shmemSum[35,innerWarpNumb]=0
                   shmemSum[36,innerWarpNumb]=0
              end   
+             sync_threads()
 
     end#if    
 end
@@ -91,39 +86,16 @@ in this spot we already have 32 (not more at least ) values in shared memory
 we need to now 
 """
 function scanWhenDataInShmem(shmemSum,innerWarpNumb, scanIter,resListIndicies,metaData,xMeta,yMeta,zMeta,metaDataDims,threadNumber,maxResListIndex ,outerWarpLoop )
-    #CUDA.@cuprint "scanWhenDataInShmem xMeta $(xMeta) yMeta $(yMeta) zMeta $(zMeta) innerWarpNumb $(innerWarpNumb)    \n"
-
     @unroll for tempCount in (shmemSum[33,innerWarpNumb] ):(shmemSum[33,innerWarpNumb]+shmemSum[34,innerWarpNumb])
-       # CUDA.@cuprint "scanWhenDataInShmem  tempCount $(tempCount)  xMeta $(xMeta) yMeta $(yMeta) zMeta $(zMeta) innerWarpNumb $(innerWarpNumb)    \n"
         resListCurrIndex = tempCount +shmemSum[35,innerWarpNumb]
         #now we need to make sure that we are not at spot whre this value is legitimite - so this is first occurence
         if((resListCurrIndex!=( (shmemSum[33,innerWarpNumb]  +shmemSum[35,innerWarpNumb] + (scanIter*32) + threadIdxX()) ) ) && resListCurrIndex < maxResListIndex  )
             #finally we iterate over all values in any given thread and compare to associated value in shared memory
-            # if(xMeta==1 && yMeta==0 && zMeta==0 && innerWarpNumb==2)   
-            # if(shmemSum[35,innerWarpNumb]==127701)   
-            #     CUDA.@cuprint "valueResList  $(resListIndicies[resListCurrIndex])  value shmem $(shmemSum[threadIdxX(),innerWarpNumb])  resListCurrIndex $(resListCurrIndex)   xMeta $(xMeta) yMeta $(yMeta+1) zMeta $(zMeta+1) innerWarpNumb $(innerWarpNumb) \n"
-            # end
             #we need also to remember that we can have only 2 copies of the same result entry  we will keep only first one and second one we will remove
-        #    CUDA.@cuprint " resListIndicies[resListCurrIndex]  $(resListIndicies[resListCurrIndex]) \n"
-           
-            if( (resListIndicies[resListCurrIndex]  == shmemSum[threadIdxX(),innerWarpNumb]) &&  (tempCount>  ((scanIter*32) + threadIdxX())) )
-                #if we are here it means that we have duplicated value 
-                #we are correcting the counter in shared memory 
-                #@atomic shmemSum[36,2]-=1
-                # CUDA.@cuprint " innerWarpNumb  $(innerWarpNumb) "
-                # @atomic shmemSum[36,2]-=1
-                # @atomic shmemSum[36,3]-=1
-                # @atomic shmemSum[36,4]-=1
-                # @atomic shmemSum[36,5]-=1
-                # if(innerWarpNumb!=1 && innerWarpNumb!=2 && innerWarpNumb!=3 && innerWarpNumb!=4 && innerWarpNumb!=5)
-
-                    # CUDA.@cuprint " innnn innerWarpNumb $(innerWarpNumb )  \n "
-                # end
-#                  if(shmemSum[35,innerWarpNumb]==127701)   
-#                     @atomic shmemSum[36,innerWarpNumb]-=UInt32(1)
-
-# #                    CUDA.@cuprint " innnn innerWarpNumb $(innerWarpNumb ) idX $(threadIdxX())  idY $(threadIdxY())  \n "
-#                  end
+            if( (resListIndicies[resListCurrIndex]  == shmemSum[threadIdxX(),innerWarpNumb]) &&  (tempCount>  ((scanIter*32) + threadIdxX()))  && (resListIndicies[resListCurrIndex]!=0) )
+                #  if(shmemSum[35,innerWarpNumb]==1701)   
+                #     CUDA.@cuprint " innnn innerWarpNumb $(innerWarpNumb ) idX $(threadIdxX())  idY $(threadIdxY())  value $(resListIndicies[resListCurrIndex]) \n "
+                #  end
                 @atomic shmemSum[36,innerWarpNumb]+=1
                 resListIndicies[resListCurrIndex]=0
                 #  manageDuplicatedValue(resListIndicies,tempCount+threadIdxX(), metaData,xMeta,yMeta,zMeta ,innerWarpNumb,metaDataDims )
@@ -186,7 +158,6 @@ end #scanWhenDataInShmem
                     end #@exOnWarp
                 end#if
                 sync_threads()
-
                 scanForDuplicatesB($locArr, $offsetIter,innerWarpNumb,resShmem,shmemSum,resListIndicies,metaData,xMeta,yMeta,zMeta,metaDataDims,localOffset,maxResListIndex,outerWarpLoop) 
                 #scanForDuplicatesB($locArr, $offsetIter) 
             end#for  

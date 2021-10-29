@@ -116,70 +116,78 @@ Int64(resListIndicies[127701] )
 
 offset = -49
    # for quueueNumb in 1:14
-   for quueueNumb in 1:2
+   for quueueNumb in 1:12
          offset+=350
         #the bigger the number the more repetitions and more non repeated elements 
-         @test metaData[1,1,1,getNewCountersBeg()+quueueNumb]==quueueNumb*5#j instead of quueueNumb*quueueNumb
+         @test metaData[1,1,1,getNewCountersBeg()+quueueNumb]==quueueNumb*5+1#j instead of quueueNumb*quueueNumb
          tempList= Array(resListIndicies[offset:offset+350])
-         @test length(filter(el->el>0,tempList))==quueueNumb*5#+1 becouse of 0's entry
+         @test length(filter(el->el>0,tempList))==quueueNumb*5+1#+1 becouse of 0's entry
   end#for
 
-   quueueNumb =11
+    quueueNumb =12
    offset = -49
    offset+=350*(quueueNumb)
    @test Int64(metaData[1,1,1,getNewCountersBeg()+quueueNumb])==quueueNumb*5+1#j instead of quueueNumb*quueueNumb
    tempList= Array(resListIndicies)[offset:offset+350];
-
    @test length(filter(el->el>0,tempList))==quueueNumb*5+1#+1 becouse of 0's entry
    
 
-   offset = -49+(350*8)
-   Int64.(resList[offset:offset+10,:])
+
+#    zzzzzzzzzzz    shmemSum[36,innerWarpNumb]  4  innerWarpNumb 1    idX 1  idY 1  xMeta 1 yMeta 0 zMeta 0 
+#    zzzzzzzzzzz    shmemSum[36,innerWarpNumb]  9  innerWarpNumb 2    idX 1  idY 2  xMeta 1 yMeta 0 zMeta 0
+#    zzzzzzzzzzz    shmemSum[36,innerWarpNumb]  14  innerWarpNumb 3    idX 1  idY 3  xMeta 1 yMeta 0 zMeta 0
+#    zzzzzzzzzzz    shmemSum[36,innerWarpNumb]  47  innerWarpNumb 4    idX 1  idY 4  xMeta 1 yMeta 0 zMeta 0
+#    zzzzzzzzzzz    shmemSum[36,innerWarpNumb]  177  innerWarpNumb 5    idX 1  idY 5  xMeta 1 yMeta 0 zMeta 0
+#    zzzzzzzzzzz    shmemSum[36,innerWarpNumb]  1  innerWarpNumb 1    idX 3  idY 1  xMeta 3 yMeta 2 zMeta 2
+
+
+#    offset = -49+(350*8)
+#    Int64.(resList[offset:offset+10,:])
 
 
 
-   indd 1102501  xMeta 1 yMeta 1 zMeta 1 innerWarpNumb 2 tempCount 656
-   indd 1102501  xMeta 1 yMeta 1 zMeta 1 innerWarpNumb 2 tempCount 653
+#    indd 1102501  xMeta 1 yMeta 1 zMeta 1 innerWarpNumb 2 tempCount 656
+#    indd 1102501  xMeta 1 yMeta 1 zMeta 1 innerWarpNumb 2 tempCount 653
 
-   Int64.(unique(resListIndicies[offset:offset+350]))
-   Int64(resListIndicies[656 ]) #0
-   Int64(resListIndicies[653 ]) #223716...
-   Int64(resListIndicies[652 ]) #223716...
-   Int64(metaData[1102501]) #4
+#    Int64.(unique(resListIndicies[offset:offset+350]))
+#    Int64(resListIndicies[656 ]) #0
+#    Int64(resListIndicies[653 ]) #223716...
+#    Int64(resListIndicies[652 ]) #223716...
+#    Int64(metaData[1102501]) #4
 
 
-   list [1, 2, 3, 1, 1, 1] ind 652   
-   list [2, 3, 4, 1, 1, 1] ind 654
-   list [1, 2, 3, 1, 1, 1] ind 653
-   list [2, 3, 4, 1, 1, 1] ind 655
+#    list [1, 2, 3, 1, 1, 1] ind 652   
+#    list [2, 3, 4, 1, 1, 1] ind 654
+#    list [1, 2, 3, 1, 1, 1] ind 653
+#    list [2, 3, 4, 1, 1, 1] ind 655
 
 
 
 
    
 
-Int64(resListIndicies[127701] ) 
-Int64(resListIndicies[127701+1] ) 
-Int64(resListIndicies[127701+2] ) 
-Int64(resListIndicies[127701+3] ) 
-Int64(resListIndicies[127701+4] ) 
-Int64(resListIndicies[127701+5] ) 
+# Int64(resListIndicies[127701] ) 
+# Int64(resListIndicies[127701+1] ) 
+# Int64(resListIndicies[127701+2] ) 
+# Int64(resListIndicies[127701+3] ) 
+# Int64(resListIndicies[127701+4] ) 
+# Int64(resListIndicies[127701+5] ) 
 
-Int64(resListIndicies[127701] ) ==223181869
-Int64(resListIndicies[127701+1] ) ==223181869
-Int64(resListIndicies[127701+2] ) ==223181869
-Int64(resListIndicies[127701+3] ) ==223181869
-Int64(resListIndicies[127701+4] ) ==223181869
-Int64(resListIndicies[127701+5] ) ==223181869
+# Int64(resListIndicies[127701] ) ==223181869
+# Int64(resListIndicies[127701+1] ) ==223181869
+# Int64(resListIndicies[127701+2] ) ==223181869
+# Int64(resListIndicies[127701+3] ) ==223181869
+# Int64(resListIndicies[127701+4] ) ==223181869
+# Int64(resListIndicies[127701+5] ) ==223181869
 
-223451221
+# 223451221
 
-223181869 -223181869
+# 223181869 -223181869
 
 
-for i in  0:0
-   println("111")
-end
+# for i in  0:0
+#    println("111")
+# end
 
 # using BenchmarkTools
 # BenchmarkTools.DEFAULT_PARAMETERS.samples = 100
