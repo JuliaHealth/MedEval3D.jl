@@ -3,7 +3,7 @@ using Revise, Parameters, Logging, Test
 using CUDA
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
 using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
-using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
+using Shuffle,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
 
 
 threads=(32,5)
@@ -68,8 +68,10 @@ metaData[3,3,3,getNewCountersBeg()+1]+=6
       end   
    end  
    
-   
-offset = -49
+ offsetForTwelve= Int64(metaData[1,1,1,getResOffsetsBeg()+12])
+ notShuffl= resListIndicies[(offsetForTwelve+1):(offsetForTwelve+40)]= shuffle( resListIndicies[(offsetForTwelve+1):(offsetForTwelve+40)])
+
+ offset = -49
 for quueueNumb in 1:14
       offset+=350
      #the bigger the number the more repetitions and more non repeated elements 
