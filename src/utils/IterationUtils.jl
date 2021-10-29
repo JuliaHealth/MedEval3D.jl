@@ -379,9 +379,13 @@ macro will know about the number of available warps as this will equall the  y d
 macro exOnWarp(numb,ex)
     return  esc(quote
         if($numb<=blockDimY())
-            @ifY $numb $ex
+          if (threadIdxY()== $numb)
+             $ex
+          end  
         else
-            @ifY (mod($numb,blockDimY())+1) $ex    
+          if (threadIdxY()==(mod($numb,blockDimY())+1) ) 
+            $ex
+          end      
         end 
     end)
  end       

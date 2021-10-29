@@ -1,20 +1,10 @@
 
+
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
-#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
-includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
-#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
-includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
-
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\MetadataAnalyzePass.jl")
-using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils
-using Main.MetadataAnalyzePass
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
+using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
 
 
 #########metaDataWarpIter
@@ -24,7 +14,7 @@ threads=(32,5)
 blocks =8
 mainArrDims= (516,523,826)
 datBdim = (43,21,17)
- metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:17,2:18,4:10,: );
+ metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:3,2:4,4:7,: );
 #metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:9,2:3,4:6,: );
 metaDataDims=size(metaData)
 loopXMeta= fld(metaDataDims[1],threads[1])
@@ -35,7 +25,7 @@ function metaDataWarpIterKernel(singleVal,metaDataDims,loopXMeta,loopYZMeta)
   
     MetadataAnalyzePass.@metaDataWarpIter( metaDataDims,loopXMeta,loopYZMeta,
     begin
-      @ifY 1 @atomic singleVal[]+=1
+      @ifY 1 if(isInRange) @atomic singleVal[]+=1 end
       #@ifX 1 CUDA.@cuprint "   xMeta $(xMeta)  yMeta $(yMeta)  zMeta $(zMeta) id  idX $(blockIdxX()) \n"   
 
     # @ifXY 1 1    CUDA.@cuprint "linIndex $(linIndex)"
@@ -65,20 +55,9 @@ end
 
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
-#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
-includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
-#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
-includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
-
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\MetadataAnalyzePass.jl")
-using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils
-using Main.MetadataAnalyzePass
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
+using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
 
 threads=(32,7)
 blocks=(1)
@@ -86,7 +65,7 @@ resCounter= CUDA.zeros(Int32,1)
 numbOfLoops = 200
 function exOnWarpKernelA(resCounter,numbOfLoops)
   for i in 1:numbOfLoops
-      MetadataAnalyzePass.@exOnWarp i @ifX 1  @atomic resCounter[1]+=1
+      @exOnWarp i @ifX 1  @atomic resCounter[1]+=1
       # MetadataAnalyzePass.@exOnWarp i @ifX 1  CUDA.@cuprint "i $(i)  mod $(mod(i,blockDimY() ))  idY   $(threadIdxY()) \n"   #@atomic resCounter[1]+=1
       
   end
@@ -100,65 +79,40 @@ end
 
 
 
-using Revise, Parameters, Logging, Test
-using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
-#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
-includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
-#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
-includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
+#     using Revise, Parameters, Logging, Test
+#     using CUDA
+#     includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+#     using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
+#     using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
+    
+# threads=(17,13)
+# blocks=(1)
+# resCounter= CUDA.zeros(Int64,1)
+# function exOnWarpIfBoolKernelA(resCounter)
+#     #bool true
+#   for i in 1:200
+#       MetadataAnalyzePass.@exOnWarpIfBool true i @ifX 1 @atomic resCounter[1]+=1
+#   end
+#   #bool false
+#     for i in 1:200
+#       MetadataAnalyzePass.@exOnWarpIfBool false i @ifX 1 @atomic resCounter[1]+=1
+#   end
+#   return
+# end 
+#     @cuda threads=threads blocks=blocks exOnWarpIfBoolKernelA(resCounter)
 
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\MetadataAnalyzePass.jl")
-using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils
-using Main.MetadataAnalyzePass
-
-threads=(17,13)
-blocks=(1)
-resCounter= CUDA.zeros(Int64,1)
-function exOnWarpIfBoolKernelA(resCounter)
-    #bool true
-  for i in 1:200
-      MetadataAnalyzePass.@exOnWarpIfBool true i @ifX 1 @atomic resCounter[1]+=1
-  end
-  #bool false
-    for i in 1:200
-      MetadataAnalyzePass.@exOnWarpIfBool false i @ifX 1 @atomic resCounter[1]+=1
-  end
-  return
-end 
-    @cuda threads=threads blocks=blocks exOnWarpIfBoolKernelA(resCounter)
-
-    @test resCounter[1]==200
+#     @test resCounter[1]==200
 
 
 
 ##################### load counters
 
-
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
-#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
-includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
-#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
-includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
-
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\MetadataAnalyzePass.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
 using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
-using Main.MetadataAnalyzePass,Main.MetaDataUtils
+using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
 
-
-#########loadCounters
 singleVal = CUDA.zeros(14)
 
 threads=(32,4)
@@ -196,7 +150,7 @@ function loadCountersKernel(metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,
   locArr= UInt32(0)
     MetadataAnalyzePass.@metaDataWarpIter(metaDataDims,loopXMeta,loopYZMeta,
     begin
-      MetadataAnalyzePass.@loadCounters(tobeEx,locArr)
+      MetadataAnalyzePass.@loadCounters()
     #@ifY 1    CUDA.@cuprint "xMeta $(xMeta) yMeta $(xMeta) zMeta $(zMeta)" 
     #CUDA.@cuprint "linIndex $(linIndex) \n "
 end)
@@ -213,21 +167,9 @@ sum(shmemSum)
 ############ analyzeMetadataFirstPass
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
-#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
-includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
-#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
-includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\WorkQueueUtils.jl")
-
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\MetadataAnalyzePass.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
 using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
-using Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils
+using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
 
 threads=(32,4)
 blocks =3
@@ -279,12 +221,6 @@ end
 @test metaData[2,2,2,1]==1
 @test metaData[2,2,2,2]==1
 
-previous = 0
-for i in 1:14
-  @info  metaData[1,1,1,(getResOffsetsBeg()-1)+i]
-  #  @test metaData[1,1,1,(getResOffsetsBeg()-1)+i] > (previous+ metaData[1,1,1, getBeginingOfFpFNcounts()+i-1]*1.4)
-  #  previous= metaData[1,1,1,(getResOffsetsBeg()-1)+i]
-end
 
 first = Int64(metaData[1,1,1,(getResOffsetsBeg()-1)+1])
 sec = Int64(metaData[1,1,1,(getResOffsetsBeg()-1)+3])
@@ -450,8 +386,8 @@ metaData[1,0+1,0+1,getFullInGoldNumb() ]
 
 
 
-@test metaData[xMeta,yMeta+1,zMeta+1,getFullInGoldNumb() ]=1
+@test metaData[xMeta,yMeta+1,zMeta+1,getFullInGoldNumb() ]==1
 
 
-@test Int64(globalFpResOffsetCounter[1]) ==Int64(ceil((16*1.5)+(17*1.5)))
-@test  Int64(globalFnResOffsetCounter[1])==Int64(ceil((18*1.5)+(17*1.5)))
+# @test Int64(globalFpResOffsetCounter[1]) ==Int64(ceil((16*1.5)+(17*1.5)))
+# @test  Int64(globalFnResOffsetCounter[1])==Int64(ceil((18*1.5)+(17*1.5)))

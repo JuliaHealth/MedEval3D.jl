@@ -38,6 +38,31 @@ threadsPerGrid - number of threads in all thread blocks combined
 maxLinIndex - maximum linear index in metadata
 """
 
+# macro metaDataWarpIter(metaDataDims,loopXMeta,loopYZMeta,ex)
+
+#     mainExp = generalizedItermultiDim(;xname=:(xMeta)
+#     ,yname= :(yzSpot)
+#     ,arrDims=metaDataDims
+#     ,loopXdim=loopXMeta 
+#     ,loopYdim=loopYZMeta
+#     ,isFullBoundaryCheckY=false
+#     ,isFullBoundaryCheckX =false
+#     ,yOffset = :(ydim*gridDim().x)
+#     ,yAdd=  :(blockIdxX()-1) 
+#     ,additionalActionBeforeY= :( yMeta= rem(yzSpot,$metaDataDims[2]) ; zMeta= fld(yzSpot,$metaDataDims[2]) )
+#     ,yCheck = :(yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] )
+#     ,xCheck = :(xMeta <= $metaDataDims[1])
+#     # ,xAdd= :(threadIdxX()-1)# to keep all 0 based
+#     ,is3d = false
+#     , ex = ex)  
+#     return esc(:( $mainExp))
+# end
+
+
+
+"""
+specialization of above where we do not check for the dimension - just create a boolean called isInRange that tell us if we are not getting outside of dims
+"""
 macro metaDataWarpIter(metaDataDims,loopXMeta,loopYZMeta,ex)
 
     mainExp = generalizedItermultiDim(;xname=:(xMeta)
@@ -45,34 +70,21 @@ macro metaDataWarpIter(metaDataDims,loopXMeta,loopYZMeta,ex)
     ,arrDims=metaDataDims
     ,loopXdim=loopXMeta 
     ,loopYdim=loopYZMeta
-    ,isFullBoundaryCheckY=false
-    ,isFullBoundaryCheckX =false
-    ,yOffset = :(ydim*gridDim().x)
+     ,yOffset = :(ydim*gridDim().x)
     ,yAdd=  :(blockIdxX()-1) 
     ,additionalActionBeforeY= :( yMeta= rem(yzSpot,$metaDataDims[2]) ; zMeta= fld(yzSpot,$metaDataDims[2]) )
-    ,yCheck = :(yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] )
-    ,xCheck = :(xMeta <= $metaDataDims[1])
+    ,additionalActionBeforeX= :( isInRange = ( yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] && xMeta <= $metaDataDims[1]  ) )
+    ,nobundaryCheckX=true
+    , nobundaryCheckY=true
+    , nobundaryCheckZ =true
+    # ,yCheck = :(yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] )
+    # ,xCheck = :(xMeta <= $metaDataDims[1])
     # ,xAdd= :(threadIdxX()-1)# to keep all 0 based
     ,is3d = false
     , ex = ex)  
     return esc(:( $mainExp))
-
-
-    # return esc(quote
-    # @unroll for innerIter in 0:$metaDataIterLoops-1
-    #     #each thread will be responsible for single metadata block
-    #     linIndex= (gridDim().x*blockDimX()*innerIter)+ (blockDimX()*(blockIdxX()-1)) + (threadIdxX())
-    #     zMeta=cld(linIndex, metaXDim*metaYdim)
-    #     yMeta=rem(linIndex, metaXDim*metaYdim ) 
-    #     xMeta= linIndex
-
-    #     if(linIndex<=maxLinIndex)
-    #         $ex
-    #     end
-    # end
-    # end )
-
 end
+
 
 """
 now we upload all data related to amount of data that is of our intrest 
@@ -84,45 +96,39 @@ macro loadCounters()
     return esc(quote
         @unroll for i in 1:14
            @exOnWarp i begin 
-             shmemSum[threadIdxX(),i]= metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ i]
-            #  if(shmemSum[threadIdxX(),i]>0)
-            #     CUDA.@cuprint "i $(i) shmem loaded $(shmemSum[threadIdxX(),i]) \n"
-            #  end
+            if(isInRange) 
+                shmemSum[threadIdxX(),i]= metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ i]
+            end   
            end
         end#for
-
+        
         #now in order to get offsets we need to atomially access the resOffsetCounter - we add to them total fp or fn cout so next blocks will not overwrite the 
         #area that is scheduled for this particular metadata block
         # we need to supply linear coordinate for atomicallyAddToSpot
         @exOnWarp 15 begin 
+            if(isInRange)
             count = metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ 16]
-            if(count>0)     
-                shmemSum[threadIdxX(),15]= atomicAdd(globalFpResOffsetCounter,  ceil(count*1.5)  )+1
-            else
-                shmemSum[threadIdxX(),15]= Float32(0.0)
-            end    
-
+                if(count>0)     
+                    shmemSum[threadIdxX(),15]= atomicAdd(globalFpResOffsetCounter,  ceil(count*1.5)  )+1
+                else
+                    shmemSum[threadIdxX(),15]= 0
+                end    
+            end
 
         end
         @exOnWarp 16 begin 
+            if(isInRange) 
             count = metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ 17]
-            if(count>0)     
-                shmemSum[threadIdxX(),16]= atomicAdd(globalFnResOffsetCounter,  ceil( count*1.5 )  )+1
-            else
-                shmemSum[threadIdxX(),16]= Float32(0.0)
-            end    
-        end   
+                if(count>0)     
+                    shmemSum[threadIdxX(),16]= atomicAdd(globalFnResOffsetCounter,  ceil( count*1.5 )  )+1
+                else
+                    shmemSum[threadIdxX(),16]= 0
+                end    
+            end   
+        end
             
         end)#quote
 end #loadCounters
-
-"""
-helps in calculating linear index in meta data 
-"""
-function getLinearIndexInMeta(xMeta,yMeta,zMeta,metaDataDims,toAddInForthDim )
-return 
-
-end
 
 
  """
@@ -143,7 +149,7 @@ end
              #as we need to perform basically the same work across all warps - instead on specializing threads in warp we will execute the same fynction across all warps
              # so warp will execute the same function just with varying data as it should be 
 
-            @loadCounters()
+            @loadCounters() 
 
             sync_threads()
 
@@ -155,24 +161,24 @@ end
 #     CUDA.@cuprint "in fn counterxMeta $(xMeta) yMeta+1 $(yMeta+1) zMeta+1 $(zMeta+1) \n"
 
 #  end
-            @ifY 1 if(shmemSum[threadIdxX(),15]>0.1 ) begin  
+            @ifY 1 if(shmemSum[threadIdxX(),15]>0 && isInRange) begin  
                     appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 ) 
                 end   
             end     
-            @ifY 2 if(shmemSum[threadIdxX(),16]>0.1 ) begin 
+            @ifY 2 if(shmemSum[threadIdxX(),16]>0 && isInRange) begin 
                  appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 ) end  
                 end      
            # @exOnWarp 2 CUDA.@cuprint "is true $((shmemSum[threadIdxX(),16]>0.0 ))"   #if(shmemSum[threadIdxX(),16]>0.0 ) appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 ) end        
             
-            @exOnWarp 3 if((shmemSum[threadIdxX(),15]) >0.1 ) setBlockasCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)    end 
-            @exOnWarp 4 if((shmemSum[threadIdxX(),16]) >0.1 ) setBlockasCurrentlyActiveInGold(metaData, xMeta,yMeta+1,zMeta+1)     end 
+            @exOnWarp 3 if((shmemSum[threadIdxX(),15]) >0 && isInRange) setBlockasCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)    end 
+            @exOnWarp 4 if((shmemSum[threadIdxX(),16]) >0 && isInRange) setBlockasCurrentlyActiveInGold(metaData, xMeta,yMeta+1,zMeta+1)     end 
  
  
             #####3set offsets
              #now we will calculate and set the result queue offsets for each offset we need to synchronize warps in order to have unique offsets 
              #we can not parallalize it more as we need to sequentially set offsets             
              
-            @exOnWarp 5 begin if((shmemSum[threadIdxX(),15]) >0 ) @unroll for i in 0:6
+            @exOnWarp 5 begin if((shmemSum[threadIdxX(),15]) >0 && isInRange) @unroll for i in 0:6
                      #set fp
                    value=floor(shmemSum[threadIdxX(),15])+1
                    if(i>0)
@@ -184,7 +190,7 @@ end
                     end #if
                 end
  
-            @exOnWarp 6 begin if((shmemSum[threadIdxX(),16]) >0 ) @unroll for i in 0:6
+            @exOnWarp 6 begin if((shmemSum[threadIdxX(),16]) >0 && isInRange) @unroll for i in 0:6
                  #set fn
                  value=shmemSum[threadIdxX(),16]
                  if(i>0)
@@ -208,13 +214,13 @@ establish is the  block  is active full or be activated, and we are saving this 
 """
 macro checkIsActiveOrFullOr()
     return esc(quote
-        @exOnWarp 30 sourceShmem[(threadIdxX()+1)] = metaData[xMeta,yMeta+1,zMeta+1,getFullInGoldNumb() ] #  isBlockFulliInGold(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 31 sourceShmem[(threadIdxX()+1)+33] = metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInGoldNumb() ] # isBlockToBeActivatediInGold(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 32 sourceShmem[(threadIdxX()+1)+33*2] = metaData[xMeta,yMeta+1,zMeta+1,getActiveGoldNumb() ] # isBlockCurrentlyActiveiInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 30 if(isInRange) sourceShmem[(threadIdxX()+1)] = metaData[xMeta,yMeta+1,zMeta+1,getFullInGoldNumb() ] end#  isBlockFulliInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 31 if(isInRange)   sourceShmem[(threadIdxX()+1)+33] = metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInGoldNumb() ] end # isBlockToBeActivatediInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 32 if(isInRange)  sourceShmem[(threadIdxX()+1)+33*2] = metaData[xMeta,yMeta+1,zMeta+1,getActiveGoldNumb() ] end # isBlockCurrentlyActiveiInGold(metaData, xMeta,yMeta+1,zMeta+1)
        
-        @exOnWarp 33 sourceShmem[(threadIdxX()+1)+33*3] = metaData[xMeta,yMeta+1,zMeta+1,getFullInSegmNumb() ] # isBlockFullInSegm(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 34 sourceShmem[(threadIdxX()+1)+33*4] = metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInSegmNumb() ] # isBlockToBeActivatedInSegm(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 35 sourceShmem[(threadIdxX()+1)+33*5] = metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb()] # isBlockCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 33 if(isInRange) sourceShmem[(threadIdxX()+1)+33*3] = metaData[xMeta,yMeta+1,zMeta+1,getFullInSegmNumb() ] end # isBlockFullInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 34 if(isInRange) sourceShmem[(threadIdxX()+1)+33*4] = metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInSegmNumb() ] end # isBlockToBeActivatedInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 35 if(isInRange) sourceShmem[(threadIdxX()+1)+33*5] = metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb()] end # isBlockCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)
 end)#quote
 end#checkIsActiveOrFullOr
 
@@ -224,11 +230,11 @@ given data in sourceShmem loaded by checkIsActiveOrFullOr() we will  mark the bl
 """
 macro setIsToBeActive()
     return esc(quote
-        @exOnWarp 1 if(!sourceShmem[(threadIdxX()+1)]  && (sourceShmem[(threadIdxX()+1)+33]  ||  sourceShmem[(threadIdxX()+1)+33*2])  )  
+        @exOnWarp 1 if(!sourceShmem[(threadIdxX()+1)]  && (sourceShmem[(threadIdxX()+1)+33]  ||  sourceShmem[(threadIdxX()+1)+33*2]) &&isInRange  )  
                         metaData[xMeta,yMeta+1,zMeta+1,getActiveGoldNumb() ]=1
                         appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 )
                     end
-        @exOnWarp 2 if(!sourceShmem[(threadIdxX()+1)+33*3]  && (sourceShmem[(threadIdxX()+1)+33*4]  ||  sourceShmem[(threadIdxX()+1)+33*5])  ) 
+        @exOnWarp 2 if(!sourceShmem[(threadIdxX()+1)+33*3]  && (sourceShmem[(threadIdxX()+1)+33*4]  ||  sourceShmem[(threadIdxX()+1)+33*5]) &&isInRange ) 
                         metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb() ]=1     
                         appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 )             
             end
@@ -256,10 +262,10 @@ end
         $locArr=0
         $offsetIter=0
         isMaskFull=false
-        @metaDataWarpIter(metaDataIterLoops, threadsPerBlock,threadsPerGrid, maxLinIndex  ,begin
+        @metaDataWarpIterOtherPass(metaDataIterLoops, threadsPerBlock,threadsPerGrid, maxLinIndex  ,begin
         isMaskOkForProcessing=false
             #first we will check is block full active or be activated and we will set 
-            @checkIsActiveOrFullOr()
+             @checkIsActiveOrFullOr() 
             #now we will load the diffrence between old and current counter
             # @unroll for i in 1:14
             #     @exOnWarp i begin
@@ -276,7 +282,7 @@ end
     
             #here we load data about wheather there is anything to be validated here - we save data so it can be read from the perspective of this block
             #and the blocks aroud that will want to analyze paddings
-            @setIsToBeValidated()
+            @setIsToBeValidated() 
     
             #now in some threads we have booleans needed for telling is mask active and in futher sixteen diffrences of counters that will tell us is there a res list that 
             #increased its  amount of value in last dilatation step if so and  this increase is in some border result list we need to  establish weather we do not have any repeating  results
@@ -289,14 +295,14 @@ end
 
 
             #we set information that block should be activated in gold  and segm
-            @setIsToBeActive()
+            if(isInRange)  @setIsToBeActive() end
 
         end    )
             sync_threads()
     
             clearMainShmem(sourceShmem)
     
-            clearSharedMemWarpLong(shmemSum, UInt8(14), Float32(0.0))
+            clearSharedMemWarpLong(shmemSum, UInt8(14), 0)
             $locArr=0
             $offsetIter=0
         end )
