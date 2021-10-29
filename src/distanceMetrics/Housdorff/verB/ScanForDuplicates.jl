@@ -95,24 +95,6 @@ function scanWhenDataInShmem(shmemSum,innerWarpNumb, scanIter,resListIndicies,me
 end #scanWhenDataInShmem
 
 
-
-
-
-    """
-    here we will mark in metadata weather there is anything to be verified - here in given que ie - weather it is possible in given queue to cover anything more in next dilatation step
-    so it is important for analysisof this particular block is  there is true - is there is non 0 amount of points to cover in any queue of the block
-    simultaneously the border queues should indicate for neighbouring blocks (given they exist ) is there is any point in analyzing the paddings ...
-    """
-    function setIsToBeValidated(innerWarpNumb,offsetIter,metaData,xMeta,yMeta,zMeta)
-      # @exOnWarp (innerWarpNumb +14) metaData[xMeta,yMeta+1,zMeta+1,getIsToBeNotAnalyzedNumb()+innerWarpNumb ] = (offsetIter==0) 
-    
-    end#setIsToBeValidated
-    
-
-
-
-
-
     """
     as we are operating under assumption that we do not know how many warps we have - we do not know the y dimension of thread block we need to load data into registers with a loop 
     and within the same loop scan it for duplicates
@@ -136,10 +118,8 @@ end #scanWhenDataInShmem
                         $locArr =  metaData[xMeta,yMeta+1,zMeta+1,((getOldCountersBeg()) +innerWarpNumb) ]
                         #diffrence new - old 
                         $offsetIter=  metaData[xMeta,yMeta+1,zMeta+1,((getNewCountersBeg()) +innerWarpNumb) ] - $locArr
-
-                        $localOffset = metaData[xMeta,yMeta+1,zMeta+1, getResOffsetsBeg()+innerWarpNumb]
-                        #### here we will mark in metadata weather there is anything to be verified - here in given que ie - weather it is possible in given queue to cover anything more in next dilatation step
-                        #setIsToBeValidated(innerWarpNumb,offsetIter,metaData,xMeta,yMeta,zMeta) 
+                        #offset to find where are the results associated with given queue
+                        $localOffset = metaData[xMeta,yMeta+1,zMeta+1, getResOffsetsBeg()+innerWarpNumb]+$locArr
                         # enable access to information is it bigger than 0 to all threads in block
                         resShmem[(threadIdxX())+(innerWarpNumb)*33] = $offsetIter >0
                     end #@exOnWarp
@@ -147,14 +127,65 @@ end #scanWhenDataInShmem
                 sync_threads()
                 #main function for scanning
                 scanForDuplicatesB($locArr, $offsetIter,innerWarpNumb,resShmem,shmemSum,resListIndicies,metaData,xMeta,yMeta,zMeta,metaDataDims,localOffset,maxResListIndex,outerWarpLoop) 
-            end#for  
+                # if(innerWarpNumb<15)
+                #     shmemSum[threadIdxX(),innerWarpNumb]=0
+                # end
+                sync_threads()
+                #at this point we have actual counters with correction for duplicated values  we can compare it with the  total values of fp or fn of a given queue  if we already covered
+                #all points of intrest there is no point to futher analyze this block or padding
+                
+                        setIsToBeValidated()
+
+            end#for            
         end)#quote
              
                     
         end #loadAndScanForDuplicates    
     
 
+"""
+   here we will mark in metadata weather there is anything to be verified - here in given que ie - weather it is possible in given queue to cover anything more in next dilatation step
+   so it is important for analysisof this particular block is  there is true - is there is non 0 amount of points to cover in any queue of the block
+   simultaneously the border queues should indicate for neighbouring blocks (given they exist ) is there is any point in analyzing the paddings ...
+      so we need this data in 3 places 
+      1) for the isNotToBeAnalyzed value in metadata of blocks around
+      2) for isNotTobeAnalyzed for a current block
+      3) also we should accumulate values pf counters - add and reduce across all blocks of tps and fps covered - so we will know when to finish the dilatation steps
+"""
+  macro setIsToBeValidated()
+return esc(quote
+    @exOnWarp (innerWarpNumb) begin
+        if(( innerWarpNumb)<15 && isInRange)
+            #value of a counter after correction
+           shmemSum[threadIdxX(),innerWarpNumb] = (shmemSum[33,innerWarpNumb]+shmemSum[34,innerWarpNumb])-shmemSum[36,innerWarpNumb] 
+           #it shoud NOT be analyzed if corrected counter value is the same as the total number for this queue
+           locResult = shmemSum[threadIdxX(),innerWarpNumb]==  metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+innerWarpNumb ]
+           #we need also to remember that data wheather there are any futher points of intrest is not only in the current block
+           # so here we establish what are the coordinates of metadata of intrest so for example  our left fp and left FN are of intrest to block to the left ...
+           newXmeta = xMeta+ (-1 * (innerWarpNumb==1 || innerWarpNumb==2)) + (innerWarpNumb==3 || innerWarpNumb==4)
+           newYmeta = yMeta+ (-1 * (innerWarpNumb==5 || innerWarpNumb==6)) + (innerWarpNumb==7 || innerWarpNumb==8)+1
+           newZmeta = zMeta+ (-1 * (innerWarpNumb==9 || innerWarpNumb==10)) + (innerWarpNumb==11 || innerWarpNumb==12)+1
+           if(newXmeta<=metaDataDims[1] && newYmeta<=metaDataDims[2]  && newZmeta<=metaDataDims[3] && innerWarpNumb<13 )
+            metaData[newXmeta,newYmeta,newZmeta,getIsToBeNotAnalyzedNumb()+innerWarpNumb ] =  loceRsult 
+           end 
+           #now we will use the fact that all odd numbered queues are fp related and all even FN related 
+           #so at 6*33+ idX we have fn related and at 7*33 +idX fp related
+           if(locResult)
+                sourceShmem[(threadIdxX()+1)+33*(6+isodd(innerWarpNumb) )]= true
+           end
+           #after later we will sync threads we will save this data to blocks associated with given idX
+        end    
+    end
+    sync_threads()
+    # we will set here is the block has anything to be analyzed
+    @exOnWarp 1 metaData[xMeta,yMeta+1,zMeta+1,getIsToBeNotAnalyzedNumb()+15 ]=sourceShmem[(threadIdxX()+1)+33*7]
+    @exOnWarp 2 metaData[xMeta,yMeta+1,zMeta+1,getIsToBeNotAnalyzedNumb()+16 ]=sourceShmem[(threadIdxX()+1)+33*6]
+    #now we have all updated counters available in shared memory now we will reduce fp and fn related queues for all 32 blocks analyzed
+    # first in shmem reduction - so for each of 14 rows of metadata we will reduce the 32 values and then the first value will hold the sum
 
+           #here we set the information weather any of the queue related to fp or fn in a particular block  has still something to be analyzed 
+end)#quote
+end#setIsToBeValidated
 
 
 end#module

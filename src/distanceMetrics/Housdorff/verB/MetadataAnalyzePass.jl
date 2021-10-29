@@ -266,32 +266,32 @@ end
         isMaskOkForProcessing=false
             #first we will check is block full active or be activated and we will set later on this basis what blocks should be put to work queue
              @checkIsActiveOrFullOr() 
-
-            #here we load data about wheather there is anything to be validated here - we save data so it can be read from the perspective of this block
-            #and the blocks aroud that will want to analyze paddings
-            @setIsToBeValidated() 
-    
-            #now in some threads we have booleans needed for telling is mask active and in futher sixteen diffrences of counters that will tell us is there a res list that 
-            #increased its  amount of value in last dilatation step if so and  this increase is in some border result list we need to  establish weather we do not have any repeating  results
-           
-            
+          
             #now we need to go through  those numbers and in case some of the border queues were incremented we need to analyze those added entries to establish is there 
             # any duplicate in case there will be we need to decrement counter and set the corresponding duplicated entry to 0 
             @loadAndScanForDuplicates(iterThrougWarNumb,locArr,offsetIter)
-            
-
+            #here we load data about wheather there is anything to be validated here - we save data so it can be read from the perspective of this block
+            #and the blocks aroud that will want to analyze paddings
+            @setIsToBeValidated() 
 
             #we set information that block should be activated in gold  and segm
-            if(isInRange)  @setIsToBeActive() end
+             @setIsToBeActive() 
 
         end    )
             sync_threads()
-    
-            clearMainShmem(sourceShmem)
-    
-            clearSharedMemWarpLong(shmemSum, UInt8(14), 0)
+            #clear used shmem - we used linear indicies so we can clear only those used
+            for i in 0:15
+                @exOnWarp i resShmem[(threadIdxX())+(i)*33]= false
+             end
+             for i in 0:8#was 6
+                @exOnWarp (i+15) sourceShmem[(threadIdxX())+(i)*33]= false
+             end   
+             for i in 1:14
+                @exOnWarp (i+23) shmemSum[threadIdxX(),i]= 0
+             end   
             $locArr=0
             $offsetIter=0
+
         end )
     end
 

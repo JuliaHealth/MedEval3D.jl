@@ -73,6 +73,11 @@ macro mainLoopKernelAllocations()
  locArr= Int32(0)
  offsetIter = UInt16(0)
 
+# #used in  meta data analyze pass in order to mark later is there anything for validation still in a whole image - later it would be passed into global memory as information from all blocks ...
+# sthToBeValidatedLocalFp = @cuStaticSharedMem(Bool,1)
+# sthToBeValidatedLocalFn = @cuStaticSharedMem(Bool,1)
+
+
  #we will store here the data about the blocks that we want to process 
  toIterWorkQueueShmem =  @cuStaticSharedMem(UInt8,32,4)
  #indicates where we are in general work queue in given moment if we are iterating over part of work queue owned by this thread block
