@@ -69,12 +69,15 @@ macro redOnlyStepOne(offsetIter,shmem, varActTuples...)
   end#reduceWitAction
 
 
+
+
+
   """
   modification of redWitAct - where we reduce only across shared memory
    """
   macro redOnlyStepThree(offsetIter,shmem, actions...)
   
-    thirdPart =   reduceWitActThirdPartOnly(offsetIter,shmem, actions)
+    thirdPart =   reduceWitActThirdPartOnly(shmem, actions)
 
       return esc(:(
         $offsetIter=1;
@@ -83,8 +86,15 @@ macro redOnlyStepOne(offsetIter,shmem, varActTuples...)
     
     end#reduceWitAction
 
-
-
+  #   """
+  #   reduction of given row of shared memory
+  #   """
+  # macro  reduceOnlyStepTwo(offsetIter,shmem,i, exp)
+  #   return esc(:(
+  #     $offsetIter=1;
+  #     @inbounds $shmem[threadIdxY(),$index]= $el1
+  #               ))
+  # end#reduceOnlyStepTwo
 """
 First stage of reductions where local variables are added from registers to registers
 """
@@ -147,11 +157,12 @@ end
 """
 modification where we pass only actions - as we know from indicies what need to be done
 """
-function reduceWitActThirdPartOnly(offsetIter,shmem, actions)
+function reduceWitActThirdPartOnly(shmem, actions)
   tmp = []
   for index in 1:length(actions)
       op = actions[index]
       push!(tmp, quote
+      locOffset= UInt8(1)
       if(threadIdxY()==$index)
         while(offsetIter <32) 
           @inbounds $shmem[threadIdxX(),$index]=$op($shmem[threadIdxX(),$index],  shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),$index], $offsetIter))  

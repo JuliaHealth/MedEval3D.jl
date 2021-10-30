@@ -256,8 +256,9 @@ end
         we will check rescounters of border res ques and compare with old ones - if any will be grater than old we will scan for any repeating results 
             - it could be the case that neighbouring blocks concurently added the same results - in this case we need to set one of those to 0 and reduce the counter    
         we will do all by using single warp per metadata block     
+        globalCurrentFpCount, globalCurrentFnCount - representing current number of already covere fp and fns
     """
-    macro setMEtaDataOtherPasses(locArr,offsetIter,iterThrougWarNumb)
+    macro setMEtaDataOtherPasses(locArr,offsetIter,iterThrougWarNumb, globalCurrentFpCount, globalCurrentFnCount)
         return esc(quote
         $locArr=0
         $offsetIter=0

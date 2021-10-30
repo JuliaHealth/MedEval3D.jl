@@ -13,7 +13,7 @@ datBdim = (43,21,17)
 metaData =view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:3,1:3,1:3,:);
 #metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:9,2:3,4:6,: );
 metaDataDims=size(metaData)
-iterThrougWarNumb = cld(12,threads[2])
+iterThrougWarNumb = cld(14,threads[2])
 resShmem = CuArray(falses(datBdim[1]+2, datBdim[2]+2, datBdim[3]+2 ))
 totalFp,totalFn = 100000,100000
 resList,resListIndicies= allocateResultLists(totalFp,totalFn)
@@ -87,11 +87,14 @@ for quueueNumb in 1:14
 end#for quueueNumb
 maxResListIndex= length(resListIndicies)
 
-function loadAndSanForDuplKernel(maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,datBdim)
+globalCurrentFnCount,globalCurrentFpCount= CUDA.zeros(UInt32,1),CUDA.zeros(UInt32,1)
+
+function loadAndSanForDuplKernel(globalCurrentFnCount,globalCurrentFpCount,maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,datBdim)
    locArr= UInt32(0)
    offsetIter= UInt16(0)
    shmemSum =  @cuStaticSharedMem(UInt32,(36,16)) # we need this additional spots
    resShmem =  @cuDynamicSharedMem(Bool,(datBdim[1]+2,datBdim[2]+2,datBdim[3]+2)) # we need this additional 33th an 34th spots
+   sourceShmem =  @cuDynamicSharedMem(Bool,(datBdim[1],datBdim[2],datBdim[3]))
    localOffset= UInt32(0)
 
    MetadataAnalyzePass.@metaDataWarpIter( metaDataDims,loopXMeta,loopYZMeta,
@@ -107,7 +110,7 @@ function loadAndSanForDuplKernel(maxResListIndex,resListIndicies,metaData,iterTh
    return
 end
 
-@cuda threads=threads blocks=blocks loadAndSanForDuplKernel(maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,datBdim)
+@cuda threads=threads blocks=blocks loadAndSanForDuplKernel(globalCurrentFnCount,globalCurrentFpCount,maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,datBdim)
 @test Int64(metaData[3,3,3,getNewCountersBeg()+1]) ==5
 
 Int64(metaData[3,3,3,getResOffsetsBeg()+1])
@@ -133,6 +136,22 @@ offset = -49
    tempList= Array(resListIndicies)[offset:offset+350];
    @test length(filter(el->el>0,tempList))==quueueNumb*5+1#+1 becouse of 0's entry
    
+  ############### testing is to be analyzed
+  #main block
+  @test metaData[1,1,1,getIsToBeNotAnalyzedNumb()+15 ]==1
+  @test metaData[1,1,1,getIsToBeNotAnalyzedNumb()+16 ]==1
+  #right
+  @test metaData[2,1,1,getIsToBeNotAnalyzedNumb()+3 ]==1
+  @test metaData[2,1,1,getIsToBeNotAnalyzedNumb()+4 ]==1
+  #bottom
+  @test metaData[2,1,1,getIsToBeNotAnalyzedNumb()+11 ]==1
+  @test metaData[2,1,1,getIsToBeNotAnalyzedNumb()+12 ]==1
+  #anterior
+  @test metaData[2,1,1,getIsToBeNotAnalyzedNumb()+7 ]==1
+  @test metaData[2,1,1,getIsToBeNotAnalyzedNumb()+8 ]==1
+
+#mixed entries ...
+
 
 
 #    zzzzzzzzzzz    shmemSum[36,innerWarpNumb]  4  innerWarpNumb 1    idX 1  idY 1  xMeta 1 yMeta 0 zMeta 0 
