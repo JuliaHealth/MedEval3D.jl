@@ -127,7 +127,6 @@ end #scanWhenDataInShmem
 
 
 
-
     """
     as we are operating under assumption that we do not know how many warps we have - we do not know the y dimension of thread block we need to load data into registers with a loop 
     and within the same loop scan it for duplicates

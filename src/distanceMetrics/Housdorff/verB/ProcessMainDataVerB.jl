@@ -42,7 +42,7 @@ macro establishIsFull()
     @redWitAct(offsetIter,shmemSum,  isMaskFull,& )
     sync_threads()
     #now if it evaluated to 1 we should save it to metadata 
-    @ifXY 2 2 setBlockAsFull(metaData,linIndex, isGoldPass)
+    @ifXY 1 1 setBlockAsFull(metaData,linIndex, isGoldPass)
 end)
 end#establishIsFull
 
@@ -190,20 +190,20 @@ function getDir(sourceShmem)
 end#getDir
 
 
-macro executeDataIterWithPadding()
+macro executeDataIterWithPadding(isGoldPass,isToBeAnalyzedMain)
     return esc(quote
   #some data cleaning
-  locArr::UInt32 = UInt32(0)
-  # locFloat::Float32 = Float32(0.0)
-  isMaskFull::Bool= true
-  isMaskOkForProcessing::Bool = true
-  offset = 1
+#   locArr::UInt32 = UInt32(0)
+#   # locFloat::Float32 = Float32(0.0)
+#   isMaskFull::Bool= true
+#   isMaskOkForProcessing::Bool = true
+#   offset = 1
   ############## upload data
   @loadMainValues()                                       
   sync_threads()
   ########## check data aprat from padding
   #can be skipped if we have the block with already all results analyzed 
-  if(getIsTotalFPorFNnotYetCovered(resshmem )   )
+  if($isToBeAnalyzedMain[1])
       @validateData() 
   end                  
   #processing padding

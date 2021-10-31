@@ -1,4 +1,8 @@
-
+module MainLoopKernel
+using CUDA, Logging,Main.CUDAGpuUtils, Main.ResultListUtils,Main.WorkQueueUtils,Main.ScanForDuplicates, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils
+using Main.MetadataAnalyzePass, Main.ScanForDuplicates
+export @mainLoop,@mainLoopKernelAllocations,@innersingleDataBlockPass,@privateWorkQueueAnalysis, @analyzeTail,@prepareForNextDilation
+export mainLoopKernel
 """
 main kernel managing 
 """
@@ -25,6 +29,7 @@ end
 main loop logic
 """
 macro mainLoop()
+    return esc(quote
     loadOwnedWorkQueueIntoShmem(mainWorkQueue,mainQuesCounter,toIterWorkQueueShmem,positionInMainWorkQueaue ,numberOfThreadBlocks,tailParts)
     #at this point if we have anything in the private part of the  work queue we will have it in toIterWorkQueueShmem, in case  we will find some 0 inside it means that queue is exhousted and we need to loo into tail
     #we are analyzing here data  from private part of work queue
@@ -48,7 +53,7 @@ macro mainLoop()
     sync_grid(grid_handle)
         @prepareForNextDilation()
     sync_grid(grid_handle)
-
+end) #quote
 end#mainLoop
 
 
@@ -56,7 +61,8 @@ end#mainLoop
 allocates memory in the kernel some register and shared memory  (no allocations in global memory here from kernel)
 """
 macro mainLoopKernelAllocations()
- #needed to manage cooperative groups functions
+    return esc(quote
+    #needed to manage cooperative groups functions
  grid_handle = this_grid()
  #storing intermidiate results +2 in order to get the one padding 
  resShmem =  @cuStaticSharedMem(Bool,(34,34,34))
@@ -101,6 +107,7 @@ alreadyCoveredInQueues =@cuStaticSharedMem(UInt32,(14))
  workCounterBiggerThan0 =  @cuStaticSharedMem(Bool,1) 
  @IfYX 1 1 iterationNumberShmem[1]= 0
  sync_threads()
+end)#quote
 end    
 
 """
@@ -108,6 +115,8 @@ stores the most important part of the kernel where we analyze supplied data bloc
 do the dilatation and add to the result queue
 """
 macro  innersingleDataBlockPass()
+   return esc(quote
+
             #in order to be able to skip some of the validations we will load now informations about this block and neighbouring blocks 
            #like for example are there any futher results to be written in this block including border queues
            #and is there sth in border queues of the neighbouring data blocks
@@ -116,34 +125,21 @@ macro  innersingleDataBlockPass()
            sync_threads()
            ############### execution
            @executeDataIterWithPadding() 
-
+end) #quote
 end
 
 """
 clearing source shared memory
 """
 function clearSourceShmem(sourceShmem)
-    krowa
 end#clearSourceShmem
 
 """
 clears shmem sum taht is used for reductions
 """
 function clearShmemSum(shmemSum)
-    krowa
+    
 end
-"""
-in order to be able to skip some of the validations we will load now informations about this block and neighbouring blocks 
-like for example are there any futher results to be written in this block including border queues
-and is there sth in border queues of the neighbouring data blocks
-problem is in case of the corners  as becouse of corners it may be included in diffrent resuld queues
-
-"""
-macro fillPreValidationsCheck()
-    #we keep function in metadata utils
-    getIstoBeAnalyzed(resShmem,metaData,linIndex,isGold)
-
-end#fillPreValidationsCheck
 
 
 
@@ -151,6 +147,8 @@ end#fillPreValidationsCheck
 analyzing private part of work queue
 """
 macro privateWorkQueueAnalysis()
+    return esc(quote
+ 
     loadOwnedWorkQueueIntoShmem(mainWorkQueue,mainQuesCounter,toIterWorkQueueShmem,positionInMainWorkQueaue ,numberOfThreadBlocks,tailParts)
     #at this point if we have anything in the private part of the  work queue we will have it in toIterWorkQueueShmem, in case  we will find some 0 inside it means that queue is exhousted and we need to loo into tail
     @unroll for i in UInt16(1):32# most outer loop is responsible for z dimension
@@ -165,6 +163,7 @@ macro privateWorkQueueAnalysis()
             sync_threads()
         end#if    
     end#for    
+end)#quote
 end    
 
 
@@ -172,6 +171,8 @@ end
 analyzing tail part of work queue
 """
 macro analyzeTail()
+    return esc(quote
+
     #below we access tail of working queue in a way that will be atomic
     @ifXY 1 1 toIterWorkQueueShmem[1]= mainWorkQueueArr[isOddPassShmem[]+1,currentTailPosition[1]]
     sync_threads()
@@ -181,6 +182,7 @@ macro analyzeTail()
     end
     loadDataNeededForTailAnalysisToShmem(currentTailPosition,tailCounter )
     sync_threads()
+end) #quote
 end
 
 
@@ -190,6 +192,7 @@ end
 after dilatation prepare
 """
 macro prepareForNextDilation()
+    return esc(quote
     #we update metadata and prepare work queue
     setMEtaDataOtherPasses()
     #we clear  and add negation to !isOddPassShmem becouse we want to set the previously updated counter to 0 
@@ -199,7 +202,7 @@ macro prepareForNextDilation()
         @IfYX 8 8 tailCounter[1]=cld(mainQuesCounterArr[isOddPassShmem[1]+1],(numberOfThreadBlocks+tailParts))*numberOfThreadBlocks +1
     end#if
     loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,iterationNumber,positionInMainWorkQueaue,workCounterInshmem,mainQuesCounterArr,isAnyBiggerThanZero,goldToBeDilatated,segmToBeDilatated, resArraysCounters)
-    
+end)#quote
 end    #prepareForNextDilation
 
 
@@ -219,6 +222,7 @@ function clearBeforeNextDilatation(locArr,resShmem,oldBlockCounter)
     clearPadding(resShmem)
     clearSourceShmem(sourceShmem)
     clearSharedMemWarpLong(shmemSum, UInt8(14), Float32(0.0))
+    # !!!!!! clear alreadyCoveredInQueues
 end#clearBeforeNextDilatation
 
 """
@@ -239,3 +243,6 @@ function loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,it
     @IfXY 5 5 segmToBeDilatated[1]=(resArraysCounters[1] < fn[1])
 
 end
+
+
+end#MainLoopKernel
