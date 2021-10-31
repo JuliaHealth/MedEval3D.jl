@@ -17,10 +17,7 @@ macro scanForDuplicatesB(oldCount, countDiff,localOffset)#innerWarpNumb,resShmem
         @exOnWarp innerWarpNumb begin
            #we loaded data into threades registers so now we need to iteratively go through this and add this register info to shared memory to be available to all threads 
            @unroll for threadNumber in 1:32 # we need to analyze all thread id x 
-                if( resShmem[(threadIdxX())+(innerWarpNumb)*33]) # futher actions necessary only if counter diffrence is bigger than 0 
                     if( threadIdxX()==threadNumber ) #now we need some  values that are in the registers  of the associated thread 
-                        #those will be needed to know what we need to iterate over 
-                        #basically we will start scanning from queaue offset + old count untill queue offset + new count
                         shmemSum[33,innerWarpNumb]=  $oldCount 
                         shmemSum[34,innerWarpNumb]=  $countDiff
                         # #queue result offset
@@ -28,7 +25,6 @@ macro scanForDuplicatesB(oldCount, countDiff,localOffset)#innerWarpNumb,resShmem
                         #will be used in order to keep track of proper new size of counter - will stay 0 if we have no duplicates
                         shmemSum[36,innerWarpNumb]= 0
                     end# if ( threadIdxX()==warpNumb )
-                end# if resShmem[(threadIdxX())+(innerWarpNumb)*33]
                 sync_warp()# now we should have the required number for scanning of new values for duplicates important that we are analyzing now given queue with just single warp                  
                     scanForDuplicatesMainPart(shmemSum,innerWarpNumb,resListIndicies,metaData,xMeta,yMeta,zMeta,resShmem,metaDataDims,threadNumber,maxResListIndex,outerWarpLoop,alreadyCoveredInQueues,sourceShmem,isInRange)
                 sync_warp()
@@ -67,6 +63,7 @@ function  scanForDuplicatesMainPart(shmemSum,innerWarpNumb,resListIndicies,metaD
                 #added in this step 
                 if((shmemSum[34,innerWarpNumb]-shmemSum[36,innerWarpNumb]) >0)
                     alreadyCoveredInQueues[innerWarpNumb]+=(shmemSum[34,innerWarpNumb]-shmemSum[36,innerWarpNumb])
+ 
                 end    
                 #we set the counter to new value only if there were some subtractions done - some values were duplicated
                 if((shmemSum[36,innerWarpNumb]>0 ) && isInRange )
@@ -86,9 +83,7 @@ function  scanForDuplicatesMainPart(shmemSum,innerWarpNumb,resListIndicies,metaD
                     # here we are marking information is there any fp or fn in this block needed covering
                     #now we will use the fact that all odd numbered queues are fp related and all even FN related 
                     #so at 6*33+ idX we have fn related and at 7*33 +idX fp related
-                    
-
- 
+                     
                  end    
             end   
              sync_warp()
@@ -169,7 +164,11 @@ end #scanWhenDataInShmem
                         end#if in range
                     end #@exOnWarp
                 end#if
-                
+                # if(innerWarpNumb==7)
+                #     if($offsetIter>0)
+                #     CUDA.@cuprint "aaaa diff no correction $($offsetIter) innerWarpNumb $(innerWarpNumb) idX $(threadIdxX()) xMeta $(xMeta) yMeta $(yMeta) zMeta $(zMeta) \n"
+                #     end
+                # end   
 
                 sync_threads()
                 # so queaue 13 or 14
@@ -187,9 +186,6 @@ end #scanWhenDataInShmem
                             #TODO (try to do warp reduction below instead of atomic... )
                             if(($offsetIter)>0)
                                 @atomic alreadyCoveredInQueues[innerWarpNumb]+=($offsetIter)
-                                # if(innerWarpNumb==2)
-                                #     CUDA.@cuprint "adding to $(innerWarpNumb) diff  $($offsetIter) "
-                                # end
                             end                       
                             #@redOnlyStepOne(locOffset, shmemSum, $locArr, +)
                             #now we have warp reduced value on first thread

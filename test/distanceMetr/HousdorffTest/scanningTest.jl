@@ -21,8 +21,7 @@ resList,resListIndicies= allocateResultLists(totalFp,totalFn)
 
 loopXMeta= fld(metaDataDims[1],threads[1])
 loopYZMeta= fld(metaDataDims[2]*metaDataDims[3],blocks )
-numbOfFp = 0
-numbOfFn = 0
+
 #we set some offsets to make it simple for evaluation we will keeep it  each separated by 50 
 offset = -49
 for metaX in 1:3, metaY in 1:3, metaZ in 1:3
@@ -41,17 +40,14 @@ offset = -49
    for quueueNumb in 1:14
          offset+=350
          #... so it should be validated as fit to be validated
-           metaData[2,2,2,getBeginingOfFpFNcounts()+quueueNumb]+=4 # so all will remain active
-           metaData[2,2,2,getNewCountersBeg()+quueueNumb]+=1 
+           metaData[2,2,2,getBeginingOfFpFNcounts()+quueueNumb]+=8 # so all will remain active
+           metaData[2,2,2,getNewCountersBeg()+quueueNumb]+=6 
+           metaData[2,2,2,getOldCountersBeg()+quueueNumb]+=5 
          # so it should not be validated
          metaData[3,3,3,getBeginingOfFpFNcounts()+quueueNumb]+=1 # so all will be inactive
          metaData[3,3,3,getNewCountersBeg()+quueueNumb]+=1  
 
-         if(isodd(quueueNumb)) 
-            numbOfFp+=5
-           else
-            numbOfFn+=5
-           end
+           
 end#for   
 
 
@@ -66,17 +62,12 @@ offset = -49
             # end  
         #the bigger the number the more repetitions and more non repeated elements 
            resList[offset+(j+1),:]= [mod(j,quueueNumb*5)+1,mod(j,quueueNumb*5)+2,mod(j,quueueNumb*5)+3,1,1,1]
-           if(isodd(quueueNumb)) 
-            numbOfFp+=1
-           else
-            numbOfFn+=1
-           end 
+
            metaData[1,1,1,getNewCountersBeg()+quueueNumb]+=1 
            metaData[1,1,1,getBeginingOfFpFNcounts()+quueueNumb]+=2 # so all will remain active
    end#for
 end#for   
-# numbOfFp = 0
-# numbOfFn = 0
+
 
 #should be first queue in block 3,3,3
 resList[127701+1,:] = [1,1,1,1,1,1]
@@ -87,7 +78,6 @@ resList[127701+5,:] = [1,1,2,1,1,1]
 resList[127701+6,:] = [2,1,1,1,1,1]
 
 metaData[3,3,3,getNewCountersBeg()+1]+=6 
-numbOfFp+=5
 ####### check is test written well (testing the test)
 @test Int64(metaData[3,3,3,getNewCountersBeg()+1]) ==7
 
@@ -138,7 +128,7 @@ function loadAndSanForDuplKernel(globalCurrentFnCount,globalCurrentFpCount,maxRe
       sourceShmem[(threadIdxX())+(i)*33]= false
    end
    for i in 1:14
-      shmemSum[(threadIdxX()),i]= false
+      shmemSum[(threadIdxX()),i]= 0
    end
 
    MetadataAnalyzePass.@metaDataWarpIter( metaDataDims,loopXMeta,loopYZMeta,
@@ -155,8 +145,16 @@ for i in 1:30
     sourceShmem[(threadIdxX())+(i)*33]= false
  end
  for i in 1:14
-    shmemSum[(threadIdxX()),i]= false
+    shmemSum[(threadIdxX()),i]= 0
+    shmemSum[33,i]= 0
+    shmemSum[34,i]= 0
+    shmemSum[35,i]= 0
+    shmemSum[36,i]= 0
  end
+# for i in 1:14
+#   @ifX i alreadyCoveredInQueues[i]=0
+# end
+
  sync_threads()
        end)
 
@@ -173,47 +171,54 @@ for i in 1:30
             summA+=alreadyCoveredInQueues[i]
             suumB+=i*10
          end  
-         CUDA.@cuprint " alreadyCoveredInQueues[1] $(alreadyCoveredInQueues[1])   should be $(1*5)\n "
-         CUDA.@cuprint " alreadyCoveredInQueues[2] $(alreadyCoveredInQueues[2]) should be $(2*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[3] $(alreadyCoveredInQueues[3]) should be $(3*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[4] $(alreadyCoveredInQueues[4]) should be $(4*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[5] $(alreadyCoveredInQueues[5]) should be $(5*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[6] $(alreadyCoveredInQueues[6]) should be $(6*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[7] $(alreadyCoveredInQueues[7]) should be $(7*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[8] $(alreadyCoveredInQueues[8]) should be $(8*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[9] $(alreadyCoveredInQueues[9]) should be $(9*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[10] $(alreadyCoveredInQueues[10]) should be $(10*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[11] $(alreadyCoveredInQueues[11]) should be $(11*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[12] $(alreadyCoveredInQueues[12]) should be $(12*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[13] $(alreadyCoveredInQueues[13]) should be $(13*10) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[14] $(alreadyCoveredInQueues[14]) should be $(14*10) \n "
-         CUDA.@cuprint "summA  $(summA) should be  $(suumB) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[1] $(alreadyCoveredInQueues[1])   should be $(1*5)\n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[2] $(alreadyCoveredInQueues[2]) should be $(2*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[3] $(alreadyCoveredInQueues[3]) should be $(3*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[4] $(alreadyCoveredInQueues[4]) should be $(4*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[5] $(alreadyCoveredInQueues[5]) should be $(5*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[6] $(alreadyCoveredInQueues[6]) should be $(6*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[7] $(alreadyCoveredInQueues[7]) should be $(7*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[8] $(alreadyCoveredInQueues[8]) should be $(8*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[9] $(alreadyCoveredInQueues[9]) should be $(9*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[10] $(alreadyCoveredInQueues[10]) should be $(10*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[11] $(alreadyCoveredInQueues[11]) should be $(11*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[12] $(alreadyCoveredInQueues[12]) should be $(12*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[13] $(alreadyCoveredInQueues[13]) should be $(13*10) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[14] $(alreadyCoveredInQueues[14]) should be $(14*10) \n "
+         # CUDA.@cuprint "summA  $(summA) should be  $(suumB) \n "
    
       end 
          #   CUDA.@cuprint """  valuee fp $(alreadyCoveredInQueues[1]+ alreadyCoveredInQueues[3]+ alreadyCoveredInQueues[5]+ alreadyCoveredInQueues[7]+ alreadyCoveredInQueues[9]+ alreadyCoveredInQueues[11]+ alreadyCoveredInQueues[13]) 
-            #   alreadyCoveredInQueues[1] $(alreadyCoveredInQueues[1]) alreadyCoveredInQueues[3] $(alreadyCoveredInQueues[3]) alreadyCoveredInQueues[5] $(alreadyCoveredInQueues[5]) alreadyCoveredInQueues[7] $(alreadyCoveredInQueues[7]) alreadyCoveredInQueues[9] $(alreadyCoveredInQueues[9]) alreadyCoveredInQueues[11] $(alreadyCoveredInQueues[11]) alreadyCoveredInQueues[13] $(alreadyCoveredInQueues[13]) 
+         #      alreadyCoveredInQueues[1] $(alreadyCoveredInQueues[1]) alreadyCoveredInQueues[3] $(alreadyCoveredInQueues[3]) alreadyCoveredInQueues[5] $(alreadyCoveredInQueues[5]) alreadyCoveredInQueues[7] $(alreadyCoveredInQueues[7]) alreadyCoveredInQueues[9] $(alreadyCoveredInQueues[9]) alreadyCoveredInQueues[11] $(alreadyCoveredInQueues[11]) alreadyCoveredInQueues[13] $(alreadyCoveredInQueues[13]) 
               
-            #   """
+         #      """
           atomicAdd(globalCurrentFpCount, alreadyCoveredInQueues[1]+ alreadyCoveredInQueues[3]+ alreadyCoveredInQueues[5]+ alreadyCoveredInQueues[7]+ alreadyCoveredInQueues[9]+ alreadyCoveredInQueues[11]+ alreadyCoveredInQueues[13]) 
        end
           @ifXY 2 1 atomicAdd(globalCurrentFnCount, alreadyCoveredInQueues[2]+ alreadyCoveredInQueues[4]+ alreadyCoveredInQueues[6]+ alreadyCoveredInQueues[8]+ alreadyCoveredInQueues[10]+ alreadyCoveredInQueues[12]+ alreadyCoveredInQueues[14]) 
        
        sync_threads()
-       
-
-
-
    return
 end
 
+numbOfFp = 0
+numbOfFn = 0
+
+for i in [1,3,5,7,9,11]
+   numbOfFp+=i*5
+end   
+numbOfFp+=13*10
+for i in [2,4,6,8,10,12]
+   numbOfFn+=i*5
+end   
+numbOfFn+=14*10
+numbOfFp+=7*2
+numbOfFn+=7*2
+
+numbOfFp+=5
+
 @cuda threads=threads blocks=blocks loadAndSanForDuplKernel(globalCurrentFnCount,globalCurrentFpCount,maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,datBdim)
-@test Int64(metaData[3,3,3,getNewCountersBeg()+1]) ==6
 
-
-@test Int64(globalCurrentFnCount[1]) ==numbOfFn
-@test Int64(globalCurrentFpCount[1]) ==numbOfFp
-
-Int64(globalCurrentFnCount[1]+globalCurrentFpCount[1])
+Int64(globalCurrentFnCount[1]+globalCurrentFpCount[1])== 660+5
 offset = -49
    # for quueueNumb in 1:14
    for quueueNumb in 1:12
@@ -223,14 +228,19 @@ offset = -49
          tempList= Array(resListIndicies[offset:offset+350])
          @test length(filter(el->el>0,tempList))==quueueNumb*5#+1 becouse of 0's entry
   end#for
-
+@testset "scanning and checking is to be validated" begin
     quueueNumb =12
    offset = -49
    offset+=350*(quueueNumb)
    @test Int64(metaData[1,1,1,getNewCountersBeg()+quueueNumb])==quueueNumb*5#j instead of quueueNumb*quueueNumb
    tempList= Array(resListIndicies)[offset:offset+350];
    @test length(filter(el->el>0,tempList))==quueueNumb*5#+1 becouse of 0's entry
-   
+   @test Int64(metaData[3,3,3,getNewCountersBeg()+1]) ==6
+
+
+@test Int64(globalCurrentFnCount[1]) ==numbOfFn
+@test Int64(globalCurrentFpCount[1]) ==numbOfFp
+
 
 
    quueueNumb =2
@@ -302,12 +312,7 @@ offset = -49
   @test metaData[metaX,metaY,metaZ+1,getIsToBeAnalyzedNumb()+11 ]==0
   @test metaData[metaX,metaY,metaZ+1,getIsToBeAnalyzedNumb()+12 ]==0
 
-  Int64(resListIndicies[662])
-  Int64(resListIndicies[307])
-  Int64(resListIndicies[1372])
-  Int64(resListIndicies[1727])
-  Int64(resListIndicies[2437])
-
+end
 
 
   
