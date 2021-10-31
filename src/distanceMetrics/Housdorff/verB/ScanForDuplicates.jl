@@ -1,6 +1,6 @@
 module ScanForDuplicates
 using CUDA, Logging,Main.CUDAGpuUtils,Main.WorkQueueUtils,Main.ScanForDuplicates, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils
-export @loadAndScanForDuplicates,@setIsToBeValidated, @scanForDuplicatesB,scanForDuplicatesMainPart,scanWhenDataInShmem,manageDuplicatedValue
+export @getIsToVal,@loadAndScanForDuplicates,@setIsToBeValidated, @scanForDuplicatesB,scanForDuplicatesMainPart,scanWhenDataInShmem,manageDuplicatedValue
 
 
 
@@ -74,15 +74,20 @@ function  scanForDuplicatesMainPart(shmemSum,innerWarpNumb,resListIndicies,metaD
                 end
                 #it shoud NOT be analyzed if corrected counter value is the same as the total number for this queue
                 # but we need to analyze this only if there was any new value added relatively to last pass
-                if( (shmemSum[34,innerWarpNumb]>0))
+                if( (shmemSum[34,innerWarpNumb]-shmemSum[36,innerWarpNumb])  >0)
                     if(isInRange && updated!= metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+innerWarpNumb ])
                         #so in res shmem we have information weather we should  validate this queue ...
                         resShmem[(threadIdxX())+(innerWarpNumb+15)*33]= true
+                    #     sourceShmem[(threadIdxX())+(33*(6+(isodd(innerWarpNumb)*2)) )]= true
+                    # if(threadIdxX()==3 && yMeta==2 && zMeta==2)
+                    #     CUDA.@cuprint "set true in  $((threadIdxX())+33*(6+(isodd(innerWarpNumb) *2) )) innerWarpNumb $(innerWarpNumb)  diff $((shmemSum[34,innerWarpNumb]-shmemSum[36,innerWarpNumb])) idX $(threadIdxX())  \n"
+                    # end    
                     end
                     # here we are marking information is there any fp or fn in this block needed covering
                     #now we will use the fact that all odd numbered queues are fp related and all even FN related 
                     #so at 6*33+ idX we have fn related and at 7*33 +idX fp related
-                    sourceShmem[(threadIdxX())+33*(6+isodd(innerWarpNumb) )]= true
+                    
+
  
                  end    
             end   
@@ -162,15 +167,19 @@ end #scanWhenDataInShmem
                             $offsetIter=0
                             $localOffset=0
                         end#if in range
-                      
                     end #@exOnWarp
                 end#if
+                
+
                 sync_threads()
                 # so queaue 13 or 14
                     @exOnWarp innerWarpNumb begin
                         if(innerWarpNumb==13 || innerWarpNumb==14)# so queaue 13 or 14
                             if($offsetIter>0) 
-                                sourceShmem[(threadIdxX())+33*(6+isodd(innerWarpNumb) )]= true
+                                if($offsetIter!= metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+innerWarpNumb ])
+                                    resShmem[(threadIdxX())+(innerWarpNumb+15)*33]= true
+                                    #sourceShmem[(threadIdxX())+33*(6+(isodd(innerWarpNumb) *2) )]= true
+                                end
                             end
                             locOffset= UInt16(1)
                             #setting what we need to locArr and reducing value in a warp
@@ -187,13 +196,15 @@ end #scanWhenDataInShmem
                             # @ifX 1 alreadyCoveredInQueues[innerWarpNumb]+=$locArr
                         end#if    
                     end#ex on warp    
-
+                    sync_threads()
 
                 #main function for scanning
                @scanForDuplicatesB($locArr, $offsetIter,$localOffset)#$locArr, $offsetIter,innerWarpNumb,resShmem,shmemSum,resListIndicies,metaData,xMeta,yMeta,zMeta,metaDataDims,$localOffset,maxResListIndex,outerWarpLoop,alreadyCoveredInQueues,sourceShmem)
                 if(innerWarpNumb<15)
                     shmemSum[threadIdxX(),innerWarpNumb]=0
                 end
+
+
             end#for
             sync_threads()
 
@@ -210,11 +221,13 @@ end #scanWhenDataInShmem
                 end         
             end#for    
             @exOnWarp 15 if(isInRange) 
-                metaData[xMeta,yMeta+1,zMeta+1,getIsToBeAnalyzedNumb()+15]=sourceShmem[(threadIdxX())+33*7]
-
+               metaData[xMeta,yMeta+1,zMeta+1,getIsToBeAnalyzedNumb()+15]= (@getIsToVal(1) || @getIsToVal(3)|| @getIsToVal(5)|| @getIsToVal(7)|| @getIsToVal(11)|| @getIsToVal(13)) #sourceShmem[(threadIdxX())+33*8]
+               #resShmem[(threadIdxX())+(1+15)*33] || resShmem[(threadIdxX())+(3+15)*33] 
             end
-            @exOnWarp 16 if(isInRange) metaData[xMeta,yMeta+1,zMeta+1,getIsToBeAnalyzedNumb()+16 ]=sourceShmem[(threadIdxX())+33*6] end
-    
+            @exOnWarp 16 if(isInRange)
+                metaData[xMeta,yMeta+1,zMeta+1,getIsToBeAnalyzedNumb()+16 ]=(@getIsToVal(2) || @getIsToVal(4)|| @getIsToVal(6)|| @getIsToVal(8)|| @getIsToVal(10)|| @getIsToVal(12)) #sourceShmem[(threadIdxX())+33*6] 
+            end
+    sync_threads()
 
 
 end)#quote
@@ -223,6 +236,14 @@ end)#quote
                     
         end #loadAndScanForDuplicates    
     
+        """
+        loads value from res shmem about weather a queue with supplied numb has anything worth validating
+        """
+        macro getIsToVal(numb)
+            return esc(quote
+            resShmem[(threadIdxX())+($numb+15)*33]
+        end)
+        end     
 
         """
         here we will mark in metadata weather there is anything to be verified - here in given que ie - weather it is possible in given queue to cover anything more in next dilatation step
