@@ -36,23 +36,23 @@ end #for
 
 
 
-# #setting number of fp ... so it should be validated as fit to be validated
-# offset = -49
-#    for quueueNumb in 1:14
-#          offset+=350
-#          #... so it should be validated as fit to be validated
-#            metaData[2,2,2,getBeginingOfFpFNcounts()+quueueNumb]+=4 # so all will remain active
-#            metaData[2,2,2,getNewCountersBeg()+quueueNumb]+=1 
-#          # so it should not be validated
-#          metaData[3,3,3,getBeginingOfFpFNcounts()+quueueNumb]+=1 # so all will be inactive
-#          metaData[3,3,3,getNewCountersBeg()+quueueNumb]+=1  
+#setting number of fp ... so it should be validated as fit to be validated
+offset = -49
+   for quueueNumb in 1:14
+         offset+=350
+         #... so it should be validated as fit to be validated
+           metaData[2,2,2,getBeginingOfFpFNcounts()+quueueNumb]+=4 # so all will remain active
+           metaData[2,2,2,getNewCountersBeg()+quueueNumb]+=1 
+         # so it should not be validated
+         metaData[3,3,3,getBeginingOfFpFNcounts()+quueueNumb]+=1 # so all will be inactive
+         metaData[3,3,3,getNewCountersBeg()+quueueNumb]+=1  
 
-#          if(isodd(quueueNumb)) 
-#             numbOfFp+=5
-#            else
-#             numbOfFn+=5
-#            end
-# end#for   
+         if(isodd(quueueNumb)) 
+            numbOfFp+=5
+           else
+            numbOfFn+=5
+           end
+end#for   
 
 
 
@@ -114,7 +114,9 @@ for quueueNumb in 1:14
       # println(Int64.(unique(tempList)))
 
       @test length(filter(el->el>0,tempList))==quueueNumb*10        
-      @test length(unique(tempList))==quueueNumb*5+1        
+      @test length(unique(tempList))==quueueNumb*5+1   
+
+      
 end#for quueueNumb
 maxResListIndex= length(resListIndicies)
 
@@ -145,7 +147,7 @@ function loadAndSanForDuplKernel(globalCurrentFnCount,globalCurrentFpCount,maxRe
         # @exOnWarp 16 CUDA.@cuprint "idX $(threadIdxX())  xMeta $(xMeta) yMeta $(yMeta+1) zMeta $(zMeta+1)  \n "
 
         @loadAndScanForDuplicates(iterThrougWarNumb,locArr,offsetIter,localOffset)  
-
+sync_threads()
 for i in 1:30
    resShmem[(threadIdxX())+(i)*33]= false
  end
@@ -160,12 +162,38 @@ for i in 1:30
 
        sync_threads()
        @ifXY 1 1 begin 
-          # if(xMeta==1 && yMeta==0 && zMeta==0)
-          #     CUDA.@cuprint """  valuee fp $(alreadyCoveredInQueues[1]+ alreadyCoveredInQueues[3]+ alreadyCoveredInQueues[5]+ alreadyCoveredInQueues[7]+ alreadyCoveredInQueues[9]+ alreadyCoveredInQueues[11]+ alreadyCoveredInQueues[13]) 
-          #     alreadyCoveredInQueues[1] $(alreadyCoveredInQueues[1]) alreadyCoveredInQueues[3] $(alreadyCoveredInQueues[3]) alreadyCoveredInQueues[5] $(alreadyCoveredInQueues[5]) alreadyCoveredInQueues[7] $(alreadyCoveredInQueues[7]) alreadyCoveredInQueues[9] $(alreadyCoveredInQueues[9]) alreadyCoveredInQueues[11] $(alreadyCoveredInQueues[11]) alreadyCoveredInQueues[13] $(alreadyCoveredInQueues[13]) 
+         if(blockIdxX()==1)
+         summA=0
+         suumB=0
+         for i in 1:12
+            summA+=alreadyCoveredInQueues[i]
+            suumB+=i*5
+         end   
+         for i in 13:14
+            summA+=alreadyCoveredInQueues[i]
+            suumB+=i*10
+         end  
+         CUDA.@cuprint " alreadyCoveredInQueues[1] $(alreadyCoveredInQueues[1])   should be $(1*5)\n "
+         CUDA.@cuprint " alreadyCoveredInQueues[2] $(alreadyCoveredInQueues[2]) should be $(2*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[3] $(alreadyCoveredInQueues[3]) should be $(3*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[4] $(alreadyCoveredInQueues[4]) should be $(4*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[5] $(alreadyCoveredInQueues[5]) should be $(5*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[6] $(alreadyCoveredInQueues[6]) should be $(6*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[7] $(alreadyCoveredInQueues[7]) should be $(7*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[8] $(alreadyCoveredInQueues[8]) should be $(8*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[9] $(alreadyCoveredInQueues[9]) should be $(9*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[10] $(alreadyCoveredInQueues[10]) should be $(10*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[11] $(alreadyCoveredInQueues[11]) should be $(11*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[12] $(alreadyCoveredInQueues[12]) should be $(12*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[13] $(alreadyCoveredInQueues[13]) should be $(13*10) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[14] $(alreadyCoveredInQueues[14]) should be $(14*10) \n "
+         CUDA.@cuprint "summA  $(summA) should be  $(suumB) \n "
+   
+      end 
+         #   CUDA.@cuprint """  valuee fp $(alreadyCoveredInQueues[1]+ alreadyCoveredInQueues[3]+ alreadyCoveredInQueues[5]+ alreadyCoveredInQueues[7]+ alreadyCoveredInQueues[9]+ alreadyCoveredInQueues[11]+ alreadyCoveredInQueues[13]) 
+            #   alreadyCoveredInQueues[1] $(alreadyCoveredInQueues[1]) alreadyCoveredInQueues[3] $(alreadyCoveredInQueues[3]) alreadyCoveredInQueues[5] $(alreadyCoveredInQueues[5]) alreadyCoveredInQueues[7] $(alreadyCoveredInQueues[7]) alreadyCoveredInQueues[9] $(alreadyCoveredInQueues[9]) alreadyCoveredInQueues[11] $(alreadyCoveredInQueues[11]) alreadyCoveredInQueues[13] $(alreadyCoveredInQueues[13]) 
               
-          #     \n"""
-          # end  
+            #   """
           atomicAdd(globalCurrentFpCount, alreadyCoveredInQueues[1]+ alreadyCoveredInQueues[3]+ alreadyCoveredInQueues[5]+ alreadyCoveredInQueues[7]+ alreadyCoveredInQueues[9]+ alreadyCoveredInQueues[11]+ alreadyCoveredInQueues[13]) 
        end
           @ifXY 2 1 atomicAdd(globalCurrentFnCount, alreadyCoveredInQueues[2]+ alreadyCoveredInQueues[4]+ alreadyCoveredInQueues[6]+ alreadyCoveredInQueues[8]+ alreadyCoveredInQueues[10]+ alreadyCoveredInQueues[12]+ alreadyCoveredInQueues[14]) 
@@ -185,24 +213,35 @@ end
 @test Int64(globalCurrentFnCount[1]) ==numbOfFn
 @test Int64(globalCurrentFpCount[1]) ==numbOfFp
 
-
+Int64(globalCurrentFnCount[1]+globalCurrentFpCount[1])
 offset = -49
    # for quueueNumb in 1:14
    for quueueNumb in 1:12
          offset+=350
         #the bigger the number the more repetitions and more non repeated elements 
-         @test metaData[1,1,1,getNewCountersBeg()+quueueNumb]==quueueNumb*5+1#j instead of quueueNumb*quueueNumb
+         @test metaData[1,1,1,getNewCountersBeg()+quueueNumb]==quueueNumb*5#j instead of quueueNumb*quueueNumb
          tempList= Array(resListIndicies[offset:offset+350])
-         @test length(filter(el->el>0,tempList))==quueueNumb*5+1#+1 becouse of 0's entry
+         @test length(filter(el->el>0,tempList))==quueueNumb*5#+1 becouse of 0's entry
   end#for
 
     quueueNumb =12
    offset = -49
    offset+=350*(quueueNumb)
-   @test Int64(metaData[1,1,1,getNewCountersBeg()+quueueNumb])==quueueNumb*5+1#j instead of quueueNumb*quueueNumb
+   @test Int64(metaData[1,1,1,getNewCountersBeg()+quueueNumb])==quueueNumb*5#j instead of quueueNumb*quueueNumb
    tempList= Array(resListIndicies)[offset:offset+350];
-   @test length(filter(el->el>0,tempList))==quueueNumb*5+1#+1 becouse of 0's entry
+   @test length(filter(el->el>0,tempList))==quueueNumb*5#+1 becouse of 0's entry
    
+
+
+   quueueNumb =2
+   offset = -49
+   offset+=350*(quueueNumb)
+   @test Int64(metaData[1,1,1,getNewCountersBeg()+quueueNumb])==quueueNumb*5#j instead of quueueNumb*quueueNumb
+   tempList= Array(resListIndicies)[offset:offset+350];
+   @test length(filter(el->el>0,tempList))==quueueNumb*5#+1 becouse of 0's entry
+   Int64.(filter(el->el>0,tempList))
+   Int64.(unique(filter(el->el>0,tempList)))
+
   ############### testing is to be analyzed
   #main block
   @test metaData[1,1,1,getIsToBeAnalyzedNumb()+15 ]==1
@@ -263,7 +302,11 @@ offset = -49
   @test metaData[metaX,metaY,metaZ+1,getIsToBeAnalyzedNumb()+11 ]==0
   @test metaData[metaX,metaY,metaZ+1,getIsToBeAnalyzedNumb()+12 ]==0
 
-
+  Int64(resListIndicies[662])
+  Int64(resListIndicies[307])
+  Int64(resListIndicies[1372])
+  Int64(resListIndicies[1727])
+  Int64(resListIndicies[2437])
 
   ### for block 3,3,3 only queaue 1 should be active  and rest should not activate surrounding blocks
 
