@@ -63,8 +63,9 @@ macro mainLoopKernelAllocations()
  #storing values loaded from analyzed array ...
  sourceShmem =  @cuStaticSharedMem(Bool,(32,32,32))
  #for storing sums for reductions
- shmemSum =  @cuStaticSharedMem(UInt32,(36,16)) # we need this additional spots
-
+ shmemSum =  @cuStaticSharedMem(UInt32,(36,14)) # we need this additional spots
+# used to accumulate counts from of fp's and fn's already covered in dilatation steps
+alreadyCoveredInQueues =@cuStaticSharedMem(UInt32,(14))
  
  #coordinates of data in main array
  #we will use this to establish weather we should mark  the data block as empty or full ...

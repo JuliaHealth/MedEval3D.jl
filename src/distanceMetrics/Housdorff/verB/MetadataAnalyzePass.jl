@@ -210,17 +210,17 @@ end #loadCounters
  end      
 
 """
-establish is the  block  is active full or be activated, and we are saving this information into resshmem
+establish is the  block  is active full or be activated, and we are saving this information into surcehmem
 """
 macro checkIsActiveOrFullOr()
     return esc(quote
-        @exOnWarp 30 if(isInRange) sourceShmem[(threadIdxX()+1)] = metaData[xMeta,yMeta+1,zMeta+1,getFullInGoldNumb() ] end#  isBlockFulliInGold(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 31 if(isInRange)   sourceShmem[(threadIdxX()+1)+33] = metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInGoldNumb() ] end # isBlockToBeActivatediInGold(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 32 if(isInRange)  sourceShmem[(threadIdxX()+1)+33*2] = metaData[xMeta,yMeta+1,zMeta+1,getActiveGoldNumb() ] end # isBlockCurrentlyActiveiInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 30 if(isInRange) sourceShmem[(threadIdxX())] = metaData[xMeta,yMeta+1,zMeta+1,getFullInGoldNumb() ] end#  isBlockFulliInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 31 if(isInRange)   sourceShmem[(threadIdxX())+33] = metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInGoldNumb() ] end # isBlockToBeActivatediInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 32 if(isInRange)  sourceShmem[(threadIdxX())+33*2] = metaData[xMeta,yMeta+1,zMeta+1,getActiveGoldNumb() ] end # isBlockCurrentlyActiveiInGold(metaData, xMeta,yMeta+1,zMeta+1)
        
-        @exOnWarp 33 if(isInRange) sourceShmem[(threadIdxX()+1)+33*3] = metaData[xMeta,yMeta+1,zMeta+1,getFullInSegmNumb() ] end # isBlockFullInSegm(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 34 if(isInRange) sourceShmem[(threadIdxX()+1)+33*4] = metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInSegmNumb() ] end # isBlockToBeActivatedInSegm(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 35 if(isInRange) sourceShmem[(threadIdxX()+1)+33*5] = metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb()] end # isBlockCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 33 if(isInRange) sourceShmem[(threadIdxX())+33*3] = metaData[xMeta,yMeta+1,zMeta+1,getFullInSegmNumb() ] end # isBlockFullInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 34 if(isInRange) sourceShmem[(threadIdxX())+33*4] = metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInSegmNumb() ] end # isBlockToBeActivatedInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 35 if(isInRange) sourceShmem[(threadIdxX())+33*5] = metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb()] end # isBlockCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)
 end)#quote
 end#checkIsActiveOrFullOr
 
@@ -230,11 +230,11 @@ given data in sourceShmem loaded by checkIsActiveOrFullOr() we will  mark the bl
 """
 macro setIsToBeActive()
     return esc(quote
-        @exOnWarp 1 if(!sourceShmem[(threadIdxX()+1)]  && (sourceShmem[(threadIdxX()+1)+33]  ||  sourceShmem[(threadIdxX()+1)+33*2]) &&isInRange  )  
+        @exOnWarp 1 if(!sourceShmem[(threadIdxX())]  && (sourceShmem[(threadIdxX())+33]  ||  sourceShmem[(threadIdxX())+33*2]) &&isInRange  )  
                         metaData[xMeta,yMeta+1,zMeta+1,getActiveGoldNumb() ]=1
                         appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 )
                     end
-        @exOnWarp 2 if(!sourceShmem[(threadIdxX()+1)+33*3]  && (sourceShmem[(threadIdxX()+1)+33*4]  ||  sourceShmem[(threadIdxX()+1)+33*5]) &&isInRange ) 
+        @exOnWarp 2 if(!sourceShmem[(threadIdxX())+33*3]  && (sourceShmem[(threadIdxX())+33*4]  ||  sourceShmem[(threadIdxX())+33*5]) &&isInRange ) 
                         metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb() ]=1     
                         appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 )             
             end
@@ -279,9 +279,24 @@ end
              @setIsToBeActive() 
 
         end    )
+        sync_threads()
+
+        #now we add to the global variables all of the fps and fns after corrections for duplicates
+        @ifXY 1 1 begin 
+            # if(xMeta==1 && yMeta==0 && zMeta==0)
+            #     CUDA.@cuprint """  valuee fp $(alreadyCoveredInQueues[1]+ alreadyCoveredInQueues[3]+ alreadyCoveredInQueues[5]+ alreadyCoveredInQueues[7]+ alreadyCoveredInQueues[9]+ alreadyCoveredInQueues[11]+ alreadyCoveredInQueues[13]) 
+            #     alreadyCoveredInQueues[1] $(alreadyCoveredInQueues[1]) alreadyCoveredInQueues[3] $(alreadyCoveredInQueues[3]) alreadyCoveredInQueues[5] $(alreadyCoveredInQueues[5]) alreadyCoveredInQueues[7] $(alreadyCoveredInQueues[7]) alreadyCoveredInQueues[9] $(alreadyCoveredInQueues[9]) alreadyCoveredInQueues[11] $(alreadyCoveredInQueues[11]) alreadyCoveredInQueues[13] $(alreadyCoveredInQueues[13]) 
+                
+            #     \n"""
+            # end  
+            atomicAdd(globalCurrentFpCount, alreadyCoveredInQueues[1]+ alreadyCoveredInQueues[3]+ alreadyCoveredInQueues[5]+ alreadyCoveredInQueues[7]+ alreadyCoveredInQueues[9]+ alreadyCoveredInQueues[11]+ alreadyCoveredInQueues[13]) 
+        end
+            @ifXY 2 1 atomicAdd(globalCurrentFnCount, alreadyCoveredInQueues[2]+ alreadyCoveredInQueues[4]+ alreadyCoveredInQueues[6]+ alreadyCoveredInQueues[8]+ alreadyCoveredInQueues[10]+ alreadyCoveredInQueues[12]+ alreadyCoveredInQueues[14]) 
+
+
             sync_threads()
             #clear used shmem - we used linear indicies so we can clear only those used
-            for i in 0:15
+            for i in 0:30
                 @exOnWarp i resShmem[(threadIdxX())+(i)*33]= false
              end
              for i in 0:8#was 6
