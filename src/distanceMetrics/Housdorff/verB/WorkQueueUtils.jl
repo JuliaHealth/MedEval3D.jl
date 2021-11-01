@@ -1,11 +1,16 @@
 module WorkQueueUtils
 using  CUDA,Main.CUDAAtomicUtils
-export appendToWorkQueue
+export allocateWorkQueue,appendToWorkQueue
 """
 allocate memory for  work queues
+    entries means
+        1)xMeta
+        2)yMeta
+        3)zMeta
+        4)isGold
 """
 function allocateWorkQueue(fpTotal,fnTotal)
-    return CUDA.zeros(UInt8,Int64(ceil((fpTotal+fnTotal )*1.51)),4)
+    return CUDA.zeros(UInt8,4,Int64(ceil((fpTotal+fnTotal )*1.51)))
 end
 
 """
@@ -15,10 +20,10 @@ function appendToWorkQueue(workQueaue,workQueauecounter, metaX,metaY,metaZ,isGol
    old =  atomicallyAddOne(workQueauecounter)+1
   # CUDA.@cuprint "in appendToWorkQueue metaX $(metaX) metaY $(metaY) metaZ $(metaZ) isGold $(isGold) old $(old) \n"
 
-   workQueaue[old,1]= UInt8(metaX)
-   workQueaue[old,2]= UInt8(metaY)
-   workQueaue[old,3]= UInt8(metaZ)
-   workQueaue[old,4]= UInt8(isGold)
+   workQueaue[1,old]= UInt8(metaX)
+   workQueaue[2,old]= UInt8(metaY)
+   workQueaue[3,old]= UInt8(metaZ)
+   workQueaue[4,old]= UInt8(isGold)
 
 end#appendToWorkQueue
 

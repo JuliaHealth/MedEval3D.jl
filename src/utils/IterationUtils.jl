@@ -12,7 +12,7 @@ we need also to supply functions of iterating the 3 dimensional data but with ch
 module IterationUtils
 using CUDA,Logging
 export generalizedItermultiDim
-export @exOnWarp,@exOnWarpIfBool, @iter3d, @iter3dAdditionalxyzActsAndZcheck, @iter3dAdditionalxyzActs, @iter3dAdditionalzActs,@iter3dWithVal
+export @iterateLinearly,@exOnWarp,@exOnWarpIfBool, @iter3d, @iter3dAdditionalxyzActsAndZcheck, @iter3dAdditionalxyzActs, @iter3dAdditionalzActs,@iter3dWithVal
 
 """
 arrDims- dimensions of main arrya
@@ -412,6 +412,27 @@ macro exOnWarpIfBool(tobeEx,numb, ex)
         end    
     end)
 end
+
+
+"""
+iterate over array that is treated as one dimensional with given length lengthh as argument
+amount of iterations needed is also passed as an argument - iterLoop
+"""
+macro iterateLinearly(iterLoop,lengthh, ex)
+  return  esc(quote
+  i = UInt32(0)
+  @unroll for j in 0:($iterLoop-1)
+    i= threadIdxX()+(threadIdxY()-1)*blockDimX()+ j* blockDimX()*blockDimY()
+    $ex
+  end 
+    i= threadIdxX()+(threadIdxY()-1)*blockDimX()+ $iterLoop* blockDimX()*blockDimY()
+      if(i<=$lengthh) 
+      $ex
+    end 
+end)
+
+end
+
 
 """
 iteration through 3 dimensional data but  with one dimension fixed - ie we will analyze plane or part of the plane where value of given dimension is as we supply it 

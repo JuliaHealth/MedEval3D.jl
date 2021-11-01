@@ -3,7 +3,7 @@ module CUDAGpuUtils
 
 using CUDA, StaticArrays
 
-export atomicallySetValueTrreeDim,atomicallyAddOneInt,clearLocArrdefineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc,reduce_warp_max,reduce_warp_min,reduce_warp_min,reduce_warp_or,reduce_warp_and,blockIdxZ,blockIdxY,blockIdxX,blockDimZ, blockDimY, blockDimX, threadIdxX, threadIdxY, threadIdxZ
+export gridDimX,atomicallySetValueTrreeDim,atomicallyAddOneInt,clearLocArrdefineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc,reduce_warp_max,reduce_warp_min,reduce_warp_min,reduce_warp_or,reduce_warp_and,blockIdxZ,blockIdxY,blockIdxX,blockDimZ, blockDimY, blockDimX, threadIdxX, threadIdxY, threadIdxZ
 export @unroll, @ifX, @ifY, @ifXY, @widL, @wid, @lan
 
 
@@ -147,6 +147,15 @@ wrapper to get x coordinates of thread block
 function blockIdxZ()::UInt32
     blockIdx().z
 end
+
+"""
+wrapper to get x length of grid - how many thread blocks in x dimension
+"""
+function gridDimX()::UInt32
+    gridDim().x
+end
+
+
 
 
 
