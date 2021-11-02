@@ -214,4 +214,39 @@ end)
 end#executeDataIterWithPadding
 
 
+
+"""
+Iteration will start only if the associated  isToBeValidated entry in isToBevalidated data is true  (which we got from metadata and indicates is there anything of our intrest in validating given padding ...)
+
+We should also supply loopX and loopY constants that are constant kernel wide  and can be precalculated 
+maxXdim, maxYdim - provides maximal dimensions in x and y direction off padding plane (not of the whole image)
+provides iteration over padding - we have 3 diffrent planes to analyze - and third dimensions will be rigidly set as constant and equal either to 1 or max of this simension
+we also need supplied direction from which the dilatation was done (dir)           top 6          bottom 5     left 2       right 1      anterior 3      posterior 4
+as tis is just basis that will be specialized for each padding we need also some expressions
+getVal - expression getting value  from the padding and reurning true or false
+
+
+"""
+macro metaDataWarpIter(loopXMeta,loopYMeta,maxXdim, maxYdim      ,ex)
+
+    mainExp = generalizedItermultiDim(;xname=:(xMeta)
+    ,yname= :(yzSpot)
+    ,arrDims=metaDataDims
+    ,loopXdim=loopXMeta 
+    ,loopYdim=loopYMeta
+     ,yOffset = :(ydim*gridDim().x)
+    ,yAdd=  :(blockIdxX()-1) 
+    ,additionalActionBeforeY= :( yMeta= rem(yzSpot,$metaDataDims[2]) ; zMeta= fld(yzSpot,$metaDataDims[2]) )
+    ,additionalActionBeforeX= :( isInRange = ( yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] && xMeta <= $metaDataDims[1]  ) )
+#     ,nobundaryCheckX=true
+#     , nobundaryCheckY=true
+#     , nobundaryCheckZ =true
+    # ,yCheck = :(yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] )
+    # ,xCheck = :(xMeta <= $metaDataDims[1])
+    # ,xAdd= :(threadIdxX()-1)# to keep all 0 based
+    ,is3d = false
+    , ex = ex)  
+    return esc(:( $mainExp))
+end
+
 end#ProcessMainDataVerB
