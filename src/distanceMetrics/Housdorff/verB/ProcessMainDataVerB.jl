@@ -225,28 +225,34 @@ we also need supplied direction from which the dilatation was done (dir)        
 as tis is just basis that will be specialized for each padding we need also some expressions
 getVal - expression getting value  from the padding and reurning true or false
 
-
+x,y offset and add probably can be left as defaoult
 """
-macro metaDataWarpIter(loopXMeta,loopYMeta,maxXdim, maxYdim      ,ex)
+macro metaDataWarpIter(loopXMeta,loopYMeta,maxXdim, maxYdim,getVal,        ,ex)
 
-    mainExp = generalizedItermultiDim(;xname=:(xMeta)
-    ,yname= :(yzSpot)
+    mainExp = generalizedItermultiDim(
     ,arrDims=metaDataDims
     ,loopXdim=loopXMeta 
     ,loopYdim=loopYMeta
-     ,yOffset = :(ydim*gridDim().x)
-    ,yAdd=  :(blockIdxX()-1) 
+
     ,additionalActionBeforeY= :( yMeta= rem(yzSpot,$metaDataDims[2]) ; zMeta= fld(yzSpot,$metaDataDims[2]) )
     ,additionalActionBeforeX= :( isInRange = ( yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] && xMeta <= $metaDataDims[1]  ) )
+       ,isFullBoundaryCheckX =true
+   , isFullBoundaryCheckY=true
+   , isFullBoundaryCheckZ=true
 #     ,nobundaryCheckX=true
 #     , nobundaryCheckY=true
 #     , nobundaryCheckZ =true
-    # ,yCheck = :(yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] )
-    # ,xCheck = :(xMeta <= $metaDataDims[1])
+    ,yCheck = :(y <=$maxYdim)
+    ,xCheck = :(x <=$maxXdim)
     # ,xAdd= :(threadIdxX()-1)# to keep all 0 based
     ,is3d = false
     , ex = ex)  
     return esc(:( $mainExp))
 end
+    
+    """
+    process anterior padding
+    """
+    
 
 end#ProcessMainDataVerB
