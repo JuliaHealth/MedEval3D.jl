@@ -223,19 +223,22 @@ maxXdim, maxYdim - provides maximal dimensions in x and y direction off padding 
 provides iteration over padding - we have 3 diffrent planes to analyze - and third dimensions will be rigidly set as constant and equal either to 1 or max of this simension
 we also need supplied direction from which the dilatation was done (dir)           top 6          bottom 5     left 2       right 1      anterior 3      posterior 4
 as tis is just basis that will be specialized for each padding we need also some expressions
-getVal - expression getting value  from the padding and reurning true or false
-
+    getVal - expression getting value  from the padding and reurning true or false, it will operate using calculated x and y  in diffrent psitions depending on the plane
+    markNexBlockAsToBeActivated - whole expression that using given xMeta,yMeta,zMeta and the position of padding given we are in range will mark block as toBeActivated
+    setMainArrToTrue - sets given spot in the main array to true - based on meta data and calculated inside loop x,y position
 x,y offset and add probably can be left as defaoult
 """
 macro metaDataWarpIter(loopXMeta,loopYMeta,maxXdim, maxYdim,getVal,        ,ex)
 
     mainExp = generalizedItermultiDim(
-    ,arrDims=metaDataDims
+    ,arrDims=:()
     ,loopXdim=loopXMeta 
     ,loopYdim=loopYMeta
 
-    ,additionalActionBeforeY= :( yMeta= rem(yzSpot,$metaDataDims[2]) ; zMeta= fld(yzSpot,$metaDataDims[2]) )
-    ,additionalActionBeforeX= :( isInRange = ( yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] && xMeta <= $metaDataDims[1]  ) )
+#     ,additionalActionBeforeY= :( yMeta= rem(yzSpot,$metaDataDims[2]) ; zMeta= fld(yzSpot,$metaDataDims[2]) )
+    ,additionalActionBeforeX= quote
+            value = $getVal
+        end#quote
        ,isFullBoundaryCheckX =true
    , isFullBoundaryCheckY=true
    , isFullBoundaryCheckZ=true
