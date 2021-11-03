@@ -11,22 +11,19 @@ export @iter3dOuter,@iterDataBlock
 
 
 """
-clear main part of shared memory - padding will be cleared separately
+adding result to the result list at correct postion using data from metaData - so we get from the metadata offset and result counter 
+metadata - 4 dimensional array holding metaData
+xMeta,yMeta,zMeta -  x,y,z coordinates of block of intrest in meta Data
+resList - list of result (matrix to be more precise) where we will wrtie the results
+x,y,z - coordinates where we found point of intrest 
+dir - direction from which dilatation covering this voxel had happened
+queueNumber - what fp or fn queue we are intrested in modyfing now 
 """
-function clearMainShmem(shmem)
-    @unroll for zIter in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
-        shmem[threadIdxX()+1,threadIdxY()+1,zIter+1]=0
-    end#for 
-end#clearMainShmem
+function addResult(metadata ,xMeta,yMeta,zMeta, resList,x,y,z, dir,queueNumber   )
+getResOffsetsBeg()
+ getNewCountersBeg()
 
-"""
-clear source shmem in shared memory """
-function clearSourceShmem(shmem)
-    @unroll for zIter in UInt8(1):UInt8(32)
-         shmem[threadIdxX(),threadIdxY(),zIter]=0
-    end#for 
-end#clearMainShmem
-
+end
 
 """
 specialization of 2 dim iteration  for iterating over 3 dimensional metadata
@@ -65,10 +62,10 @@ macro iterDataBlock(mainArrDims,dataBlockDims,loopXdim ,loopYdim,loopZdim,ex)
     # ,xCheck = :((xMeta* $dataBlockDims[1]+x)<=$mainArrDims[1] )
     # ,yCheck = :((yMeta* $dataBlockDims[2]+y)<=$mainArrDims[2])
     # ,zCheck = :( (zMeta* $dataBlockDims[3]+z)<=$mainArrDims[3])
-    ,xCheck = :(((xdim * blockDimX())+threadIdxX()  )<= $dataBlockDims[1] && x<=$mainArrDims[1] )
-    ,yCheck = :(((ydim * blockDimY())+threadIdxY()  )<= $dataBlockDims[2] &&  y<=$mainArrDims[2])
-    ,zCheck = :((zdim+1)<= $dataBlockDims[3]  &&   z<=$mainArrDims[3])
-    ,zOffset= :(zMeta* ( ($dataBlockDims[3])  ) )
+    ,xCheck = :(((xdim * blockDimX())+threadIdxX()) <= $dataBlockDims[1] && x<=$mainArrDims[1])
+    ,yCheck = :(((ydim * blockDimY())+threadIdxY()) <= $dataBlockDims[2] && y<=$mainArrDims[2])
+    ,zCheck = :((zdim+1) <= $dataBlockDims[3]  &&   z <= $mainArrDims[3])
+    ,zOffset= :(zMeta* ( ($dataBlockDims[3])))
     ,zAdd =:(zdim+1)
    ,yOffset = :(ydim* blockDimY()+yMeta* $dataBlockDims[2])
    ,yAdd= :(threadIdxY())
@@ -83,21 +80,6 @@ macro iterDataBlock(mainArrDims,dataBlockDims,loopXdim ,loopYdim,loopZdim,ex)
 end
 
 
-"""
-set padding planes to 0 
-"""
-function clearPadding(shmem)
-    clearHalfOfPadding(shmem,UInt8(1))
-    clearHalfOfPadding(shmem,UInt8(34))
-end#clearPadding
-"""
-helper for clearPadding
-"""
-function clearHalfOfPadding(shmem,constantNumb::UInt8)
-    shmem[constantNumb,threadIdxX()+1, threadIdxY()+1]=false
-    shmem[threadIdxX()+1,constantNumb, threadIdxY()+1]=false
-    shmem[threadIdxX()+1,threadIdxY()+1, constantNumb]=false
-end   
 
 
 """
@@ -164,3 +146,40 @@ end#HFUtils
 # function transvarseToSaggitalhreadPlane(constantNumb::UInt8,shmem)::Bool
 #     return shmem[constantNumb,threadIdxX(), threadIdxY()]
 # end#transvarseToSaggitalhreadPlane    
+
+
+
+# """
+# clear main part of shared memory - padding will be cleared separately
+# """
+# function clearMainShmem(shmem)
+#     @unroll for zIter in UInt8(1):UInt8(32)# most outer loop is responsible for z dimension
+#         shmem[threadIdxX()+1,threadIdxY()+1,zIter+1]=0
+#     end#for 
+# end#clearMainShmem
+
+# """
+# clear source shmem in shared memory """
+# function clearSourceShmem(shmem)
+#     @unroll for zIter in UInt8(1):UInt8(32)
+#          shmem[threadIdxX(),threadIdxY(),zIter]=0
+#     end#for 
+# end#clearMainShmem
+
+
+# """
+# set padding planes to 0 
+# """
+# function clearPadding(shmem)
+#     clearHalfOfPadding(shmem,UInt8(1))
+#     clearHalfOfPadding(shmem,UInt8(34))
+# end#clearPadding
+# """
+# helper for clearPadding
+# """
+# function clearHalfOfPadding(shmem,constantNumb::UInt8)
+#     shmem[constantNumb,threadIdxX()+1, threadIdxY()+1]=false
+#     shmem[threadIdxX()+1,constantNumb, threadIdxY()+1]=false
+#     shmem[threadIdxX()+1,threadIdxY()+1, constantNumb]=false
+# end   
+
