@@ -268,14 +268,16 @@ macro paddingIter(loopXMeta,loopYMeta,maxXdim, maxYdim,resShmem ,a,b,c , dataBdi
                     #if we have true in reference array in analyzed spot
                     if(refArr[(xMeta-1)*$dataBdim[1]+$a,(yMeta-1)*$dataBdim[2]+$b,(zMeta-1)*$dataBdim[3]+$c])
                         #adding the result to the result list at correct spot - using metadata taken from metadata
-                        addResult([xMeta+xMetaChange,yMeta+yMetaChange,zMeta+zMetaChange, $resList,(xMeta-1)*$dataBdim[1]+$a,(yMeta-1)*$dataBdim[2]+$b, (zMeta-1)*$dataBdim[3]+$c, $dir, $queueNumber   )
+                        addResult([xMeta+xMetaChange,yMeta+yMetaChange,zMeta+zMetaChange, $resList,(xMeta-1)*$dataBdim[1]+$a,(yMeta-1)*$dataBdim[2]+$b, (zMeta-1)*$dataBdim[3]+$c, $dir, $queueNumber,metaDataDims ,isGold    )
+                    
                     end
                 end
             end
+               krowa add this outside of the data block iter loop
             sync_threads()
              #we set the next block to be activated in gold or other pass 
             @ifXY 1 1 if(isAnyPositive[1]) metaData[xMeta+xMetaChange,yMeta+yMetaChange,zMeta+zMetaChange,getIsToBeActivatedInSegmNumb()-isGold  ]=1 end
-            @ifXY 2 1 if(isAnyPositive[1]) $isAnyPositive[1]=false end
+            @ifXY 2 1 $isAnyPositive[1]=false 
             sync_threads()
             end))  
     return esc(:( $mainExp))
