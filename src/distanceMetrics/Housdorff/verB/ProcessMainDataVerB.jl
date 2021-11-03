@@ -230,9 +230,14 @@ as tis is just basis that will be specialized for each padding we need also some
 x,y offset and add probably can be left as defaoult
 resShmem - shared memoy 3 dimensional boolean array
 isAnyPositive - shared memory value indicating is anything was evaluated as true in the padding as true 
-
+xMetaChange,yMetaChange,zMetaChange - indicates how the meata coordinates (coordinates of metadata block of intrest will change)
+isToBeValidated - indicates weather we should validate data from dilatation or just write the dilatation to global memory
+mainArr - main array which we modify during dilatations
+refArr - array we will check weather dilatation had covered any new intresting voxel
+resList - list with result
+dir - direction from which we performed dilatation
 """
-macro paddingIter(loopXMeta,loopYMeta,maxXdim, maxYdim,resShmem ,a,b,c , dataBdim ,isAnyPositive    ,ex)
+macro paddingIter(loopXMeta,loopYMeta,maxXdim, maxYdim,resShmem ,a,b,c , dataBdim ,isAnyPositive,xMetaChange,yMetaChange,zMetaChange, isToBeValidated, mainArr,resList,dir)
 
     mainExp = generalizedItermultiDim(
     ,arrDims=:()
@@ -245,7 +250,7 @@ macro paddingIter(loopXMeta,loopYMeta,maxXdim, maxYdim,resShmem ,a,b,c , dataBdi
         end#quote
        ,isFullBoundaryCheckX =true
    , isFullBoundaryCheckY=true
-   , isFullBoundaryCheckZ=true
+#   , isFullBoundaryCheckZ=true
 #     ,nobundaryCheckX=true
 #     , nobundaryCheckY=true
 #     , nobundaryCheckZ =true
@@ -256,14 +261,21 @@ macro paddingIter(loopXMeta,loopYMeta,maxXdim, maxYdim,resShmem ,a,b,c , dataBdi
     , ex = esc(quote
             if(resShmem[$a,$b,$c])
                 $isAnyPositive[1]=true# indicating that we have sth positive in this padding
-                $ex
+                #below we do actual dilatation
+                mainArr[(xMeta-1)*$dataBdim[1]+$a,(yMeta-1)*$dataBdim[2]+$b,(zMeta-1)*$dataBdim[3]+$c]=true
+                if(isToBeValidated)
+                    #if we have true in reference array in analyzed spot
+                    if(refArr[(xMeta-1)*$dataBdim[1]+$a,(yMeta-1)*$dataBdim[2]+$b,(zMeta-1)*$dataBdim[3]+$c])
+                        #adding the result to the result list at correct spot - using metadata taken from metadata
+                        addResult([xMeta+xMetaChange,yMeta+yMetaChange,zMeta+zMetaChange, $resList,(xMeta-1)*$dataBdim[1]+$a,(yMeta-1)*$dataBdim[2]+$b, (zMeta-1)*$dataBdim[3]+$c, $dir   )
+                    end
+                end
             end
             sync_threads()
-            if(isAnyPositive[1])
-                    @ifXY 1 1 metaData[(xMeta-1)*$dataBdim[1],(yMeta-1)*$dataBdim[2],(zMeta-1)*$dataBdim[3],  ]
-                    @ifXY 2 1 $isAnyPositive[1]=false
-           end
-
+             #we set the next block to be activated in gold or other pass 
+            @ifXY 1 1 if(isAnyPositive[1]) metaData[xMeta+xMetaChange,yMeta+yMetaChange,zMeta+zMetaChange,getIsToBeActivatedInSegmNumb()-isGold  ]=1 end
+            @ifXY 2 1 if(isAnyPositive[1]) $isAnyPositive[1]=false end
+            sync_threads()
             end))  
     return esc(:( $mainExp))
 end
