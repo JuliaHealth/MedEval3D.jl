@@ -255,10 +255,50 @@ end
    
 
 
+                top 6 
+                bottom 5  
+                left 2
+                right 1 
+                anterior 3
+                posterior 4
+
+loopAXFixed= cld(dataBdim[2], blockDimX())
+loopBXfixed= cld(dataBdim[3], blockDimY())
+    """
+    process left padding
+    """
+    @paddingIter(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3], resShmem ,1,:(x),:(y) , dataBdim ,isAnyPositive,1,0,0, isToBeValidated, mainArr,resList,1)
+      """
+    process rigth padding
+    """  
+@paddingIter(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3], resShmem ,dataBdim[1],:(x),:(y) , dataBdim ,isAnyPositive,1,0,0, isToBeValidated, mainArr,resList,2)
+
+loopAYFixed= cld(dataBdim[1], blockDimX())
+loopBYfixed= cld(dataBdim[3], blockDimY())
+
     """
     process anterior padding
     """
-    @paddingIter(loopAXFixed,loopBXfixed,maxXdim, maxYdim,resShmem ,a,b,c , dataBdim ,isAnyPositive,xMetaChange,yMetaChange,zMetaChange, isToBeValidated, mainArr,resList,dir)
+    @paddingIter(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], resShmem ,:(x),1,:(y) , dataBdim ,isAnyPositive,1,0,0, isToBeValidated, mainArr,resList,4)
+      """
+    process posterior padding
+    """  
+@paddingIter(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], resShmem ,:(x),dataBdim[2],:(y) , dataBdim ,isAnyPositive,1,0,0, isToBeValidated, mainArr,resList,3)
+
+loopAZFixed= cld(dataBdim[1], blockDimX())
+loopBZfixed= cld(dataBdim[2], blockDimY())
+
+    """
+    process top padding
+    """
+    @paddingIter(loopAZFixed,loopBZfixed,dataBdim[1], dataBdim[2], resShmem ,:(x),:(y),1 , dataBdim ,isAnyPositive,1,0,0, isToBeValidated, mainArr,resList,5)
+      """
+    process bottom padding
+    """  
+@paddingIter(loopAZFixed,loopBZfixed,dataBdim[1], dataBdim[2], resShmem ,:(x),:(y),dataBdim[3] , dataBdim ,isAnyPositive,1,0,0, isToBeValidated, mainArr,resList,6)
+
+
+
 
 
 end#ProcessMainDataVerB
