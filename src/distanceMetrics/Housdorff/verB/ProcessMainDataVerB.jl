@@ -236,6 +236,7 @@ mainArr - main array which we modify during dilatations
 refArr - array we will check weather dilatation had covered any new intresting voxel
 resList - list with result
 dir - direction from which we performed dilatation
+queueNumber - what fp or fn queue we are intrested in modyfing now 
 """
 macro paddingIter(loopXMeta,loopYMeta,maxXdim, maxYdim,resShmem ,a,b,c , dataBdim ,isAnyPositive,xMetaChange,yMetaChange,zMetaChange, isToBeValidated, mainArr,resList,dir)
 
@@ -267,7 +268,7 @@ macro paddingIter(loopXMeta,loopYMeta,maxXdim, maxYdim,resShmem ,a,b,c , dataBdi
                     #if we have true in reference array in analyzed spot
                     if(refArr[(xMeta-1)*$dataBdim[1]+$a,(yMeta-1)*$dataBdim[2]+$b,(zMeta-1)*$dataBdim[3]+$c])
                         #adding the result to the result list at correct spot - using metadata taken from metadata
-                        addResult([xMeta+xMetaChange,yMeta+yMetaChange,zMeta+zMetaChange, $resList,(xMeta-1)*$dataBdim[1]+$a,(yMeta-1)*$dataBdim[2]+$b, (zMeta-1)*$dataBdim[3]+$c, $dir   )
+                        addResult([xMeta+xMetaChange,yMeta+yMetaChange,zMeta+zMetaChange, $resList,(xMeta-1)*$dataBdim[1]+$a,(yMeta-1)*$dataBdim[2]+$b, (zMeta-1)*$dataBdim[3]+$c, $dir, $queueNumber   )
                     end
                 end
             end
