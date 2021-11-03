@@ -208,7 +208,7 @@ resList - list with result
 dir - direction from which we performed dilatation
 queueNumber - what fp or fn queue we are intrested in modyfing now 
 """
-macro paddingIter(loopX,loopY,maxXdim, maxYdim,resShmem ,a,b,c , dataBdim ,isAnyPositive,xMetaChange,yMetaChange,zMetaChange, isToBeValidated, mainArr,resList,dir,queueNumber)
+macro paddingIter(loopX,loopY,maxXdim, maxYdim,a,b,c , xMetaChange,yMetaChange,zMetaChange, mainArr, dir,queueNumber)
 
     mainExp = generalizedItermultiDim(
     ,arrDims=:()
@@ -273,35 +273,43 @@ end
 """
 executes paddingIter
 """
-@processPadding()
+macro processPadding()
+    krowa wrong numbers as direction and generally this needs rethinking !
+    #process left padding
+    @paddingIter(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3], ,1,:(x),:(y) , 1,0,0,  mainArr,1, queuenumbbbb)
+    @checkIsToBeActivated()
+    #process rigth padding
+    @paddingIter(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3], dataBdim[1],:(x),:(y) , -1,0,0,  mainArr,resList,2, queuenumbbbb)
+    @checkIsToBeActivated()
+    #process anterior padding
+    @paddingIter(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], :(x),1,:(y) , 0,1,0,  mainArr,4, queuenumbbbb)
+    @checkIsToBeActivated()
+    #process posterior padding
+    @paddingIter(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], :(x),dataBdim[2],:(y) , 0,-1,0,  mainArr,3, queuenumbbbb)
+    @checkIsToBeActivated()
+    #process top padding
+    @paddingIter(loopAZFixed,loopBZfixed,dataBdim[1], dataBdim[2], :(x),:(y),1 ,0,0,1,  mainArr,5, queuenumbbbb)
+    @checkIsToBeActivated()
+    #process bottom padding
+    @paddingIter(loopAZFixed,loopBZfixed,dataBdim[1], dataBdim[2], :(x),:(y),dataBdim[3] , 0,0,-1, mainArr,6, queuenumbbbb)
+    @checkIsToBeActivated()
 
-
-
-    
-#process left padding
-@paddingIter(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3], resShmem ,1,:(x),:(y) , dataBdim ,isAnyPositive,1,0,0, isToBeValidated, mainArr,resList,1)
-@checkIsToBeActivated()
-#process rigth padding
-@paddingIter(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3], resShmem ,dataBdim[1],:(x),:(y) , dataBdim ,isAnyPositive,-1,0,0, isToBeValidated, mainArr,resList,2)
-@checkIsToBeActivated()
-#process anterior padding
-@paddingIter(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], resShmem ,:(x),1,:(y) , dataBdim ,isAnyPositive,0,1,0, isToBeValidated, mainArr,resList,4)
-@checkIsToBeActivated()
-#process posterior padding
-@paddingIter(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], resShmem ,:(x),dataBdim[2],:(y) , dataBdim ,isAnyPositive,0,-1,0, isToBeValidated, mainArr,resList,3)
-@checkIsToBeActivated()
-#process top padding
-@paddingIter(loopAZFixed,loopBZfixed,dataBdim[1], dataBdim[2], resShmem ,:(x),:(y),1 , dataBdim ,isAnyPositive,0,0,1, isToBeValidated, mainArr,resList,5)
-@checkIsToBeActivated()
-#process bottom padding
-@paddingIter(loopAZFixed,loopBZfixed,dataBdim[1], dataBdim[2], resShmem ,:(x),:(y),dataBdim[3] , dataBdim ,isAnyPositive,0,0,-1, isToBeValidated, mainArr,resList,6)
-@checkIsToBeActivated()
-
-
-
-end
+end#processPadding
            
-
+1)   Left FP  
+2)   Left FN  
+3)   Right FP  
+4)   Right FN  
+5)   Posterior FP  
+6)   Posterior FN  
+7)   Anterior FP  
+8)   Anterior FN  
+9)   Top FP  
+10)   Top FN  
+11)   Bottom FP  
+12)   Bottom FN  
+13)   main block Fp  
+14)   main block Fn  
 
 
 
