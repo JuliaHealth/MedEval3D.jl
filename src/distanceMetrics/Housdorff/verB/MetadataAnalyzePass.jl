@@ -295,12 +295,6 @@ end
 
 
             sync_threads()
-            #now we need to set old caounters to the value of new counters so at next dilatation we will count only new values ...
-            for i in 1:14
-        krowa
-                 getNewCountersBeg()
-                 getOldCountersBeg()
-            end  
     
             #clear used shmem - we used linear indicies so we can clear only those used
             for i in 0:30
@@ -311,7 +305,11 @@ end
              end   
              for i in 1:14
                 @exOnWarp (i+23) shmemSum[threadIdxX(),i]= 0
-             end   
+             end
+                #now we need to set old caounters to the value of new counters so at next dilatation we will count only new values ...
+            for i in 1:14
+                @exOnWarp (i+37) metaData[xMeta, yMeta+1,zMeta+1, getOldCountersBeg() +i ]=metaData[xMeta, yMeta+1,zMeta+1, getNewCountersBeg() +i ]
+            end  
             $locArr=0
             $offsetIter=0
             sync_threads()
