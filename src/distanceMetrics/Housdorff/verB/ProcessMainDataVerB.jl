@@ -4,35 +4,6 @@ export @processMaskData
 
 
 
-"""
-we are processing padding 
-"""
-macro processPadding()
-    return esc(quote
-    #so here we utilize iter3 with 1 dim fixed 
-    @unroll for  dim in 1:3, numb in [1,34]              
-        @iter3dFixed dim numb if( isPaddingToBeAnalyzed(resShmem,dim,numb ))
-                if(val)#if value in padding associated with this spot is true
-                    # setting value in global memory
-                    @inbounds  analyzedArr[x,y,z]= true
-                    # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
-                    resShmem[1,1,1]=true
-                    if(@inbounds referenceArray[x,y,z])
-                        appendResultPadding(metaData, linIndex, x,y,z,iterationnumber, dim,numb)
-                end#if
-                #we need to check is next block in given direction exists
-                if(isNextBlockExists(metaData,dim, numb ,linIter, isPassGold, maxX,maxY,maxZ))
-                    if(resShmem[1,1,1])
-                        @ifXY 1 1 setAsToBeActivated(metaData,linIndex,isPassGold)
-                    end    
-                end # if isNextBlockExists       
-            end # if isPaddingToBeAnalyzed   
-        end#iter3dFixed       
-    end#for
-end)
-end
-
-
 
 """
 we need to establish is the block full after dilatation step 
@@ -61,7 +32,6 @@ macro validateData()
         locValOrShmem = (locVal | resShemVal)
         #those needed to establish weather data block will remain active
         isMaskFull= locValOrShmem & isMaskFull
-        @ifverr zzz isMaskEmpty = ~locValOrShmem & isMaskEmpty
         if(!locVal && resShemVal)       
               innerValidate(analyzedArr,referenceArray,x,y,z,privateResArray,privateResCounter,iterationnumber,sourceShmem  )
         end#if
@@ -158,7 +128,7 @@ macro loadMainValues(mainArrGPU)
 
      maskBool=$mainArrGPU[x,y,z]
      @processMaskData( maskBool) 
-
+        
         #we add to source shmem also becouse 
 
     end  )#iterDataBlock
@@ -238,7 +208,7 @@ resList - list with result
 dir - direction from which we performed dilatation
 queueNumber - what fp or fn queue we are intrested in modyfing now 
 """
-macro paddingIter(loopXMeta,loopYMeta,maxXdim, maxYdim,resShmem ,a,b,c , dataBdim ,isAnyPositive,xMetaChange,yMetaChange,zMetaChange, isToBeValidated, mainArr,resList,dir)
+macro paddingIter(loopX,loopY,maxXdim, maxYdim,resShmem ,a,b,c , dataBdim ,isAnyPositive,xMetaChange,yMetaChange,zMetaChange, isToBeValidated, mainArr,resList,dir)
 
     mainExp = generalizedItermultiDim(
     ,arrDims=:()
@@ -282,10 +252,48 @@ macro paddingIter(loopXMeta,loopYMeta,maxXdim, maxYdim,resShmem ,a,b,c , dataBdi
             end))  
     return esc(:( $mainExp))
 end
-    
+   
+
+
     """
     process anterior padding
     """
-    
+    @paddingIter(loopAXFixed,loopBXfixed,maxXdim, maxYdim,resShmem ,a,b,c , dataBdim ,isAnyPositive,xMetaChange,yMetaChange,zMetaChange, isToBeValidated, mainArr,resList,dir)
+
 
 end#ProcessMainDataVerB
+
+
+
+
+
+# """
+# we are processing padding 
+# """
+# macro processPadding()
+#     return esc(quote
+#     #so here we utilize iter3 with 1 dim fixed 
+#     @unroll for  dim in 1:3, numb in [1,34]              
+#         @iter3dFixed dim numb if( isPaddingToBeAnalyzed(resShmem,dim,numb ))
+#                 if(val)#if value in padding associated with this spot is true
+#                     # setting value in global memory
+#                     @inbounds  analyzedArr[x,y,z]= true
+#                     # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
+#                     resShmem[1,1,1]=true
+#                     if(@inbounds referenceArray[x,y,z])
+#                         appendResultPadding(metaData, linIndex, x,y,z,iterationnumber, dim,numb)
+#                 end#if
+#                 #we need to check is next block in given direction exists
+#                 if(isNextBlockExists(metaData,dim, numb ,linIter, isPassGold, maxX,maxY,maxZ))
+#                     if(resShmem[1,1,1])
+#                         @ifXY 1 1 setAsToBeActivated(metaData,linIndex,isPassGold)
+#                     end    
+#                 end # if isNextBlockExists       
+#             end # if isPaddingToBeAnalyzed   
+#         end#iter3dFixed       
+#     end#for
+# end)
+# end
+
+
+
