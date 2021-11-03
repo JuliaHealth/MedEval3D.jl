@@ -63,29 +63,29 @@ next block data to establish could this spot be activated from there
 
 
 
-"""
-Help to establish should we validate the voxel - so if ok add to result set, update the main array etc
-  in case we have some true in padding
-  generally we need just to get idea if
-    we already had true in this very spot - if so we ignore it
-    can this spot be reached by other voxels from the block we are reaching into - in other words padding is analyzing the same data as other block is analyzing in its main part
-      hence if the block that is doing it in main part will reach this spot on its own we will ignore value from padding 
+# """
+# Help to establish should we validate the voxel - so if ok add to result set, update the main array etc
+#   in case we have some true in padding
+#   generally we need just to get idea if
+#     we already had true in this very spot - if so we ignore it
+#     can this spot be reached by other voxels from the block we are reaching into - in other words padding is analyzing the same data as other block is analyzing in its main part
+#       hence if the block that is doing it in main part will reach this spot on its own we will ignore value from padding 
 
-  in order to reduce sears direction by 1 it would be also beneficial to know from where we had came - from what direction the block we are spilled into padding 
-"""
-function isPaddingValToBeValidated(dir,analyzedArr, x,y,z )::Bool
+#   in order to reduce sears direction by 1 it would be also beneficial to know from where we had came - from what direction the block we are spilled into padding 
+# """
+# function isPaddingValToBeValidated(dir,analyzedArr, x,y,z )::Bool
      
-if(dir!=5)  if( @inbounds resShmem[threadIdxX(),threadIdxY(),zIter-1]) return false  end end #up
-if(dir!=6)  if( @inbounds  resShmem[threadIdxX(),threadIdxY(),zIter+1]) return false  end  end #down
+# if(dir!=5)  if( @inbounds resShmem[threadIdxX(),threadIdxY(),zIter-1]) return false  end end #up
+# if(dir!=6)  if( @inbounds  resShmem[threadIdxX(),threadIdxY(),zIter+1]) return false  end  end #down
     
-if(dir!=1)   if( @inbounds  resShmem[threadIdxX()-1,threadIdxY(),zIter]) return false  end  end #left
-if(dir!=2)   if( @inbounds   resShmem[threadIdxX()+1,threadIdxY(),zIter]) return false  end end  #right
+# if(dir!=1)   if( @inbounds  resShmem[threadIdxX()-1,threadIdxY(),zIter]) return false  end  end #left
+# if(dir!=2)   if( @inbounds   resShmem[threadIdxX()+1,threadIdxY(),zIter]) return false  end end  #right
 
-if(dir!=4)   if(  @inbounds  resShmem[threadIdxX(),threadIdxY()+1,zIter]) return false  end  end #front
-if(dir!=3)   if( @inbounds  resShmem[threadIdxX(),threadIdxY()-1,zIter]) return false  end end  #back
-  #will return true only in case there is nothing around 
-  return true
-end
+# if(dir!=4)   if(  @inbounds  resShmem[threadIdxX(),threadIdxY()+1,zIter]) return false  end  end #front
+# if(dir!=3)   if( @inbounds  resShmem[threadIdxX(),threadIdxY()-1,zIter]) return false  end end  #back
+#   #will return true only in case there is nothing around 
+#   return true
+# end
 
 
 """
@@ -208,7 +208,7 @@ resList - list with result
 dir - direction from which we performed dilatation
 queueNumber - what fp or fn queue we are intrested in modyfing now 
 """
-macro paddingIter(loopX,loopY,maxXdim, maxYdim,resShmem ,a,b,c , dataBdim ,isAnyPositive,xMetaChange,yMetaChange,zMetaChange, isToBeValidated, mainArr,resList,dir)
+macro paddingIter(loopX,loopY,maxXdim, maxYdim,resShmem ,a,b,c , dataBdim ,isAnyPositive,xMetaChange,yMetaChange,zMetaChange, isToBeValidated, mainArr,resList,dir,queueNumber)
 
     mainExp = generalizedItermultiDim(
     ,arrDims=:()
@@ -244,59 +244,63 @@ macro paddingIter(loopX,loopY,maxXdim, maxYdim,resShmem ,a,b,c , dataBdim ,isAny
                 end
             end
                krowa add this outside of the data block iter loop
-            sync_threads()
-             #we set the next block to be activated in gold or other pass 
-            @ifXY 1 1 if(isAnyPositive[1]) metaData[xMeta+xMetaChange,yMeta+yMetaChange,zMeta+zMetaChange,getIsToBeActivatedInSegmNumb()-isGold  ]=1 end
-            @ifXY 2 1 $isAnyPositive[1]=false 
-            sync_threads()
+
             end))  
     return esc(:( $mainExp))
 end
    
-
-
-                top 6 
-                bottom 5  
-                left 2
-                right 1 
-                anterior 3
-                posterior 4
-
 loopAXFixed= cld(dataBdim[2], blockDimX())
 loopBXfixed= cld(dataBdim[3], blockDimY())
-    """
-    process left padding
-    """
-    @paddingIter(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3], resShmem ,1,:(x),:(y) , dataBdim ,isAnyPositive,1,0,0, isToBeValidated, mainArr,resList,1)
-      """
-    process rigth padding
-    """  
-@paddingIter(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3], resShmem ,dataBdim[1],:(x),:(y) , dataBdim ,isAnyPositive,1,0,0, isToBeValidated, mainArr,resList,2)
-
+        
 loopAYFixed= cld(dataBdim[1], blockDimX())
 loopBYfixed= cld(dataBdim[3], blockDimY())
-
-    """
-    process anterior padding
-    """
-    @paddingIter(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], resShmem ,:(x),1,:(y) , dataBdim ,isAnyPositive,1,0,0, isToBeValidated, mainArr,resList,4)
-      """
-    process posterior padding
-    """  
-@paddingIter(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], resShmem ,:(x),dataBdim[2],:(y) , dataBdim ,isAnyPositive,1,0,0, isToBeValidated, mainArr,resList,3)
-
+        
 loopAZFixed= cld(dataBdim[1], blockDimX())
 loopBZfixed= cld(dataBdim[2], blockDimY())
+ 
+"""
+after padding iter it checks is there was any true in this padding if so it will mark the appropriate metadata entry as isToBeActivated
+"""
+macro checkIsToBeActivated()
+                sync_threads()
+             #we set the next block to be activated in gold or other pass 
+            @ifXY 1 1 if(isAnyPositive[1]) metaData[xMeta+xMetaChange,yMeta+yMetaChange,zMeta+zMetaChange,getIsToBeActivatedInSegmNumb()-isGold  ]=1 end
+            @ifXY 2 1 $isAnyPositive[1]=false 
+            sync_threads()
+    
+end
 
-    """
-    process top padding
-    """
-    @paddingIter(loopAZFixed,loopBZfixed,dataBdim[1], dataBdim[2], resShmem ,:(x),:(y),1 , dataBdim ,isAnyPositive,1,0,0, isToBeValidated, mainArr,resList,5)
-      """
-    process bottom padding
-    """  
-@paddingIter(loopAZFixed,loopBZfixed,dataBdim[1], dataBdim[2], resShmem ,:(x),:(y),dataBdim[3] , dataBdim ,isAnyPositive,1,0,0, isToBeValidated, mainArr,resList,6)
+"""
+executes paddingIter
+"""
+@processPadding()
 
+
+
+    
+#process left padding
+@paddingIter(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3], resShmem ,1,:(x),:(y) , dataBdim ,isAnyPositive,1,0,0, isToBeValidated, mainArr,resList,1)
+@checkIsToBeActivated()
+#process rigth padding
+@paddingIter(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3], resShmem ,dataBdim[1],:(x),:(y) , dataBdim ,isAnyPositive,-1,0,0, isToBeValidated, mainArr,resList,2)
+@checkIsToBeActivated()
+#process anterior padding
+@paddingIter(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], resShmem ,:(x),1,:(y) , dataBdim ,isAnyPositive,0,1,0, isToBeValidated, mainArr,resList,4)
+@checkIsToBeActivated()
+#process posterior padding
+@paddingIter(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], resShmem ,:(x),dataBdim[2],:(y) , dataBdim ,isAnyPositive,0,-1,0, isToBeValidated, mainArr,resList,3)
+@checkIsToBeActivated()
+#process top padding
+@paddingIter(loopAZFixed,loopBZfixed,dataBdim[1], dataBdim[2], resShmem ,:(x),:(y),1 , dataBdim ,isAnyPositive,0,0,1, isToBeValidated, mainArr,resList,5)
+@checkIsToBeActivated()
+#process bottom padding
+@paddingIter(loopAZFixed,loopBZfixed,dataBdim[1], dataBdim[2], resShmem ,:(x),:(y),dataBdim[3] , dataBdim ,isAnyPositive,0,0,-1, isToBeValidated, mainArr,resList,6)
+@checkIsToBeActivated()
+
+
+
+end
+           
 
 
 
