@@ -223,12 +223,16 @@ maxXdim, maxYdim - provides maximal dimensions in x and y direction off padding 
 provides iteration over padding - we have 3 diffrent planes to analyze - and third dimensions will be rigidly set as constant and equal either to 1 or max of this simension
 we also need supplied direction from which the dilatation was done (dir)           top 6          bottom 5     left 2       right 1      anterior 3      posterior 4
 as tis is just basis that will be specialized for each padding we need also some expressions
-    getVal - expression getting value  from the padding and reurning true or false, it will operate using calculated x and y  in diffrent psitions depending on the plane
-    markNexBlockAsToBeActivated - whole expression that using given xMeta,yMeta,zMeta and the position of padding given we are in range will mark block as toBeActivated
+    a,b.c - variables used to  getting value  from the padding and reurning true or false, it will operate using calculated x and y  (so we need to insert x symbol y symbol and constant number as a,b,c in coreect order) in diffrent psitions depending on the plane
+    dataBdim - dimensionality of a data block 
+//markNexBlockAsToBeActivated - whole expression that using given xMeta,yMeta,zMeta and the position of padding given we are in range will mark block as toBeActivated
     setMainArrToTrue - sets given spot in the main array to true - based on meta data and calculated inside loop x,y position
 x,y offset and add probably can be left as defaoult
+resShmem - shared memoy 3 dimensional boolean array
+isAnyPositive - shared memory value indicating is anything was evaluated as true in the padding as true 
+
 """
-macro metaDataWarpIter(loopXMeta,loopYMeta,maxXdim, maxYdim,getVal,        ,ex)
+macro paddingIter(loopXMeta,loopYMeta,maxXdim, maxYdim,resShmem ,a,b,c , dataBdim ,isAnyPositive    ,ex)
 
     mainExp = generalizedItermultiDim(
     ,arrDims=:()
@@ -237,7 +241,7 @@ macro metaDataWarpIter(loopXMeta,loopYMeta,maxXdim, maxYdim,getVal,        ,ex)
 
 #     ,additionalActionBeforeY= :( yMeta= rem(yzSpot,$metaDataDims[2]) ; zMeta= fld(yzSpot,$metaDataDims[2]) )
     ,additionalActionBeforeX= quote
-            value = $getVal
+            value = $resShmem
         end#quote
        ,isFullBoundaryCheckX =true
    , isFullBoundaryCheckY=true
@@ -246,10 +250,21 @@ macro metaDataWarpIter(loopXMeta,loopYMeta,maxXdim, maxYdim,getVal,        ,ex)
 #     , nobundaryCheckY=true
 #     , nobundaryCheckZ =true
     ,yCheck = :(y <=$maxYdim)
-    ,xCheck = :(x <=$maxXdim)
+    ,xCheck = :(x <=$maxXdim )
     # ,xAdd= :(threadIdxX()-1)# to keep all 0 based
     ,is3d = false
-    , ex = ex)  
+    , ex = esc(quote
+            if(resShmem[$a,$b,$c])
+                $isAnyPositive[1]=true# indicating that we have sth positive in this padding
+                $ex
+            end
+            sync_threads()
+            if(isAnyPositive[1])
+                    @ifXY 1 1 metaData[(xMeta-1)*$dataBdim[1],(yMeta-1)*$dataBdim[2],(zMeta-1)*$dataBdim[3],  ]
+                    @ifXY 2 1 $isAnyPositive[1]=false
+           end
+
+            end))  
     return esc(:( $mainExp))
 end
     
