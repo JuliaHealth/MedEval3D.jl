@@ -12,7 +12,7 @@ we need also to supply functions of iterating the 3 dimensional data but with ch
 module IterationUtils
 using CUDA,Logging
 export generalizedItermultiDim
-export @iterateLinearly,@exOnWarp,@exOnWarpIfBool, @iter3d, @iter3dAdditionalxyzActsAndZcheck, @iter3dAdditionalxyzActs, @iter3dAdditionalzActs,@iter3dWithVal
+export @iterateLinearlyWithStart, @iterateLinearly,@exOnWarp,@exOnWarpIfBool, @iter3d, @iter3dAdditionalxyzActsAndZcheck, @iter3dAdditionalxyzActs, @iter3dAdditionalzActs,@iter3dWithVal
 
 """
 arrDims- dimensions of main arrya
@@ -432,6 +432,28 @@ macro iterateLinearly(iterLoop,lengthh, ex)
 end)
 
 end
+
+"""
+iterate over array that is treated as one dimensional with given length lengthh as argument
+amount of iterations needed is also passed as an argument - iterLoop
+
+modification that add start 
+"""
+macro iterateLinearlyWithStart(start,iterLoop,lengthh, ex)
+  return  esc(quote
+  i = UInt32(0)
+  @unroll for j in $start:($iterLoop-1)
+    i= threadIdxX()+(threadIdxY()-1)*blockDimX()+ j* blockDimX()*blockDimY()
+    $ex
+  end 
+    i= threadIdxX()+(threadIdxY()-1)*blockDimX()+ $iterLoop* blockDimX()*blockDimY()
+      if(i<=$lengthh) 
+      $ex
+    end 
+end)
+
+end
+
 
 
 """

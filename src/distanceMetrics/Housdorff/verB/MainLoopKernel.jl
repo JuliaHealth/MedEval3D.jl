@@ -59,21 +59,11 @@ alreadyCoveredInQueues =@cuStaticSharedMem(UInt32,(14))
  locArr= Int32(0)
  offsetIter = UInt16(0)
  localOffset= UInt32(0)
- #we will store here the indexes about the blocks that we want to process 
- toIterWorkQueueShmem =  @cuStaticSharedMem(UInt32,32)
- #indicates where we are in general work queue in given moment if we are iterating over part of work queue owned by this thread block
- positionInLocalWorkQueaue =  @cuStaticSharedMem(UInt16,1)
  #boolean usefull in the iterating over private part of work queue 
  isAnyBiggerThanZero =  @cuStaticSharedMem(Bool,1)
-#  #used for iterating over a tail
-#  tailCounterInShmem= @cuStaticSharedMem(UInt16,1)
-#  workCounterInshmem= @cuStaticSharedMem(UInt16,1)
-
  #loading data to shared memory from global about is it even or odd pass
- isOddPassShmem =  @cuStaticSharedMem(Bool,1)
  iterationNumberShmem =  @cuStaticSharedMem(UInt16,1)
  #current spot in tail - usefull to save where we need to access the tail to get proper block
-#  currentTailPosition =  @cuStaticSharedMem(UInt16,1)
  #shared memory variables needed to marks wheather we are already finished with  any dilatation step
  goldToBeDilatated =  @cuStaticSharedMem(Bool,1)
  segmToBeDilatated =  @cuStaticSharedMem(Bool,1)
@@ -82,7 +72,6 @@ alreadyCoveredInQueues =@cuStaticSharedMem(UInt32,(14))
  @ifXY 1 1 iterationNumberShmem[1]= 0
  @ifXY 2 1 isAnyBiggerThanZero[1]= 0
 #  @ifXY 3 1 tailCounterInShmem[1]= 0
- @ifXY 4 1 workCounterInshmem[1]= 0
  @ifXY 5 1 isOddPassShmem[1]= 0
  @ifXY 6 1 currentTailPosition[1]= 0
  @ifXY 7 1 goldToBeDilatated[1]= 0
@@ -122,29 +111,12 @@ main loop logic
 macro mainLoop()
     return esc(quote
     MetadataAnalyzePass.@setMEtaDataOtherPasses(locArr,offsetIter,iterThrougWarNumb, globalCurrentFpCount, globalCurrentFnCount)
-    # loadOwnedWorkQueueIntoShmem(mainWorkQueue,mainQuesCounter,toIterWorkQueueShmem,positionInMainWorkQueaue ,numberOfThreadBlocks,tailParts)
-    # #at this point if we have anything in the private part of the  work queue we will have it in toIterWorkQueueShmem, in case  we will find some 0 inside it means that queue is exhousted and we need to loo into tail
-    # #we are analyzing here data  from private part of work queue
-    # while(isAnyBiggerThanZero[]) #isAnyBiggerThanZero will be modified inside @privateWorkQueueAnalysis
-    #     @privateWorkQueueAnalysis()
-    # end#while
-    # @ifXY 4 4 currentTailPosition[1]= CUDA.atomic_inc!(pointer(tailCounter), UInt16(1))+1
-
-    # # in this moment we have nothing left in private part of work queue and we need to check is there sth in tail to process
-    # #first load data of tail counter once
-
-    # sync_threads()
-    # while (currentTailPosition[1]< workCounterInshmem[1])
-    #     @analyzeTail()
-    # end
-
-    # #we are just negiting it so it should be the same in all blocks
-    # @ifXY 1 1 isOddPassShmem[1]= !isOddPassShmem[1]
-    # #if we are here it means we had covered all blocks that were marked as active and we need to prepare to next dilatation step
-
-    # sync_grid(grid_handle)
-    #     @prepareForNextDilation()
-    # sync_grid(grid_handle)
+    sync_grid(grid_handle)
+    loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,iterationNumber,positionInMainWorkQueaue,workCounterInshmem,mainQuesCounterArr,isAnyBiggerThanZero,goldToBeDilatated,segmToBeDilatated, resArraysCounters  )
+    sync_threads()
+    @iterateOverWorkQueue(workQueauecounter,workQueaue,goldToBeDilatated, segmToBeDilatated,shmemSumLengthMaxDiv4,begin 
+#        @executeDataIterWithPadding(isGoldPass,isToBeAnalyzedMain)
+    end) 
 end) #quote
 end#mainLoop
 
@@ -167,34 +139,63 @@ macro iterateOverWorkQueue(workQueauecounter,workQueaue,goldToBeDilatated, segmT
     numbOfDataBlockPerThreadBlock = cld(workQueauecounter[1],gridDimX() )
 
     #we need to stuck all of the blocks data into shared memory 4 entries for each block
-    @unroll for outerIter in 0: fld((numbOfDataBlockPerThreadBlock),shmemSumLengthMaxDiv4)
-        workQuueueLinearIndexOffset = (((numbOfDataBlockPerThreadBlock-1)*4)*(blockIdxX()-1))+(outerIter*shmemSumLengthMaxDiv4)
+    @unroll for outerIter in 0: fld((numbOfDataBlockPerThreadBlock*4),shmemSumLengthMaxDiv4)
+        # workQuueueLinearIndexOffset = ((((numbOfDataBlockPerThreadBlock)*4 ))*(blockIdxX()-1))+ (outerIter*shmemSumLengthMaxDiv4)
+        workQuueueLinearIndexOffset = ((((numbOfDataBlockPerThreadBlock)*4 ))*(blockIdxX()-1))+ (outerIter*shmemSumLengthMaxDiv4)
         # now we load all needed data into shared memory
-        @iterateLinearly cld(blockDimX()*blockDimY(),shmemSumLengthMaxDiv4) shmemSumLengthMaxDiv4 begin
+        @iterateLinearly cld(shmemSumLengthMaxDiv4,blockDimX()*blockDimY()) shmemSumLengthMaxDiv4 begin
             #checking if we are in range
             workQuueueLinearIndex =workQuueueLinearIndexOffset +i
-            if(workQuueueLinearIndex<=(workQueauecounter[1]*4))
-                #CUDA.@cuprint "workQuueueLinearIndex $(Int64(workQuueueLinearIndex))  (((numbOfDataBlockPerThreadBlock-1)*4) $((((numbOfDataBlockPerThreadBlock-1)*4)))  (((numbOfDataBlockPerThreadBlock-1)*4)*(blockDimX()-1)) $((((numbOfDataBlockPerThreadBlock-1)*4)*(blockDimX()-1))) (outerIter*shmemSumLengthMaxDiv4) $((outerIter*shmemSumLengthMaxDiv4))  workQueaue[workQuueueLinearIndex] $(Int64(workQueaue[workQuueueLinearIndex])) \n"
-                shmemSum[i]= workQueaue[workQuueueLinearIndex]  
-            end  
+
+            # sync_threads()
+            # if(workQuueueLinearIndex>(480) && workQuueueLinearIndex<=36*14 )
+            #     CUDA.@cuprint " workQuueueLinearIndex  $(workQuueueLinearIndex)  i $(i) < $(shmemSumLengthMaxDiv4)  aa$(((outerIter*shmemSumLengthMaxDiv4)+i))< bb $((numbOfDataBlockPerThreadBlock*4))  cc $((workQueauecounter[1]*4))   blockidX $(blockIdxX()) i $(i) outerIter $(outerIter) numbOfDataBlockPerThreadBlock $(numbOfDataBlockPerThreadBlock)  shmemSumLengthMaxDiv4 $(shmemSumLengthMaxDiv4) workQuueueLinearIndexOffset $(workQuueueLinearIndexOffset)  \n "
+            # end
+            # sync_threads()
+
+            if(i<=shmemSumLengthMaxDiv4 )
+
+                if( ((outerIter*shmemSumLengthMaxDiv4)+i)<=((numbOfDataBlockPerThreadBlock*4)) && workQuueueLinearIndex<=(workQueauecounter[1]*4)  )
+                    # if(workQuueueLinearIndex>(480) && workQuueueLinearIndex<=36*14 )
+                    #     CUDA.@cuprint " workQuueueLinearIndex  $(workQuueueLinearIndex)  i $(i) < $(shmemSumLengthMaxDiv4)  aa$(((outerIter*shmemSumLengthMaxDiv4)+i))<  $((numbOfDataBlockPerThreadBlock*4))   bb $(workQuueueLinearIndex) < $((workQueauecounter[1]*4))   blockidX $(blockIdxX()) i $(i) outerIter $(outerIter) numbOfDataBlockPerThreadBlock $(numbOfDataBlockPerThreadBlock)  shmemSumLengthMaxDiv4 $(shmemSumLengthMaxDiv4) workQuueueLinearIndexOffset $(workQuueueLinearIndexOffset)  \n "
+                    # end
+                    # if(workQuueueLinearIndex>(79*4))
+            #     CUDA.@cuprint " workQuueueLinearIndex  $(workQuueueLinearIndex)  loops $(cld(shmemSumLengthMaxDiv4,blockDimX()*blockDimY()))  i $(i) < $(shmemSumLengthMaxDiv4)  aa$(((outerIter*shmemSumLengthMaxDiv4)+i))< bb $((numbOfDataBlockPerThreadBlock*4))  cc $((workQueauecounter[1]*4))   blockidX $(blockIdxX()) i $(i) outerIter $(outerIter) numbOfDataBlockPerThreadBlock $(numbOfDataBlockPerThreadBlock)  shmemSumLengthMaxDiv4 $(shmemSumLengthMaxDiv4) workQuueueLinearIndexOffset $(workQuueueLinearIndexOffset)  \n "
+            # end
+                    #CUDA.@cuprint "workQuueueLinearIndex $(Int64(workQuueueLinearIndex))  (((numbOfDataBlockPerThreadBlock-1)*4) $((((numbOfDataBlockPerThreadBlock-1)*4)))  (((numbOfDataBlockPerThreadBlock-1)*4)*(blockDimX()-1)) $((((numbOfDataBlockPerThreadBlock-1)*4)*(blockDimX()-1))) (outerIter*shmemSumLengthMaxDiv4) $((outerIter*shmemSumLengthMaxDiv4))  workQueaue[workQuueueLinearIndex] $(Int64(workQueaue[workQuueueLinearIndex])) \n"
+                shmemSum[i] = workQueaue[workQuueueLinearIndex]
+                else
+                    shmemSum[i] =0      
+                end
+            end
+            
         end
+        sync_threads()
     #at this point we had pushed into shared memory as much data as we can fit so we need to start using it         
     #second part proper iteration by definition no rounding needed here 
     #also we do not make here any attempt of parallelization as this will be done inside the expression we just provide actual metadata for dilatation step
-        for shmemIndex in 0:fld(shmemSumLengthMaxDiv4,4)
-            if((workQuueueLinearIndexOffset+shmemIndex)<numbOfDataBlockPerThreadBlock )
+        for shmemIndex in 0:(fld(shmemSumLengthMaxDiv4,4)-1)
+            #CUDA.@cuprint " iind $(shmemIndex*4+4) fld(shmemSumLengthMaxDiv4,4) $(shmemSumLengthMaxDiv4) \n"
+            # @ifXY 1 1  CUDA.@cuprint "xIndex $(shmemIndex*4+1)  shmemIndex $(shmemIndex) indd $((outerIter*shmemSumLengthMaxDiv4)+shmemIndex) outerIter $(outerIter)   blockidX $(blockIdxX()) numbOfDataBlockPerThreadBlock $(numbOfDataBlockPerThreadBlock) shmemSumLengthMaxDiv4 $(shmemSumLengthMaxDiv4) \n  "#yMeta $(yMeta)  zMeta $(zMeta) isGold $(isGold) \n "
 
-            #data used block wide
+            # if(((outerIter*shmemSumLengthMaxDiv4)+shmemIndex)<=numbOfDataBlockPerThreadBlock) #shmemSum[shmemIndex*4+1]>0
+            if( ((shmemIndex+1)*4 <=shmemSumLengthMaxDiv4 ) && shmemSum[shmemIndex*4+1]>0  ) #shmemSum[shmemIndex*4+1]>0
+            #if(shmemSum[shmemIndex*4+1]>0 )
+           # @ifXY 1 1  CUDA.@cuprint " indd $(workQuueueLinearIndexOffset+shmemIndex) \n "
+
+            # data used block wide
             xMeta= shmemSum[shmemIndex*4+1]
             yMeta= shmemSum[shmemIndex*4+2]
             zMeta= shmemSum[shmemIndex*4+3]
             isGold= shmemSum[shmemIndex*4+4]
-            #checking is there any point in futher dilatations of this block
-            if((isGold==1 && goldToBeDilatated[1]) || (isGold==0 && segmToBeDilatated[1]) )
+#sync_threads()
+            # checking is there any point in futher dilatations of this block
+            #if((isGold==1 && goldToBeDilatated[1]) || (isGold==0 && segmToBeDilatated[1]) )
                 #finally all ready for dilatation step to be executed on this particular block
-                @ifXY 1 1  CUDA.@cuprint " xMeta $(xMeta) yMeta $(yMeta)  zMeta $(zMeta) isGold $(isGold) \n "
+                # @ifXY 1 1  CUDA.@cuprint " xMeta $(xMeta) yMeta $(yMeta)  zMeta $(zMeta) isGold $(isGold) \n "
+                #@ifXY 1 1  CUDA.@cuprint " xMeta $(xMeta) shmemIndex $(shmemIndex) indd $(shmemIndex*4+1) outerIter $(outerIter)  range $(fld(shmemSumLengthMaxDiv4,4))  numbOfDataBlockPerThreadBlock $(numbOfDataBlockPerThreadBlock) \n "
                 $ex 
-            end    
+            #end    
             end#if in range
         end# main functional loop for dilatation and validation  
     end#outer for 
@@ -208,17 +209,17 @@ function mainLoopKernel()
 
     @mainLoopKernelAllocations(datBdim)
     MetadataAnalyzePass.@analyzeMetadataFirstPass()
-    @ifXY 1 1 iterationNumberShmem[1]+=1
+    loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,iterationNumber,positionInMainWorkQueaue,workCounterInshmem,mainQuesCounterArr,isAnyBiggerThanZero,goldToBeDilatated,segmToBeDilatated, resArraysCounters  )    
     sync_grid(grid_handle)
     #loadDataAtTheBegOfDilatationStep(true,iterationNumberShmem,iterationNumber,positionInMainWorkQueaue,workCounterInshmem,mainQuesCounterArr,isAnyBiggerThanZero,goldToBeDilatated,segmToBeDilatated, resArraysCounters  )
     
     sync_threads()
     #we check first wheather next dilatation step should be done or not we also establish some shared memory variables to know wheather both passes should continue or just one
     # checking weather we already finished so we need to check    
-    # - is amount of results related to gold mask dilatations is equal to false positives
-    # - is amount of results related to other  mask dilatations is equal to false negatives
+    # - is amount of results related to gold mask dilatations is equal to false positives or given percent of them
+    # - is amount of results related to other  mask dilatations is equal to false negatives or given percent of them
     # - is amount of workQueue that we will want to analyze now is bigger than 0 
-    while(goldToBeDilatated[1] && segmToBeDilatated[1] && workCounterBiggerThan0[1])
+    while((goldToBeDilatated[1] || segmToBeDilatated[1]) && workCounterBiggerThan0[1])
         @mainLoop()
     end#while we did not yet finished    
 
@@ -290,6 +291,7 @@ end    #prepareForNextDilation
 """
 loads data at the begining of each dilatation step
     we need to set some variables in shared memory ro initial values
+    fp, fn  
 """
 function loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,iterationNumber,positionInMainWorkQueaue,workCounterInshmem,mainQuesCounterArr,isAnyBiggerThanZero,goldToBeDilatated,segmToBeDilatated, resArraysCounters  )
     #so we know that becouse of sync grid we will have evrywhere the same  iterationNumberShmem and positionInMainWorkQueaue
@@ -297,12 +299,12 @@ function loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,it
     @ifXY 1 1 iterationNumberShmem[1]+=1
     #@ifXY 2 2 positionInMainWorkQueaue[1]=0 
 
-    @ifXY 3 3 begin
+    @ifXY 2 1 begin
         workCounterInshmem[1]= mainQuesCounterArr[isOddPassShmem[1]+1]
         workCounterBiggerThan0[1]= (workCounterInshmem[1]>0)
                     end 
-    @ifXY 4 4 goldToBeDilatated[1]=(resArraysCounters[2] < fp[1])
-    @ifXY 5 5 segmToBeDilatated[1]=(resArraysCounters[1] < fn[1])
+    @ifXY 3 1 goldToBeDilatated[1]=(resArraysCounters[2] < fp[1])
+    @ifXY 4 1 segmToBeDilatated[1]=(resArraysCounters[1] < fn[1])
 
 end
 
