@@ -10,27 +10,7 @@ export    clearLocArr,clearMainShmem,clearPadding
 export @iter3dOuter,@iterDataBlock
 
 
-"""
-adding result to the result list at correct postion using data from metaData - so we get from the metadata offset and result counter 
-metadata - 4 dimensional array holding metaData
-xMeta,yMeta,zMeta -  x,y,z coordinates of block of intrest in meta Data
-resList - list of result (matrix to be more precise) where we will wrtie the results
-x,y,z - coordinates where we found point of intrest 
-dir - direction from which dilatation covering this voxel had happened
-queueNumber - what fp or fn queue we are intrested in modyfing now 
-metaDataDims - dimensions of metadata array
-isGold - indicated is this a gold dilatation step (then it will evaluate to 1 otherwise 0 )
-"""
-function addResult(metaData ,xMeta,yMeta,zMeta, resList,x,y,z, dir,queueNumber,metaDataDims ,isGold  )
- linearIndex = xMeta + (yMeta-1)*metaDataDims[1] + (zMeta-1)*metaDataDims[1]*metaDataDims[2] + (getNewCountersBeg()+queueNumber)*metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
- count = atomicallyAddToSpot( metaData,linearIndex,UInt32(1) ) # value of counter before this addition
- resListPos = metaData[xMeta,yMeta,zMeta, getResOffsetsBeg() +queueNumber ]+count
- resList[ resListPos, 1]=x 
- resList[ resListPos, 2]=y 
- resList[ resListPos, 3]=z 
- resList[ resListPos, 4]= isGold
- resList[ resListPos, 5]= dir
-end
+
 
 """
 specialization of 2 dim iteration  for iterating over 3 dimensional metadata

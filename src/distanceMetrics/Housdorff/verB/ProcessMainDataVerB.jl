@@ -1,6 +1,6 @@
 module ProcessMainDataVerB
 using CUDA, Logging,Main.CUDAGpuUtils,Main.WorkQueueUtils, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils
-export @processMaskData
+export calculateLoopsIter,@processMaskData
 
 
 
@@ -207,17 +207,17 @@ refArr - array we will check weather dilatation had covered any new intresting v
 resList - list with result
 dir - direction from which we performed dilatation
 queueNumber - what fp or fn queue we are intrested in modyfing now 
+,xMeta,yMeta,zMeta - metadata x y z coordinates
 """
-macro paddingIter(loopX,loopY,maxXdim, maxYdim,a,b,c , xMetaChange,yMetaChange,zMetaChange, mainArr, dir,queueNumber)
+macro paddingIter(loopX,loopY,maxXdim, maxYdim,a,b,c , xMetaChange,yMetaChange,zMetaChange, mainArr, dir,queueNumber,xMeta,yMeta,zMeta)
 
     mainExp = generalizedItermultiDim(
-    ,arrDims=:()
+    arrDims=:()
     ,loopXdim=loopXMeta 
     ,loopYdim=loopYMeta
-
 #     ,additionalActionBeforeY= :( yMeta= rem(yzSpot,$metaDataDims[2]) ; zMeta= fld(yzSpot,$metaDataDims[2]) )
     ,additionalActionBeforeX= quote
-            value = $resShmem
+            value = resShmem
         end#quote
        ,isFullBoundaryCheckX =true
    , isFullBoundaryCheckY=true
@@ -231,85 +231,99 @@ macro paddingIter(loopX,loopY,maxXdim, maxYdim,a,b,c , xMetaChange,yMetaChange,z
     ,is3d = false
     , ex = esc(quote
             if(resShmem[$a,$b,$c])
-                $isAnyPositive[1]=true# indicating that we have sth positive in this padding
+                @inbounds resShmem[dir,1,1]=true# indicating that we have sth positive in this padding we are using a corner of the result shmem that will not be used in dilatation steps
                 #below we do actual dilatation
-                mainArr[(xMeta-1)*$dataBdim[1]+$a,(yMeta-1)*$dataBdim[2]+$b,(zMeta-1)*$dataBdim[3]+$c]=true
-                if(isToBeValidated)
-                    #if we have true in reference array in analyzed spot
-                    if(refArr[(xMeta-1)*$dataBdim[1]+$a,(yMeta-1)*$dataBdim[2]+$b,(zMeta-1)*$dataBdim[3]+$c])
-                        #adding the result to the result list at correct spot - using metadata taken from metadata
-                        addResult([xMeta+xMetaChange,yMeta+yMetaChange,zMeta+zMetaChange, $resList,(xMeta-1)*$dataBdim[1]+$a,(yMeta-1)*$dataBdim[2]+$b, (zMeta-1)*$dataBdim[3]+$c, $dir, $queueNumber,metaDataDims ,isGold    )
-                    
+                if($xMeta+$xMetaChange>0 && $xMeta+$xMetaChange<=metaDataDims[1]  && $yMeta+$yMetaChange>0 && $yMeta+$yMetaChange<=metaDataDims[2] && $zMeta+$zMetaChange>0 && $zMeta+$zMetaChange<=metaDataDims[3]  )
+                    @inbounds mainArr[($xMeta-1)*$dataBdim[1]+$a,($yMeta-1)*$dataBdim[2]+$b,($zMeta-1)*$dataBdim[3]+$c]=true
+                    if(isToBeValidated)
+                        #if we have true in reference array in analyzed spot
+                        if(refArr[($xMeta-1)*$dataBdim[1]+$a,($yMeta-1)*$dataBdim[2]+$b,($zMeta-1)*$dataBdim[3]+$c])
+                            #adding the result to the result list at correct spot - using metadata taken from metadata
+                            addResult($xMeta+$xMetaChange,$yMeta+$yMetaChange,zMeta+$zMetaChange, $resList,($xMeta-1)*$dataBdim[1]+$a,($yMeta-1)*$dataBdim[2]+$b, ($zMeta-1)*$dataBdim[3]+$c, $dir, $queueNumber,metaDataDims ,$isGold    )
+                        end
                     end
                 end
             end
-               krowa add this outside of the data block iter loop
-
             end))  
     return esc(:( $mainExp))
 end
    
-loopAXFixed= cld(dataBdim[2], blockDimX())
-loopBXfixed= cld(dataBdim[3], blockDimY())
-        
-loopAYFixed= cld(dataBdim[1], blockDimX())
-loopBYfixed= cld(dataBdim[3], blockDimY())
-        
-loopAZFixed= cld(dataBdim[1], blockDimX())
-loopBZfixed= cld(dataBdim[2], blockDimY())
- 
-"""
-after padding iter it checks is there was any true in this padding if so it will mark the appropriate metadata entry as isToBeActivated
-"""
-macro checkIsToBeActivated()
-                sync_threads()
-             #we set the next block to be activated in gold or other pass 
-            @ifXY 1 1 if(isAnyPositive[1]) metaData[xMeta+xMetaChange,yMeta+yMetaChange,zMeta+zMetaChange,getIsToBeActivatedInSegmNumb()-isGold  ]=1 end
-            @ifXY 2 1 $isAnyPositive[1]=false 
-            sync_threads()
-    
-end
 
 """
-executes paddingIter
+invoked before kernel execution in order to set number of needed loop iterations
+dataBdim - dimensions of the data block 
+threadsXdim  - x dimension of the thread block
+threadsYdim  - y dimension of the thread block
+return tuple with numbers indicating how many iterations are needed in the loops of the kernel
 """
-macro processPadding()
-    krowa wrong numbers as direction and generally this needs rethinking !
-    #process left padding
-    @paddingIter(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3], ,1,:(x),:(y) , 1,0,0,  mainArr,1, queuenumbbbb)
-    @checkIsToBeActivated()
-    #process rigth padding
-    @paddingIter(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3], dataBdim[1],:(x),:(y) , -1,0,0,  mainArr,resList,2, queuenumbbbb)
-    @checkIsToBeActivated()
-    #process anterior padding
-    @paddingIter(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], :(x),1,:(y) , 0,1,0,  mainArr,4, queuenumbbbb)
-    @checkIsToBeActivated()
-    #process posterior padding
-    @paddingIter(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], :(x),dataBdim[2],:(y) , 0,-1,0,  mainArr,3, queuenumbbbb)
-    @checkIsToBeActivated()
-    #process top padding
-    @paddingIter(loopAZFixed,loopBZfixed,dataBdim[1], dataBdim[2], :(x),:(y),1 ,0,0,1,  mainArr,5, queuenumbbbb)
-    @checkIsToBeActivated()
-    #process bottom padding
-    @paddingIter(loopAZFixed,loopBZfixed,dataBdim[1], dataBdim[2], :(x),:(y),dataBdim[3] , 0,0,-1, mainArr,6, queuenumbbbb)
-    @checkIsToBeActivated()
+function calculateLoopsIter(dataBdim,threadsXdim,threadsYdim)
+    loopAXFixed= cld(dataBdim[2], threadsXdim)
+    loopBXfixed= cld(dataBdim[3], threadsYdim)
+            
+    loopAYFixed= cld(dataBdim[1], threadsXdim)
+    loopBYfixed= cld(dataBdim[3], threadsYdim)
+            
+    loopAZFixed= cld(dataBdim[1], threadsXdim)
+    loopBZfixed= cld(dataBdim[2], threadsYdim)
+
+    loopdataDimMainX = cld(dataBdim[1], threadsXdim)
+    loopdataDimMainY = cld(dataBdim[2], threadsYdim)
+    loopdataDimMainZ =dataBdim[2]
+
+return (loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ) 
+
+end    
+
+
+"""
+executes paddingIter over all paddings 
+"""
+macro processPadding(isGold,xMeta,yMeta,zMeta)
+    return esc(quote
+
+    @checkIsToBeActivated should be invoked once
+        #process left padding
+        @paddingIter(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3],1,:(x),:(y) , -1,0,0,  mainArr,1, 4-$isGold,$xMeta,$yMeta,$zMeta)
+        #process rigth padding
+        @paddingIter(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3], dataBdim[1],:(x),:(y) , 1,0,0,  mainArr,2, 2-$isGold,$xMeta,$yMeta,$zMeta)
+        #process posterior padding
+        @paddingIter(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], :(x),1,:(y) , 0,-1,0,  mainArr,3, 8-$isGold,$xMeta,$yMeta,$zMeta)
+        #process anterior padding
+        @paddingIter(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], :(x),dataBdim[2],:(y) , 0,1,0,  mainArr,4, 6-$isGold,$xMeta,$yMeta,$zMeta)
+        #process top padding
+        @paddingIter(loopAZFixed,loopBZfixed,dataBdim[1], dataBdim[2], :(x),:(y),1 ,0,0,-1,  mainArr,5, 12-$isGold,$xMeta,$yMeta,$zMeta)
+        #process bottom padding
+        @paddingIter(loopAZFixed,loopBZfixed,dataBdim[1], dataBdim[2], :(x),:(y),dataBdim[3] , 0,0,1, mainArr,6, 10-$isGold,$xMeta,$yMeta,$zMeta)
+        #checking res  shmem (we used part that is unused in  dilatation step) 
+        sync_threads()
+        @ifXY 1 1 setNextBlockAsIsToBeActivated(@inbounds resShmem[1,1,1] ,-1,0,0,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
+        @ifXY 2 1 setNextBlockAsIsToBeActivated(@inbounds resShmem[2,1,1] ,1,0,0,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
+        @ifXY 3 1 setNextBlockAsIsToBeActivated(@inbounds resShmem[3,1,1] ,0,-1,0,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
+        @ifXY 4 1 setNextBlockAsIsToBeActivated(@inbounds resShmem[4,1,1] ,0,1,0,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
+        @ifXY 5 1 setNextBlockAsIsToBeActivated(@inbounds resShmem[5,1,1] ,0,0,-1,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
+        @ifXY 6 1 setNextBlockAsIsToBeActivated(@inbounds resShmem[6,1,1] , 0,0,1,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
+        sync_threads()
+
+    end)
 
 end#processPadding
            
-1)   Left FP  
-2)   Left FN  
-3)   Right FP  
-4)   Right FN  
-5)   Posterior FP  
-6)   Posterior FN  
-7)   Anterior FP  
-8)   Anterior FN  
-9)   Top FP  
-10)   Top FN  
-11)   Bottom FP  
-12)   Bottom FN  
-13)   main block Fp  
-14)   main block Fn  
+"""
+In case we have any true in padding we need to set the next block as to be activated 
+yet we need also to test wheather next block in this direction actually exists so we check metadata dimensions
+metaData - multidim array with metadata about data blocks
+isToBeActivated - boolean taken from res shmem indicating weather there was any  true in related direction
+xMeta,yMeta,zMeta - current metadata spot 
+isGold - indicating wheather we are in gold or other pass
+xMetaChange,yMetaChange,zMetaChange - points in which direction we should go in analyzis of metadata - how to change current metaData 
+metaDataDims - dimensions of metadata
+
+"""
+function setNextBlockAsIsToBeActivated(isToBeActivated::Bool,xMetaChange,yMetaChange,zMetaChange,xMeta,yMeta,zMeta,isGold,  metaData, metaDataDims)
+   if(isToBeActivated && xMeta+xMetaChange<=metaDataDims[1]  && yMeta+yMetaChange>0 && yMeta+yMetaChange<=metaDataDims[2] && zMeta+zMetaChange>0 && zMeta+zMetaChange<=metaDataDims[3]) 
+    metaData[xMeta+xMetaChange,yMeta+yMetaChange,zMeta+zMetaChange,getIsToBeActivatedInSegmNumb()-isGold  ]=1 
+    end
+end
 
 
 

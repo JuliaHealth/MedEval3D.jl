@@ -307,7 +307,7 @@ end
              end
                 #now we need to set old caounters to the value of new counters so at next dilatation we will count only new values ...
             for i in 1:14
-                @exOnWarp (i+37) metaData[xMeta, yMeta+1,zMeta+1, getOldCountersBeg() +i ]=metaData[xMeta, yMeta+1,zMeta+1, getNewCountersBeg() +i ]
+                @exOnWarp (i+37) metaData[xMeta, (yMeta+1),(zMeta+1), (getOldCountersBeg() +i) ]=metaData[xMeta, (yMeta+1),(zMeta+1), (getNewCountersBeg() +i) ]
             end  
             $locArr=0
             $offsetIter=0

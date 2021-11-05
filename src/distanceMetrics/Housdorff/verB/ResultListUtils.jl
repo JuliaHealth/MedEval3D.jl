@@ -5,8 +5,8 @@
 utility functions helping managing result list 
 """
 module ResultListUtils
-using CUDA
-export getResLinIndex,allocateResultLists
+using CUDA,Main.MetaDataUtils, Main.CUDAAtomicUtils
+export getResLinIndex,allocateResultLists,addResult
 
 """
 allocate memory on GPU for storing result list 
@@ -28,6 +28,36 @@ resRow - array where first 3 entries are x,y,z positions then is gold,
  function getResLinIndex(x,y,z,isGold,mainArrDims)
     # last one is in order to differentiate between gold pass and other pass ...
     return x+ y*mainArrDims[1]+ z* mainArrDims[1]*mainArrDims[2]+ isGold*mainArrDims[1]*mainArrDims[2]*mainArrDims[3]  
+ end
+
+
+
+ """
+ adding result to the result list at correct postion using data from metaData - so we get from the metadata offset and result counter 
+ metadata - 4 dimensional array holding metaData
+ xMeta,yMeta,zMeta -  x,y,z coordinates of block of intrest in meta Data
+ resList - list of result (matrix to be more precise) where we will wrtie the results
+ resListIndicies - list of indicies related to results
+ x,y,z - coordinates where we found point of intrest 
+ dir - direction from which dilatation covering this voxel had happened
+ queueNumber - what fp or fn queue we are intrested in modyfing now 
+ metaDataDims - dimensions of metadata array
+mainArrDims - dimensions of main array
+ isGold - indicated is this a gold dilatation step (then it will evaluate to 1 otherwise 0 )
+ """
+ function addResult(metaData ,xMeta,yMeta,zMeta, resList,resListIndicies,x,y,z, dir,iterNumb,queueNumber,metaDataDims,mainArrDims ,isGold  )
+  linearIndex = xMeta + (yMeta-1)*metaDataDims[1] + (zMeta-1)*metaDataDims[1]*metaDataDims[2] + (getNewCountersBeg()+queueNumber)*metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
+  count = atomicallyAddToSpot( metaData,linearIndex,UInt32(1) ) # value of counter before this addition
+  resListPos = (metaData[xMeta,yMeta,zMeta, (getResOffsetsBeg() +queueNumber) ]+count)
+  resList[ resListPos, 1]=x 
+  resList[ resListPos, 2]=y 
+  resList[ resListPos, 3]=z 
+  resList[ resListPos, 4]= isGold
+  resList[ resListPos, 5]= dir
+  resList[ resListPos, 6]= iterNumb
+
+  resListIndicies[resListPos]=getResLinIndex(x,y,z,isGold,mainArrDims)
+  
  end
 
 end#ResultListUtils

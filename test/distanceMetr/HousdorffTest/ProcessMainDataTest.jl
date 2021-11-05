@@ -108,3 +108,48 @@ end
 filter(cart-> resShmem[cart], CartesianIndices(resShmem)  )
 
 
+
+
+
+
+
+#################  paddingIter
+using Revise, Parameters, Logging, Test
+using CUDA
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
+using Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils,Main.ResultListUtils
+
+
+
+threads=(32,5);
+blocks =17;
+mainArrDims= (67,177,90);
+datBdim = (43,21,17);
+mainArrCPU= falses(mainArrDims);
+mainArrCPU[5,5,5]= true;
+mainArrCPU[33,10,7]= true;
+mainArrGPU = CuArray(mainArrCPU);
+metaData = MetaDataUtils.allocateMetadata(mainArrDims,datBdim);
+metaDataDims= size(metaData);
+
+loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ = calculateLoopsIter(dataBdim,threads[1],threads[2])
+#for start we will get top padding
+
+function paddingIterKernel(loopX,loopY,maxXdim, maxYdim,a,b,c , xMetaChange,yMetaChange,zMetaChange, mainArr, dir,queueNumber,xMeta,yMeta,zMeta )
+    @iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
+    begin 
+        #@ifXY 1 1    CUDA.@cuprint "  xMeta $(xMeta) yMeta $(yMeta)  zMeta $(zMeta) \n"   
+
+        @iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
+        begin
+            ProcessMainDataVerB.@loadMainValues( mainArrGPU)
+
+    end)end)
+    
+    return
+end
+
+@cuda threads=threads blocks=blocks processDataKernel(mainArrGPU,sourceShmem,resShmem,mainArrDims,metaDataDims,loopXMeta,loopYZMeta,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ )
+@test  resShmem[5+1,5+1,5+1]==false
+
