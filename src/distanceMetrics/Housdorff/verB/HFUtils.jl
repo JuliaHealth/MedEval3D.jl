@@ -6,10 +6,72 @@ module HFUtils
 using Main.CUDAGpuUtils, Logging,StaticArrays
  using CUDA, Main.BasicStructs, Logging
  using Main.CUDAGpuUtils ,Main.IterationUtils
-export    clearLocArr,clearMainShmem,clearPadding
-export @iter3dOuter,@iterDataBlock
+export    clearLocArr,clearMainShmem,clearPadding,getIndexOfQueue
+export @iter3dOuter,@iterDataBlock , calculateLoopsIter
 
 
+
+
+"""
+invoked before kernel execution in order to set number of needed loop iterations
+dataBdim - dimensions of the data block 
+threadsXdim  - x dimension of the thread block
+threadsYdim  - y dimension of the thread block
+return tuple with numbers indicating how many iterations are needed in the loops of the kernel
+"""
+function calculateLoopsIter(dataBdim,threadsXdim,threadsYdim)
+    loopAXFixed= fld(dataBdim[2], threadsXdim)
+    loopBXfixed= fld(dataBdim[3], threadsYdim)
+            
+    loopAYFixed= fld(dataBdim[1], threadsXdim)
+    loopBYfixed= fld(dataBdim[3], threadsYdim)
+            
+    loopAZFixed= fld(dataBdim[1], threadsXdim)
+    loopBZfixed= fld(dataBdim[2], threadsYdim)
+
+    loopdataDimMainX = fld(dataBdim[1], threadsXdim)
+    loopdataDimMainY = fld(dataBdim[2], threadsYdim)
+    loopdataDimMainZ =dataBdim[2]
+    inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(dataBdim[1] ,threadsXdim),fld(dataBdim[2] ,threadsYdim),dataBdim[3]    );
+
+return (loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ) 
+
+end    
+
+"""
+1)   Left FP  
+2)   Left FN  
+3)   Right FP  
+4)   Right FN  
+5)   Posterior FP  
+6)   Posterior FN  
+7)   Anterior FP  
+8)   Anterior FN  
+9)   Top FP  
+10)   Top FN  
+11)   Bottom FP  
+12)   Bottom FN  
+13)   Total block Fp  
+14)   Total block Fn  
+
+xpos,ypos,zpos -current  position in x,y,z dimension 
+datBdim - dimensions of the data block
+
+on the basis of the data it should give the index from 1 to 14 - to the appropriate queue
+"""
+function getIndexOfQueue(xpos,ypos,zpos, datBdim,boolGold)
+    #we need to do so many != in order to deal with corners ...
+    return (
+     (xpos==1)*1
+    +(xpos==datBdim[1])*3
+    +(ypos==1 && xpos!=1 && xpos!=datBdim[1] )*5
+    +(ypos==datBdim[2] && xpos!=1 && xpos!=datBdim[1]  )*7
+    +(zpos==1  && xpos!=1 && xpos!=datBdim[1]  && ypos!=1 && ypos!=datBdim[2] )*9
+    +(zpos==datBdim[3] && xpos!=1 && xpos!=datBdim[1]  && ypos!=1 && ypos!=datBdim[2])*11
+    +(xpos>1 && xpos<datBdim[1] &&  ypos>1 && ypos<datBdim[2] && zpos>1 && zpos<datBdim[3])*13
+    )+boolGold# in that way we will get odd for fp an even for fn
+
+end
 
 
 """
@@ -66,7 +128,32 @@ macro iterDataBlock(mainArrDims,dataBlockDims,loopXdim ,loopYdim,loopZdim,ex)
     return esc(:( $mainExp))
 end
 
-
+#macro iterDataBlock(mainArrDims,dataBlockDims,loopXdim ,loopYdim,loopZdim,ex)
+    #     mainExp = generalizedItermultiDim(;arrDims=mainArrDims
+    #     ,loopXdim
+    #     ,loopYdim
+    #     ,loopZdim
+    #     # ,xCheck = :((xMeta* $dataBlockDims[1]+x)<=$mainArrDims[1] )
+    #     # ,yCheck = :((yMeta* $dataBlockDims[2]+y)<=$mainArrDims[2])
+    #     # ,zCheck = :( (zMeta* $dataBlockDims[3]+z)<=$mainArrDims[3])
+    #     ,xCheck = :(((xdim * blockDimX())+threadIdxX()) <= $dataBlockDims[1] && x<=$mainArrDims[1])
+    #     ,yCheck = :(((ydim * blockDimY())+threadIdxY()) <= $dataBlockDims[2] && y<=$mainArrDims[2])
+    #     ,zCheck = :((zdim+1) <= $dataBlockDims[3]  &&   z <= $mainArrDims[3])
+    #     ,zOffset= :((zMeta-1)* ( ($dataBlockDims[3])))
+    #     ,zAdd =:(zdim+1)
+    #    ,yOffset = :(ydim* blockDimY()+(yMeta-1)* $dataBlockDims[2])
+    #    ,yAdd= :(threadIdxY())
+    #    ,xOffset= :( (xdim * blockDimX()) +(xMeta-1)* $dataBlockDims[1])
+    #     ,xAdd= :(threadIdxX())
+    #     ,isFullBoundaryCheckX =true
+    #     , isFullBoundaryCheckY=true
+    #     , isFullBoundaryCheckZ=true
+    #     ,additionalActionBeforeX=  :(xpos= xdim * blockDimX()+threadIdxX() ;ypos= (ydim * blockDimY())+threadIdxY() ;zpos=(zdim+1))
+    #     , ex = ex)  
+    #     return esc(:( $mainExp))
+    # end
+    
+    
 
 
 """

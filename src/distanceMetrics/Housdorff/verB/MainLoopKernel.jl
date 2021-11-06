@@ -15,20 +15,12 @@ resShmemTotalLength, sourceShmemTotalLength - total (treating as 1 dimensional a
 """
 macro clearBeforeNextDilatation( clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength, sourceShmemTotalLength)
     return esc(quote
-    #register variables
-    # locArr=0
-    # offsetIter=0
-    # localOffset=0
-    # @ifXY 1 9 oldBlockCounter[1]=0
-    #resetting the counter so when we will add to this new items it will count from 0 
+    isMaskFull=true
     @iterateLinearly clearIterResShmemLoop resShmemTotalLength  resShmem[i]=false
     @iterateLinearly clearIterSourceShmemLoop sourceShmemTotalLength  sourceShmem[i]=false
-    
-    # TODO () is it needed in dilatations or only in metadata pass
-    # for i in 1:14
-    #     @exOnWarp i shmemSum[threadIdxX(), i]
-    # end     
-    # !!!!!! clear alreadyCoveredInQueues
+    @ifY 1 if(threadIdxX()<15) areToBeValidated[threadIdxX()]=false end 
+    @ifY 2 if(threadIdxX()<7) isAnythingInPadding[threadIdxX()]=false end 
+   
 end)#quote
 end#clearBeforeNextDilatation
 
@@ -49,6 +41,10 @@ macro mainLoopKernelAllocations(datBdim)
  sourceShmem =  @cuDynamicSharedMem(Bool,($datBdim[1],$datBdim[2],$datBdim[3]))
  #for storing sums for reductions
  shmemSum =  @cuStaticSharedMem(UInt32,(36,14)) # we need this additional spots
+#used to load from metadata information are ques to be validated 
+areToBeValidated =  @cuStaticSharedMem(Bool, (14)) 
+# used to mark wheather there is any true in paddings
+isAnythingInPadding =  @cuStaticSharedMem(Bool, (6))
 # used to accumulate counts from of fp's and fn's already covered in dilatation steps
 alreadyCoveredInQueues =@cuStaticSharedMem(UInt32,(14))
  

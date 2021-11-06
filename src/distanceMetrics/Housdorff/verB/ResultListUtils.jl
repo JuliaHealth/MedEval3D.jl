@@ -6,7 +6,7 @@ utility functions helping managing result list
 """
 module ResultListUtils
 using CUDA,Main.MetaDataUtils, Main.CUDAAtomicUtils
-export getResLinIndex,allocateResultLists,addResult
+export getResLinIndex,allocateResultLists,@addResult
 
 """
 allocate memory on GPU for storing result list 
@@ -21,14 +21,6 @@ function allocateResultLists(totalFpCount,TotalFNCount)
 return (CUDA.zeros(UInt16, (totalFpCount+ TotalFNCount+1),6 ),CUDA.zeros(UInt32, (totalFpCount+ TotalFNCount+1)))
 end#allocateResultList
 
-"""
-giver the result row that holds data about covered point and in what iteration, from what direction and in what pass it was covered
-resRow - array where first 3 entries are x,y,z positions then is gold,
-"""
- function getResLinIndex(x,y,z,isGold,mainArrDims)
-    # last one is in order to differentiate between gold pass and other pass ...
-    return x+ y*mainArrDims[1]+ z* mainArrDims[1]*mainArrDims[2]+ isGold*mainArrDims[1]*mainArrDims[2]*mainArrDims[3]  
- end
 
 
 
@@ -45,19 +37,45 @@ resRow - array where first 3 entries are x,y,z positions then is gold,
 mainArrDims - dimensions of main array
  isGold - indicated is this a gold dilatation step (then it will evaluate to 1 otherwise 0 )
  """
- function addResult(metaData ,xMeta,yMeta,zMeta, resList,resListIndicies,x,y,z, dir,iterNumb,queueNumber,metaDataDims,mainArrDims ,isGold  )
-  linearIndex = xMeta + (yMeta-1)*metaDataDims[1] + (zMeta-1)*metaDataDims[1]*metaDataDims[2] + (getNewCountersBeg()+queueNumber)*metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
-  count = atomicallyAddToSpot( metaData,linearIndex,UInt32(1) ) # value of counter before this addition
-  resListPos = (metaData[xMeta,yMeta,zMeta, (getResOffsetsBeg() +queueNumber) ]+count)
-  resList[ resListPos, 1]=x 
-  resList[ resListPos, 2]=y 
-  resList[ resListPos, 3]=z 
-  resList[ resListPos, 4]= isGold
-  resList[ resListPos, 5]= dir
-  resList[ resListPos, 6]= iterNumb
+ macro addResult(metaData ,xMeta,yMeta,zMeta, resList,resListIndicies,x,y,z, dir,iterNumb,queueNumber,metaDataDims,mainArrDims ,isGold  )
+  return esc(quote
 
-  resListIndicies[resListPos]=getResLinIndex(x,y,z,isGold,mainArrDims)
-  
- end
+linearIndex = ($xMeta+1) + ($yMeta)*$metaDataDims[1] + ($zMeta)*$metaDataDims[1]*$metaDataDims[2] + (getNewCountersBeg()+$queueNumber-1)*$metaDataDims[1]*$metaDataDims[2]*$metaDataDims[3]
+  count = atomicallyAddToSpot( metaData,linearIndex,UInt32(1) ) # value of counter before this addition
+  resListPos = ($metaData[($xMeta+1),($yMeta+1),($zMeta+1), (getResOffsetsBeg() +$queueNumber) ]+count)+1
+# qn = $queueNumber
+# xm = $xMeta
+# ym = $yMeta
+# zm = $zMeta
+# xx = $x
+# yy= $y
+# zz=$z
+# dd= $dir
+# if(qn==1)
+#  CUDA.@cuprint "\n resListPos $(resListPos) queueNumber $(qn)  xMeta $(xm) yMeta $(ym)  zMeta $(zm) x $(xx) y $(yy) z $(zz) linearIndex $(linearIndex) dd $(dd)   \n "
+# end
+@inbounds $resList[ resListPos, 1]=$x 
+@inbounds $resList[ resListPos, 2]=$y 
+@inbounds $resList[ resListPos, 3]=$z 
+@inbounds $resList[ resListPos, 4]= $isGold
+@inbounds $resList[ resListPos, 5]= $dir
+@inbounds $resList[ resListPos, 6]= $iterNumb
+@inbounds $resListIndicies[resListPos]=getResLinIndex($x,$y,$z,$isGold,$mainArrDims)
+# CUDA.@cuprint "\n linIndex $(getResLinIndex(x,y,z,isGold,mainArrDims))  \n "
+#addResHelper(resListIndicies,resListPos,x)
+ end)#quote
+ end#addResult
+
+
+
+ """
+ giver the result row that holds data about covered point and in what iteration, from what direction and in what pass it was covered
+ resRow - array where first 3 entries are x,y,z positions then is gold,
+ """
+  function getResLinIndex(x,y,z,isGold,mainArrDims)::UInt32
+     # last one is in order to differentiate between gold pass and other pass ...
+     return x+ y*mainArrDims[1]+ z* mainArrDims[1]*mainArrDims[2]+ isGold*mainArrDims[1]*mainArrDims[2]*mainArrDims[3]  
+   end#getResLinIndex
+ 
 
 end#ResultListUtils

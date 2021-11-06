@@ -2,7 +2,6 @@
 this kernel will prepare da
 """
 module PrepareArrtoBool
-export getIndexOfQueue
 using CUDA, Logging,Main.CUDAGpuUtils, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils,Main.HFUtils
 
 
@@ -71,40 +70,6 @@ end)
 end
 
 
-"""
-1)   Left FP  
-2)   Left FN  
-3)   Right FP  
-4)   Right FN  
-5)   Posterior FP  
-6)   Posterior FN  
-7)   Anterior FP  
-8)   Anterior FN  
-9)   Top FP  
-10)   Top FN  
-11)   Bottom FP  
-12)   Bottom FN  
-13)   Total block Fp  
-14)   Total block Fn  
-
-xpos,ypos,zpos -current  position in x,y,z dimension 
-datBdim - dimensions of the data block
-
-on the basis of the data it should give the index from 1 to 14 - to the appropriate queue
-"""
-function getIndexOfQueue(xpos,ypos,zpos, datBdim,boolGold)
-    #we need to do so many != in order to deal with corners ...
-    return (
-     (xpos==1)*1
-    +(xpos==datBdim[1])*3
-    +(ypos==1 && xpos!=1 && xpos!=datBdim[1] )*5
-    +(ypos==datBdim[2] && xpos!=1 && xpos!=datBdim[1]  )*7
-    +(zpos==1  && xpos!=1 && xpos!=datBdim[1]  && ypos!=1 && ypos!=datBdim[2] )*9
-    +(zpos==datBdim[3] && xpos!=1 && xpos!=datBdim[1]  && ypos!=1 && ypos!=datBdim[2])*11
-    +(xpos>1 && xpos<datBdim[1] &&  ypos>1 && ypos<datBdim[2] && zpos>1 && zpos<datBdim[3])*13
-    )+boolGold# in that way we will get odd for fp an even for fn
-
-end
 
 """
 invoked on each lane and on the basis of its position will update the number of fp or fn in given queue
