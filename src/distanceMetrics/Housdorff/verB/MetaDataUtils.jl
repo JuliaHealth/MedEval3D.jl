@@ -24,7 +24,7 @@ in those cases false will be 0 and true 32 ...
 """
 module MetaDataUtils
 using CUDA
-export getIsToBeAnalyzedNumb,getIsToBeActivatedInSegmNumb,getIsToBeActivatedInGoldNumb,getFullInSegmNumb,getFullInGoldNumb,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm,getActiveGoldNumb,getActiveSegmNumb,getResOffsetsBeg,getOldCountersBeg,getNewCountersBeg,getBeginingOfFpFNcounts,getBeginingOfXYZ,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm
+export @setMeta,@accMeta,getIsToBeAnalyzedNumb,getIsToBeActivatedInSegmNumb,getIsToBeActivatedInGoldNumb,getFullInSegmNumb,getFullInGoldNumb,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm,getActiveGoldNumb,getActiveSegmNumb,getResOffsetsBeg,getOldCountersBeg,getNewCountersBeg,getBeginingOfFpFNcounts,getBeginingOfXYZ,setBlockasCurrentlyActiveInGold,setBlockasCurrentlyActiveInSegm
 
 
 """
@@ -90,7 +90,26 @@ function getResOffsetsBeg()::UInt32 return  41 end
 function getOldCountersBeg()::UInt32 return  59 end
 function getNewCountersBeg()::UInt32 return  74 end
 
+"""
+making access to the metaData Easier
+we assume that linIdexMeta, xMeta, zMeta,yMeta are available
+"""
+macro accMeta(numb)
+    return esc(quote
+        metaData[xMeta+1,yMeta+1,zMeta+1,$numb]
+    end)
 
+end
+"""
+making setting value  to the metaData Easier
+we assume that linIdexMeta, xMeta, zMeta,yMeta are available
+"""
+macro setMeta(numb,value)
+    return esc(quote
+        metaData[(xMeta+1),(yMeta+1),(zMeta+1),($numb)]=($value)
+    end)
+
+end
 
 """
 make is block currently active to true for gold standard pass

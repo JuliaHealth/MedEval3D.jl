@@ -28,17 +28,17 @@ end#clearBeforeNextDilatation
 
 """
 allocates memory in the kernel some register and shared memory  (no allocations in global memory here from kernel)
-datBdim - are dimensions of data block - each data block has just one row in the metadata ...
+dataBdim - are dimensions of data block - each data block has just one row in the metadata ...
 
 """
-macro mainLoopKernelAllocations(datBdim)
+macro mainLoopKernelAllocations(dataBdim)
     return esc(quote
     #needed to manage cooperative groups functions
  grid_handle = this_grid()
  #storing intermidiate results +2 in order to get the one padding 
- resShmem =  @cuDynamicSharedMem(Bool,($datBdim[1]+2,$datBdim[2]+2,$datBdim[3]+2)) # we need this additional 33th an 34th spots
+ resShmem =  @cuDynamicSharedMem(Bool,($dataBdim[1]+2,$dataBdim[2]+2,$dataBdim[3]+2)) # we need this additional 33th an 34th spots
  #storing values loaded from analyzed array ...
- sourceShmem =  @cuDynamicSharedMem(Bool,($datBdim[1],$datBdim[2],$datBdim[3]))
+ sourceShmem =  @cuDynamicSharedMem(Bool,($dataBdim[1],$dataBdim[2],$dataBdim[3]))
  #for storing sums for reductions
  shmemSum =  @cuStaticSharedMem(UInt32,(36,14)) # we need this additional spots
 #used to load from metadata information are ques to be validated 
@@ -203,7 +203,7 @@ main kernel managing
 """
 function mainLoopKernel()
 
-    @mainLoopKernelAllocations(datBdim)
+    @mainLoopKernelAllocations(dataBdim)
     MetadataAnalyzePass.@analyzeMetadataFirstPass()
     loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,iterationNumber,positionInMainWorkQueaue,workCounterInshmem,mainQuesCounterArr,isAnyBiggerThanZero,goldToBeDilatated,segmToBeDilatated, resArraysCounters  )    
     sync_grid(grid_handle)

@@ -30,12 +30,12 @@ using Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.Proce
 threads=(32,5);
 blocks =2;
 mainArrDims= (67,177,90);
-datBdim = (43,21,17);
+dataBdim = (43,21,17);
 mainArrCPU= falses(mainArrDims);
 mainArrCPU[5,5,5]= true;
 mainArrCPU[33,10,7]= true;
 mainArrGPU = CuArray(mainArrCPU);
-metaData = MetaDataUtils.allocateMetadata(mainArrDims,datBdim);
+metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
 metaDataDims= size(metaData);
 totalFp,totalFn= 500,500
 resList,resListIndicies= allocateResultLists(totalFp,totalFn)

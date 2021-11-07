@@ -11,11 +11,11 @@ using Main.MainLoopKernel
 threads=(32,5);
 blocks =1;
 mainArrDims= (67,177,90);
-datBdim = (43,21,17);
-metaData = MetaDataUtils.allocateMetadata(mainArrDims,datBdim);
+dataBdim = (43,21,17);
+metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
 metaDataDims= size(metaData);
-resShmem = CUDA.ones(Bool,(datBdim[1]+2,datBdim[2]+2,datBdim[3]+2 ));
-sourceShmem = CUDA.ones(Bool,(datBdim));
+resShmem = CUDA.ones(Bool,(dataBdim[1]+2,dataBdim[2]+2,dataBdim[3]+2 ));
+sourceShmem = CUDA.ones(Bool,(dataBdim));
 resShmemTotalLength = length(resShmem)
 sourceShmemTotalLength= length(sourceShmem)
 clearIterResShmemLoop= fld(resShmemTotalLength,threads[1]*threads[2])

@@ -3,7 +3,7 @@ this kernel will prepare da
 """
 module PrepareArrtoBool
 using CUDA, Logging,Main.CUDAGpuUtils, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils,Main.HFUtils
-
+export getLargeForBoolKernel,getSmallForBoolKernel,@getBoolCubeKernel,@localAllocations,@uploadLocalfpFNCounters,@uploadMinMaxesToShmem,@uploadDataToMetaData,@finalGlobalSet
 
 
 """
@@ -28,9 +28,6 @@ macro localAllocations()
      minZ = @cuStaticSharedMem(Float32, 1)
      maxZ= @cuStaticSharedMem(Float32, 1)      
      
-     true  ⊻ false
-
-     isAnyPositive = @cuStaticSharedMem(Bool, 1)
      #resetting
      minX[1]= Float32(1110.0)
      maxX[1]= Float32(0.0)
@@ -38,7 +35,6 @@ macro localAllocations()
      maxY[1]= Float32(0.0)    
      minZ[1]= Float32(1110.0)
      maxZ[1]= Float32(0.0) 
-     @ifXY 1 1 isAnyPositive[1]= false
      #in shared memory
  
 #####needed for fp fn sums
@@ -59,7 +55,7 @@ macro localAllocations()
     #  12)   Bottom FN  
     #13)   main part FP  
     #14)   main Part FN  
-    localQuesValues= @cuStaticSharedMem(Float32, 14)   
+    localQuesValues= @cuStaticSharedMem(UInt32, 14)   
   
 
     #making sure they are initialized all to zeros
@@ -76,23 +72,26 @@ invoked on each lane and on the basis of its position will update the number of 
 """
 macro uploadLocalfpFNCounters()
    return esc(quote
-   coord=PrepareArrtoBool.getIndexOfQueue((xdim * blockDimX())+threadIdxX() ,(ydim * blockDimY())+threadIdxY(),(zdim+1),datBdim,boolGold)
-   atomicallyAddToSpot(Float32,localQuesValues,coord,1)
+   coord=getIndexOfQueue(xpos,ypos,zpos,dataBdim,boolSegm)
+   atomicallyAddToSpot(localQuesValues,coord,1)
     end)
 end   
-
 
 """
 invoked after we gone through data block and now we save data into shared memory
 """
 macro uploadMinMaxesToShmem()
     return  esc(quote
-        @ifXY 1 1 if(isAnyPositive[1]) minX[1]= min(minX[1],xMeta+1) end
-        @ifXY 1 2 if(isAnyPositive[1]) maxX[1]= max(maxX[1],xMeta+1) end
-        @ifXY 2 1 if(isAnyPositive[1]) minY[1]= min(minY[1],yMeta+1) end
-        @ifXY 2 2 if(isAnyPositive[1]) maxY[1]= max(maxY[1],yMeta+1) end
-        @ifXY 3 1 if(isAnyPositive[1]) minZ[1]= min(minZ[1],zMeta+1) end
-        @ifXY 3 2 if(isAnyPositive[1]) maxZ[1]= max(maxZ[1],zMeta+1) end 
+    
+    # if((xMeta+1)>1 && anyPositive)
+    #     CUDA.@cuprint "xMeta+1 $(xMeta+1) anyPositive $(anyPositive) \n"
+    # end
+        @ifXY 1 1 if(anyPositive) minX[1]= min(minX[1],xMeta+1) end
+        @ifXY 1 2 if(anyPositive) maxX[1]= max(maxX[1],xMeta+1) end
+        @ifXY 2 1 if(anyPositive) minY[1]= min(minY[1],yMeta+1) end
+        @ifXY 2 2 if(anyPositive) maxY[1]= max(maxY[1],yMeta+1) end
+        @ifXY 3 1 if(anyPositive) minZ[1]= min(minZ[1],zMeta+1) end
+        @ifXY 3 2 if(anyPositive) maxZ[1]= max(maxZ[1],zMeta+1) end 
     end)
 
 end
@@ -102,32 +101,21 @@ invoked after we gone through data block and now we save data into appropriate s
 """
 macro uploadDataToMetaData()
     esc(quote
-    
-    #now we should also add the total value by adding all fp or fn values required
-
-    
-    @ifY 1 if(threadIdxX()<15 && isAnyPositive[1])
-        if(isAnyPositive[1]) metaData[xMeta+1,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ threadIdxX()]=localQuesValues[threadIdxX()]
+    #now we should also add the total value by adding all fp or fn values required   
+    @ifY 1 if(threadIdxX()<15 && anyPositive)
+        # if(anyPositive) metaData[xMeta+1,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ threadIdxX()]=localQuesValues[threadIdxX()]
+        @setMeta(getBeginingOfFpFNcounts()+ threadIdxX(),localQuesValues[threadIdxX()])
        # localQuesValues[threadIdxX()]=0
-        end
+        
     end
-
-    @ifXY 15 1 if(isAnyPositive[1])
-        metaData[xMeta+1,yMeta+1,zMeta+1,(getBeginingOfFpFNcounts()+ 15)]= (localQuesValues[1]+localQuesValues[3]+localQuesValues[5]+localQuesValues[7] +localQuesValues[9]+localQuesValues[11]+localQuesValues[13] ) 
+    @ifXY 15 1 if(anyPositive)
+        # metaData[xMeta+1,yMeta+1,zMeta+1,(getBeginingOfFpFNcounts()+ 15)]= (localQuesValues[1]+localQuesValues[3]+localQuesValues[5]+localQuesValues[7] +localQuesValues[9]+localQuesValues[11]+localQuesValues[13] ) 
+        @setMeta(getBeginingOfFpFNcounts()+ 15, (localQuesValues[1]+localQuesValues[3]+localQuesValues[5]+localQuesValues[7] +localQuesValues[9]+localQuesValues[11]+localQuesValues[13] )  )
         end
-    @ifXY 16 1 if(isAnyPositive[1]) 
-        metaData[xMeta+1,yMeta+1,zMeta+1,(getBeginingOfFpFNcounts()+ 16)]= (localQuesValues[2]+localQuesValues[4]+localQuesValues[6]+localQuesValues[8]+localQuesValues[10]+localQuesValues[12]+localQuesValues[14]) 
-        end
-    
-            #as all was done on first warp we just need to synchronize this and clear localQuesValues
-    #now we need to clear localQuesValues
-
-    # vote_ballot_sync(FULL_MASK, localBool)
-    # threadfence()
-
-    # if(threadIdxX()<15)
-    #     localQuesValues[threadIdxX()]=Float32(0.0)
-    # end
+    @ifXY 16 1 if(anyPositive) 
+        # metaData[xMeta+1,yMeta+1,zMeta+1,(getBeginingOfFpFNcounts()+ 16)]= (localQuesValues[2]+localQuesValues[4]+localQuesValues[6]+localQuesValues[8]+localQuesValues[10]+localQuesValues[12]+localQuesValues[14]) 
+        @setMeta(getBeginingOfFpFNcounts()+ 16, (localQuesValues[2]+localQuesValues[4]+localQuesValues[6]+localQuesValues[8]+localQuesValues[10]+localQuesValues[12]+localQuesValues[14]) )
+        end  
 
     end)
 
@@ -141,10 +129,9 @@ macro  finalGlobalSet()
     esc(quote
         @redWitAct(offsetIter,shmemSum,  locFns,+,     locFps,+   )
         @addAtomic(shmemSum,fn,fp)
-        # @ifXY 1 1 CUDA.@cuprint  """ minxRes $(minxRes)  minX[1] $(minX[1])  maxxRes $(maxxRes) maxX[1] $(maxX[1])
-        # minyRes $(minyRes)  minY[1] $(minY[1])  maxyRes $(maxyRes)  maxY[1] $(maxY[1])  
-        # minzRes $(minzRes) minZ[1] $(minZ[1])  maxzRes $(maxzRes) maxZ[1] $(maxZ[1])
-        # \n"""
+        # if(maxxRes[1]>1)
+        #     CUDA.@cuprint " maxxRes[1] $(maxxRes[1]) \n"
+        # end
         @ifXY 1 1 atomicMinSet(minxRes,minX[1])
         @ifXY 1 2 atomicMaxSet(maxxRes,maxX[1])
 
@@ -157,17 +144,11 @@ macro  finalGlobalSet()
 end
 
 
-
-
-
-
-
-
 """
 we need to give back number of false positive and false negatives and min,max x,y,x of block containing all data 
 adapted from https://github.com/JuliaGPU/CUDA.jl/blob/afe81794038dddbda49639c8c26469496543d831/src/mapreduce.jl
-goldBoolGPU3d - array holding 3 dimensional data of gold standard bollean array
-segmBoolGPU3d - array with 3 dimensional the data we want to compare with gold standard
+gold3d - array holding 3 dimensional data of gold standard bollean array
+segm3d - array with 3 dimensional the data we want to compare with gold standard
 reducedGold - the smallest boolean block (3 dim array) that contains all positive entris from both masks
 reducedSegm - the smallest boolean block (3 dim array) that contains all positive entris from both masks
 numberToLooFor - number we will analyze whether is the same between two sets
@@ -176,46 +157,49 @@ cuda arrays holding just single value wit atomically reduced result
 ,minxRes,maxxRes
 ,minyRes,maxyRes
 ,minZres,maxZres
-datBdim - dimensions of data block
+dataBdim - dimensions of data block
 metaDataDims - dimensions of the metadata
 loopXMeta,loopYZMeta- indicates how many times we need to iterate over the metadata
 inBlockLoopX,inBlockLoopY,inBlockLoopZ - indicates how many times we need to iterate over the data block using our size of thread block
                                           basically data block size will be established by the thread block size of main kernel  
 """
-function getBoolCubeKernel(goldBoolGPU3d
-        ,segmBoolGPU3d
-        ,numberToLooFor::T
-        ,reducedGoldA
-        ,reducedSegmA
-        ,reducedGoldB
-        ,reducedSegmB
-        ,fn
-        ,fp
-        ,minxRes
-        ,maxxRes
-        ,minyRes
-        ,maxyRes
-        ,minzRes
-        ,maxzRes
-        ,datBdim
-        ,metaData
-        ,metaDataDims
-        ,mainArrDims
-        ,loopXMeta,loopYZMeta
-        ,inBlockLoopX,inBlockLoopY,inBlockLoopZ
-) where T
+# function getBoolCubeKernel(gold3d
+#         ,segm3d
+#         ,numberToLooFor::T
+#         ,reducedGoldA
+#         ,reducedSegmA
+#         ,reducedGoldB
+#         ,reducedSegmB
+#         ,fn
+#         ,fp
+#         ,minxRes
+#         ,maxxRes
+#         ,minyRes
+#         ,maxyRes
+#         ,minzRes
+#         ,maxzRes
+#         ,dataBdim
+#         ,metaData
+#         ,metaDataDims
+#         ,mainArrDims
+#         ,loopXMeta,loopYZMeta
+#         ,inBlockLoopX,inBlockLoopY,inBlockLoopZ
+# ) where T
+
+macro getBoolCubeKernel()
+ return esc(quote
     @localAllocations()
     #we need nested x,y,z iterations so we will iterate over the matadata and on its basis over the  data in the main arrays 
     #first loop over the metadata 
 
 
-    @iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,
+    @iter3dOuter(metaDataDims,loopMeta,metaDataLength,
          begin
          #inner loop is over the data indicated by metadata
-         @iterDataBlock(mainArrDims,datBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ
+         @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ
                          ,begin 
-                                boolGold=goldBoolGPU3d[x,y,z]==numberToLooFor
-                                boolSegm=segmBoolGPU3d[x,y,z]==numberToLooFor    
+                                boolGold=gold3d[x,y,z]==numberToLooFor
+                                boolSegm=segm3d[x,y,z]==numberToLooFor    
      
                                 #we need to also collect data about how many fp and fn we have in main part and borders
                                 #important in case of corners we will first analyze z and y dims and z dim on last resort only !
@@ -224,10 +208,11 @@ function getBoolCubeKernel(goldBoolGPU3d
                                 if(boolGold  || boolSegm)
                                         if((boolGold  ⊻ boolSegm))
                                             @uploadLocalfpFNCounters()
+                                            # CUDA.@cuprint "xMeta $(xMeta+1)  yMeta $(yMeta+1) zMeta $(zMeta+1) linIdexMeta $(linIdexMeta) \n"
 
                                             locFps+=boolSegm
                                             locFns+=boolGold
-                                            isAnyPositive[1]= true #- we just mark that there was some fp or fn in this block 
+                                            anyPositive= true #- we just mark that there was some fp or fn in this block 
                                         end# if (boolGold  ⊻ boolSegm)
                                     #passing data to new arrays needed for running final algorithm
                                     reducedGoldA[x,y,z]=boolGold    
@@ -237,13 +222,16 @@ function getBoolCubeKernel(goldBoolGPU3d
                                 end#if boolGold  || boolSegm
                             end)#ex                
                 # #now we are just after we iterated over a single data block  we need to we save data about border data blocks 
-                sync_threads()
-
+                anyPositive = sync_threads_or(anyPositive)
+ 
+                # if(anyPositive)
+                #     CUDA.@cuprint "xMeta+1 $(xMeta+1) anyPositive $(anyPositive) \n"
+                # end
                     #we want to invoke this only once per data block
                     #save the data about number of fp and fn of this block and accumulate also this sum for global sum 
                     #doing all on first warp
                     @uploadDataToMetaData() 
-                    # if(isAnyPositive[1])           
+                    # if(anyPositive)           
                     #     @ifXY 4 1  CUDA.@cuprint "xMeta $(xMeta+1)  ,yMeta $(yMeta+1),zMeta $(zMeta+1) \n"
                     # end    
                     #invoked after we gone through data block and now we save data into shared memory
@@ -251,16 +239,8 @@ function getBoolCubeKernel(goldBoolGPU3d
                     @uploadMinMaxesToShmem()            
 
                     sync_threads()
-                    ### set x y z needed in case we will use later linear indexing
-                    @ifXY 2 1 metaData[xMeta+1,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+1]= xMeta+1
-                    @ifXY 3 1 metaData[xMeta+1,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+2]= yMeta+1
-                    @ifXY 4 1 metaData[xMeta+1,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+3]= zMeta+1
-
-
                     #resetting
-                    @ifXY 1 1 isAnyPositive[1]= false  #reset   
-
-                 
+                    anyPositive= false  #reset                   
                     
                     @ifY 2 if(threadIdxX()<15)
                         localQuesValues[threadIdxX()]=0
@@ -278,9 +258,36 @@ function getBoolCubeKernel(goldBoolGPU3d
 
 
    return  
-
+end)#quote
    end
+   
+"""
+creates small memory footprint GPU variables for getBoolCubeKernel
+  return  minX,maxX,minY,maxY,minZ,maxZ,fn,fp
+"""
+function getSmallForBoolKernel()
+    return (CuArray([Float32(1110.0) ])
+    , CuArray([Float32(0.0)])
+    , CuArray([Float32(1110.0)])
+    , CuArray([Float32(0.0)    ])
+    , CuArray([Float32(1110.0)])
+    , CuArray([Float32(0.0) ])
+    ,CuArray([UInt32(0)])
+    ,CuArray([UInt32(0)]))
+end    
+
+
+"""
+creates large memory footprint GPU variables for getBoolCubeKernel
+    return reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB
+"""
+function getLargeForBoolKernel(mainArrDims)
+return (
+    CuArray(falses(mainArrDims)),CuArray(falses(mainArrDims)),CuArray(falses(mainArrDims)),CuArray(falses(mainArrDims))
+    )
 
 end
+
+end#module
 
 

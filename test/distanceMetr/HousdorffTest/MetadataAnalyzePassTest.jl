@@ -1,9 +1,8 @@
 
-
 using Revise, Parameters, Logging, Test
 using CUDA
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
-using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
+using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils, Main.PrepareArrtoBool
 using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
 
 
@@ -12,18 +11,17 @@ singleVal = CUDA.zeros(14)
 
 threads=(32,5)
 blocks =8
-mainArrDims= (516,523,826)
-datBdim = (43,21,17)
- metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:3,2:4,4:7,: );
-#metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:9,2:3,4:6,: );
+mainArrDims= (516,523,421)
+dataBdim = (43,21,17)
+metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
+#metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:9,2:3,4:6,: );
 metaDataDims=size(metaData)
-loopXMeta= fld(metaDataDims[1],threads[1])
-loopYZMeta= fld(metaDataDims[2]*metaDataDims[3],blocks )
+loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
-function metaDataWarpIterKernel(singleVal,metaDataDims,loopXMeta,loopYZMeta)
+function metaDataWarpIterKernel(singleVal,metaDataDims,loopWarpMeta,metaDataLength)
 
   
-    MetadataAnalyzePass.@metaDataWarpIter( metaDataDims,loopXMeta,loopYZMeta,
+    MetadataAnalyzePass.@metaDataWarpIter(metaDataDims,loopWarpMeta,metaDataLength,
     begin
       @ifY 1 if(isInRange) @atomic singleVal[]+=1 end
       #@ifX 1 CUDA.@cuprint "   xMeta $(xMeta)  yMeta $(yMeta)  zMeta $(zMeta) id  idX $(blockIdxX()) \n"   
@@ -34,7 +32,7 @@ end)
     
     return
 end
-@cuda threads=threads blocks=blocks metaDataWarpIterKernel(singleVal,metaDataDims,loopXMeta,loopYZMeta)
+@cuda threads=threads blocks=blocks  metaDataWarpIterKernel(singleVal,metaDataDims,loopWarpMeta,metaDataLength)
 @test singleVal[1]==metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
 
 
@@ -50,13 +48,10 @@ end
 ####### exOnWarpIfNotFull
 
 
-
-
-
 using Revise, Parameters, Logging, Test
 using CUDA
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
-using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
+using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils, Main.PrepareArrtoBool
 using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
 
 threads=(32,7)
@@ -118,9 +113,9 @@ singleVal = CUDA.zeros(14)
 threads=(32,4)
 blocks =1
 mainArrDims= (516,523,826)
-datBdim = (43,21,17)
- metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:3,2:5,4:6,: );
-#metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:9,2:3,4:6,: );
+dataBdim = (43,21,17)
+ metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:3,2:5,4:6,: );
+#metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:9,2:3,4:6,: );
 metaDataDims=size(metaData)
 loopXMeta= fld(metaDataDims[1],threads[1])
 loopYZMeta= fld(metaDataDims[2]*metaDataDims[3],blocks )
@@ -174,9 +169,9 @@ using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.Wor
 threads=(32,4)
 blocks =3
 mainArrDims= (516,523,826)
-datBdim = (43,21,17)
- metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:3,2:5,4:6,: );
-#metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:9,2:3,4:6,: );
+dataBdim = (43,21,17)
+ metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:3,2:5,4:6,: );
+#metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:9,2:3,4:6,: );
 metaDataDims=size(metaData)
 loopXMeta= fld(metaDataDims[1],threads[1])
 loopYZMeta= fld(metaDataDims[2]*metaDataDims[3],blocks )
@@ -269,8 +264,8 @@ singleVal = CUDA.zeros(14)
 threads=(32,4)
 blocks =7
 mainArrDims= (516,523,826)
-datBdim = (43,21,17)
-metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:3,2:4,1:3,: );
+dataBdim = (43,21,17)
+metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:3,2:4,1:3,: );
 metaDataDims=size(metaData)
 
 globalFpResOffsetCounter= CUDA.zeros(UInt32,1)
@@ -318,10 +313,10 @@ metaData[xMeta,yMeta+1,zMeta+1,getFullInSegmNumb() ]=1
 
 #as we have counters we check in shmem are they correct
 
-function checkIsToBeActive(datBdim,workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
+function checkIsToBeActive(dataBdim,workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
  
   shmemSum =  @cuStaticSharedMem(Float32,(35,16)) # we need this additional 33th an 34th spots
-  sourceShmem =  @cuDynamicSharedMem(Bool,(datBdim[1]+2,datBdim[2]+2,datBdim[3]+2)) # we need this additional 33th an 34th spots
+  sourceShmem =  @cuDynamicSharedMem(Bool,(dataBdim[1]+2,dataBdim[2]+2,dataBdim[3]+2)) # we need this additional 33th an 34th spots
   tobeEx= true
   locArr= UInt32(0)
   MetadataAnalyzePass.@metaDataWarpIter( metaDataDims,loopXMeta,loopYZMeta,
@@ -341,7 +336,7 @@ function checkIsToBeActive(datBdim,workQueaueCounter,workQueaue,metaData,metaDat
     
     return
 end
-@cuda threads=threads blocks=blocks checkIsToBeActive(datBdim,workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
+@cuda threads=threads blocks=blocks checkIsToBeActive(dataBdim,workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
 workQueaue[1,:]
 Int64(sum(workQueaue))
 Int64(workQueaueCounter[1])

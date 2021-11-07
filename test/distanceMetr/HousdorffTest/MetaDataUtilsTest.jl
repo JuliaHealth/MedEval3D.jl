@@ -19,10 +19,10 @@ threads=(32,5)
 blocks =3
 
 mainArrDims= (67,78,90)
-datBdim = (17,7,12)
+dataBdim = (17,7,12)
 
-metaDataDims= (cld(mainArrDims[1],datBdim[1] ),cld(mainArrDims[2],datBdim[2]),cld(mainArrDims[3],datBdim[3]))
-metaData = MetaDataUtils.allocateMetadata(mainArrDims,datBdim);
+metaDataDims= (cld(mainArrDims[1],dataBdim[1] ),cld(mainArrDims[2],dataBdim[2]),cld(mainArrDims[3],dataBdim[3]))
+metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
 size(metaData)
 
 

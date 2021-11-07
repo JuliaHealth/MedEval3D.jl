@@ -33,57 +33,47 @@ export @metaDataWarpIter, @loadCounters,@analyzeMetadataFirstPass, @checkIsActiv
 """
 this will enable iteration of metadata block
 linear index is the same for each threadIdxX in a block hence the bigger in y direction is thread block the more threads will work on single metadata block
-metaDataIterLoops - how many times we need to iterate over metadata with each block of threads
-threadsPerBlock - number of threads in thread block
-threadsPerGrid - number of threads in all thread blocks combined
-maxLinIndex - maximum linear index in metadata
-"""
-
-# macro metaDataWarpIter(metaDataDims,loopXMeta,loopYZMeta,ex)
-
-#     mainExp = generalizedItermultiDim(;xname=:(xMeta)
-#     ,yname= :(yzSpot)
-#     ,arrDims=metaDataDims
-#     ,loopXdim=loopXMeta 
-#     ,loopYdim=loopYZMeta
-#     ,isFullBoundaryCheckY=false
-#     ,isFullBoundaryCheckX =false
-#     ,yOffset = :(ydim*gridDim().x)
-#     ,yAdd=  :(blockIdxX()-1) 
-#     ,additionalActionBeforeY= :( yMeta= rem(yzSpot,$metaDataDims[2]) ; zMeta= fld(yzSpot,$metaDataDims[2]) )
-#     ,yCheck = :(yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] )
-#     ,xCheck = :(xMeta <= $metaDataDims[1])
-#     # ,xAdd= :(threadIdxX()-1)# to keep all 0 based
-#     ,is3d = false
-#     , ex = ex)  
-#     return esc(:( $mainExp))
-# end
-
-
 
 """
-specialization of above where we do not check for the dimension - just create a boolean called isInRange that tell us if we are not getting outside of dims
-"""
-macro metaDataWarpIter(metaDataDims,loopXMeta,loopYZMeta,ex)
+macro metaDataWarpIter(metaDataDims,loopWarpMeta,metaDataLength,ex)
 
-    mainExp = generalizedItermultiDim(;xname=:(xMeta)
-    ,yname= :(yzSpot)
-    ,arrDims=metaDataDims
-    ,loopXdim=loopXMeta 
-    ,loopYdim=loopYZMeta
-     ,yOffset = :(ydim*gridDim().x)
-    ,yAdd=  :(blockIdxX()-1) 
-    ,additionalActionBeforeY= :( yMeta= rem(yzSpot,$metaDataDims[2]) ; zMeta= fld(yzSpot,$metaDataDims[2]) )
-    ,additionalActionBeforeX= :( isInRange = ( yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] && xMeta <= $metaDataDims[1]  ) )
-    ,nobundaryCheckX=true
-    , nobundaryCheckY=true
-    , nobundaryCheckZ =true
-    # ,yCheck = :(yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] )
-    # ,xCheck = :(xMeta <= $metaDataDims[1])
-    # ,xAdd= :(threadIdxX()-1)# to keep all 0 based
-    ,is3d = false
-    , ex = ex)  
-    return esc(:( $mainExp))
+    return  esc(quote
+    isInRange = true
+    linIdexMeta = UInt32(0)
+    @unroll for j in 0:($loopWarpMeta-1)
+        linIdexMeta= blockIdxX()+ j*gridDimX()-1+ threadIdxX()
+        xMeta= rem(linIdexMeta,$metaDataDims[1])
+        zMeta= fld((linIdexMeta),$metaDataDims[1]*$metaDataDims[2])
+        yMeta= fld((linIdexMeta-((zMeta*$metaDataDims[1]*$metaDataDims[2] ) + xMeta )),$metaDataDims[1])
+      $ex
+    end 
+    linIdexMeta= blockIdxX()+ $loopWarpMeta*gridDimX() -1+ threadIdxX()
+            isInRange=(linIdexMeta<$metaDataLength)
+            xMeta= rem(linIdexMeta,$metaDataDims[1])
+            zMeta= fld((linIdexMeta),$metaDataDims[1]*$metaDataDims[2])
+            yMeta= fld((linIdexMeta-((zMeta*$metaDataDims[1]*$metaDataDims[2] ) + xMeta )),$metaDataDims[1])
+        $ex
+    end)
+
+
+    # mainExp = generalizedItermultiDim(;xname=:(xMeta)
+    # ,yname= :(yzSpot)
+    # ,arrDims=metaDataDims
+    # ,loopXdim=loopXMeta 
+    # ,loopYdim=loopYZMeta
+    #  ,yOffset = :(ydim*gridDim().x)
+    # ,yAdd=  :(blockIdxX()-1) 
+    # ,additionalActionBeforeY= :( yMeta= rem(yzSpot,$metaDataDims[2]) ; zMeta= fld(yzSpot,$metaDataDims[2]) )
+    # ,additionalActionBeforeX= :( isInRange = ( yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] && xMeta <= $metaDataDims[1]  ) )
+    # ,nobundaryCheckX=true
+    # , nobundaryCheckY=true
+    # , nobundaryCheckZ =true
+    # # ,yCheck = :(yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] )
+    # # ,xCheck = :(xMeta <= $metaDataDims[1])
+    # # ,xAdd= :(threadIdxX()-1)# to keep all 0 based
+    # ,is3d = false
+    # , ex = ex)  
+    # return esc(:( $mainExp))
 end
 
 
@@ -145,7 +135,7 @@ end #loadCounters
  macro analyzeMetadataFirstPass()
          return esc(quote
          # we need to iterate over all metadata blocks with checks so the blocks can not be  outside the area of intrest defined by  minX, minY,minZ and maxX,maxY,maxZ
-         @metaDataWarpIter(metaDataDims,loopXMeta,loopYZMeta ,begin
+         @metaDataWarpIter(metaDataDims,loopMeta,metaDataLength,begin
              #now we upload all data related to amount of data that is of our intrest 
              #as we need to perform basically the same work across all warps - instead on specializing threads in warp we will execute the same fynction across all warps
              # so warp will execute the same function just with varying data as it should be 
@@ -156,12 +146,7 @@ end #loadCounters
 
             #  ######  we need to establish is block is active at the first pass block is active simply  when total count of fp and fn is greater than 0 
             # #we are adding 1 to meta y z becouse those are 0 based ...           
-#            @exOnWarp 1 if(shmemSum[threadIdxX(),15]>0 ) appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 ) end        
- #           @exOnWarp 2 if(shmemSum[threadIdxX(),16]>0 ) appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 ) end        
-#  if(shmemSum[threadIdxX(),15]>0.0 )   
-#     CUDA.@cuprint "in fn counterxMeta $(xMeta) yMeta+1 $(yMeta+1) zMeta+1 $(zMeta+1) \n"
 
-#  end
             @ifY 1 if(shmemSum[threadIdxX(),15]>0 && isInRange) begin  
                     appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 ) 
                 end   

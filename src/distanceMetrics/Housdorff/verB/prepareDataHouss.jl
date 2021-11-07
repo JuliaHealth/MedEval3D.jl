@@ -35,7 +35,7 @@ function getBoolCubeKernel(goldBoolGPU3d
         ,maxyRes::CuDeviceVector{UInt32, 1}
         ,minzRes::CuDeviceVector{UInt32, 1}
         ,maxzRes::CuDeviceVector{UInt32, 1}
-        ,datBdim
+        ,dataBdim
 ) where T
 
    anyPositive = false # true If any bit will bge positive in this array - we are not afraid of data race as we can set it multiple time to true
@@ -103,11 +103,11 @@ function getBoolCubeKernel(goldBoolGPU3d
     sync_threads()
     #we need nested x,y,z iterations so we will iterate over the matadata and on its basis over the  data in the main arrays 
     #first loop over the metadata 
-    #datBdim - indicats dimensions of data blocks
+    #dataBdim - indicats dimensions of data blocks
     @iter3dOuter(xname,yName , zName, loopXMeta,loopYMeta,loopZmeta,
          begin
          #inner loop is over the data indicated by metadata
-         @iter3dInMeta(xOuter*datBdim[1] ,yOuter*datBdim[2], zzOuter*datBdim[3],true,zdim ,inBlockLoopX,inBlockLoopY,inBlockLoopZ
+         @iter3dInMeta(xOuter*dataBdim[1] ,yOuter*dataBdim[2], zzOuter*dataBdim[3],true,zdim ,inBlockLoopX,inBlockLoopY,inBlockLoopZ
                          ,begin 
                                 boolGold=    goldBoolGPU3d[x,y,z]==numberToLooFor
                                 boolSegm=    segmBoolGPU3d[x,y,z]==numberToLooFor

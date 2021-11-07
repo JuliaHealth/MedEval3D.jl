@@ -9,12 +9,12 @@ using Shuffle,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,
 threads=(32,5)
 blocks =8
 mainArrDims= (516,523,826)
-datBdim = (43,21,17)
-metaData =view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:4,1:4,1:4,:);
-#metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,datBdim),1:9,2:3,4:6,: );
+dataBdim = (43,21,17)
+metaData =view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:4,1:4,1:4,:);
+#metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:9,2:3,4:6,: );
 metaDataDims=size(metaData)
 iterThrougWarNumb = cld(14,threads[2])
-resShmem = CuArray(falses(datBdim[1]+2, datBdim[2]+2, datBdim[3]+2 ))
+resShmem = CuArray(falses(dataBdim[1]+2, dataBdim[2]+2, dataBdim[3]+2 ))
 totalFp,totalFn = 100000,100000
 resList,resListIndicies= allocateResultLists(totalFp,totalFn)
 
@@ -112,13 +112,13 @@ maxResListIndex= length(resListIndicies)
 
 globalCurrentFnCount,globalCurrentFpCount= CUDA.zeros(UInt32,1),CUDA.zeros(UInt32,1)
 
-function loadAndSanForDuplKernel(globalCurrentFnCount,globalCurrentFpCount,maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,datBdim)
+function loadAndSanForDuplKernel(globalCurrentFnCount,globalCurrentFpCount,maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,dataBdim)
    locArr= UInt32(0)
    localOffset= UInt32(0)
    offsetIter= UInt16(0)
    shmemSum =  @cuStaticSharedMem(UInt32,(36,14)) # we need this additional spots
-   resShmem =  @cuDynamicSharedMem(Bool,(datBdim[1]+2,datBdim[2]+2,datBdim[3]+2)) # we need this additional 33th an 34th spots
-   sourceShmem =  @cuDynamicSharedMem(Bool,(datBdim[1],datBdim[2],datBdim[3]))
+   resShmem =  @cuDynamicSharedMem(Bool,(dataBdim[1]+2,dataBdim[2]+2,dataBdim[3]+2)) # we need this additional 33th an 34th spots
+   sourceShmem =  @cuDynamicSharedMem(Bool,(dataBdim[1],dataBdim[2],dataBdim[3]))
    alreadyCoveredInQueues =@cuStaticSharedMem(UInt32,(15))
 
    for i in 1:30
@@ -216,7 +216,7 @@ numbOfFn+=7*2
 
 numbOfFp+=5
 
-@cuda threads=threads blocks=blocks loadAndSanForDuplKernel(globalCurrentFnCount,globalCurrentFpCount,maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,datBdim)
+@cuda threads=threads blocks=blocks loadAndSanForDuplKernel(globalCurrentFnCount,globalCurrentFpCount,maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,dataBdim)
 
 Int64(globalCurrentFnCount[1]+globalCurrentFpCount[1])== 660+5
 offset = -49
@@ -389,7 +389,7 @@ end
 # BenchmarkTools.DEFAULT_PARAMETERS.gcsample = true
 
 # function toBench()
-#    CUDA.@sync @cuda threads=threads blocks=blocks loadAndSanForDuplKernel(resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,datBdim)
+#    CUDA.@sync @cuda threads=threads blocks=blocks loadAndSanForDuplKernel(resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,dataBdim)
 # end
 # bb2 = @benchmark toBench()
 

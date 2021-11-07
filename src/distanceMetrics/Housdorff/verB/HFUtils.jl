@@ -19,7 +19,7 @@ threadsXdim  - x dimension of the thread block
 threadsYdim  - y dimension of the thread block
 return tuple with numbers indicating how many iterations are needed in the loops of the kernel
 """
-function calculateLoopsIter(dataBdim,threadsXdim,threadsYdim)
+function calculateLoopsIter(dataBdim,threadsXdim,threadsYdim,metaDataDims,blocks)
     loopAXFixed= fld(dataBdim[2], threadsXdim)
     loopBXfixed= fld(dataBdim[3], threadsYdim)
             
@@ -33,8 +33,10 @@ function calculateLoopsIter(dataBdim,threadsXdim,threadsYdim)
     loopdataDimMainY = fld(dataBdim[2], threadsYdim)
     loopdataDimMainZ =dataBdim[2]
     inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(dataBdim[1] ,threadsXdim),fld(dataBdim[2] ,threadsYdim),dataBdim[3]    );
-
-return (loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ) 
+    metaDataLength= metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
+    loopMeta= fld(metaDataLength,blocks )
+    loopWarpMeta= fld(metaDataLength,(blocks*threadsXdim ))
+return (loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta) 
 
 end    
 
@@ -55,21 +57,21 @@ end
 14)   Total block Fn  
 
 xpos,ypos,zpos -current  position in x,y,z dimension 
-datBdim - dimensions of the data block
-
+dataBdim - dimensions of the data block
+boolSegm - true if we have true in algo arr 
 on the basis of the data it should give the index from 1 to 14 - to the appropriate queue
 """
-function getIndexOfQueue(xpos,ypos,zpos, datBdim,boolGold)
+function getIndexOfQueue(xpos,ypos,zpos, dataBdim,boolSegm)
     #we need to do so many != in order to deal with corners ...
     return (
      (xpos==1)*1
-    +(xpos==datBdim[1])*3
-    +(ypos==1 && xpos!=1 && xpos!=datBdim[1] )*5
-    +(ypos==datBdim[2] && xpos!=1 && xpos!=datBdim[1]  )*7
-    +(zpos==1  && xpos!=1 && xpos!=datBdim[1]  && ypos!=1 && ypos!=datBdim[2] )*9
-    +(zpos==datBdim[3] && xpos!=1 && xpos!=datBdim[1]  && ypos!=1 && ypos!=datBdim[2])*11
-    +(xpos>1 && xpos<datBdim[1] &&  ypos>1 && ypos<datBdim[2] && zpos>1 && zpos<datBdim[3])*13
-    )+boolGold# in that way we will get odd for fp an even for fn
+    +(xpos==dataBdim[1])*3
+    +(ypos==1 && xpos!=1 && xpos!=dataBdim[1] )*5
+    +(ypos==dataBdim[2] && xpos!=1 && xpos!=dataBdim[1]  )*7
+    +(zpos==1  && xpos!=1 && xpos!=dataBdim[1]  && ypos!=1 && ypos!=dataBdim[2] )*9
+    +(zpos==dataBdim[3] && xpos!=1 && xpos!=dataBdim[1]  && ypos!=1 && ypos!=dataBdim[2])*11
+    +(xpos>1 && xpos<dataBdim[1] &&  ypos>1 && ypos<dataBdim[2] && zpos>1 && zpos<dataBdim[3])*13
+    )+boolSegm# in that way we will get odd for fp an even for fn
 
 end
 
@@ -78,25 +80,26 @@ end
 specialization of 2 dim iteration  for iterating over 3 dimensional metadata
     we join y and z iterations in order to increase occupancy for potentially small arrays
 """
-macro iter3dOuter(metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta, ex)
-    mainExp = generalizedItermultiDim(;xname=:(xMeta)
-    ,yname= :(yzSpot)
-    ,arrDims=metaDataDims
-    ,loopXdim=loopXMeta 
-    ,loopYdim=loopYZMeta
-    ,isFullBoundaryCheckY=false
-    ,isFullBoundaryCheckX =false
-    ,yOffset = :(ydim*gridDim().x)
-    ,yAdd=  :(blockIdxX()-1) 
-    ,additionalActionBeforeY= :( yMeta= rem(yzSpot,$metaDataDims[2]) ; zMeta= fld(yzSpot,$metaDataDims[2]) )
-    ,yCheck = :(yMeta < $metaDataDims[2] && zMeta<$metaDataDims[3] )
-    ,xCheck = :(xMeta < $metaDataDims[1])
-    #so each block will iterate over all xses
-    ,xOffset= :(0)
-    ,xAdd= :(xdim)
-    ,is3d = false
-    , ex = ex)  
-    return esc(:( $mainExp))
+macro iter3dOuter(metaDataDims,loopMeta,metaDataLength, ex)
+    
+    return  esc(quote
+    linIdexMeta = UInt32(0)
+    @unroll for j in 0:($loopMeta-1)
+        linIdexMeta= blockIdxX()+ j*gridDimX()-1
+        xMeta= rem(linIdexMeta,$metaDataDims[1])
+        zMeta= fld((linIdexMeta),$metaDataDims[1]*$metaDataDims[2])
+        yMeta= fld((linIdexMeta-((zMeta*$metaDataDims[1]*$metaDataDims[2] ) + xMeta )),$metaDataDims[1])
+      $ex
+    end 
+    linIdexMeta= blockIdxX()+ $loopMeta*gridDimX() -1
+            if(linIdexMeta<$metaDataLength)
+            xMeta= rem(linIdexMeta,$metaDataDims[1])
+            zMeta= fld((linIdexMeta),$metaDataDims[1]*$metaDataDims[2])
+            yMeta= fld((linIdexMeta-((zMeta*$metaDataDims[1]*$metaDataDims[2] ) + xMeta )),$metaDataDims[1])
+        $ex
+      end 
+    end)
+
 
 end #iter3dOuter
 

@@ -17,9 +17,7 @@ mainArrCPU[10:50,10:50,10]= true
 refArrCPU[10:50,10:50,30]= true
 metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
 metaDataDims= size(metaData);
-loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ= ProcessMainDataVerB.calculateLoopsIter(dataBdim,threads[1],threads[2])
-
-
+loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta=calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
 
 
