@@ -39,10 +39,20 @@ main function responsible for calculations of Housedorff distance
 function mainKernelLoad()
     @mainLoopKernel
 end
+boolKernelArgs = (mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,gold3d,segm3d,numberToLooFor,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta)
+mainKernelArgs= ()
 
+function get_shmemBoolKernel()
+    
+end
+
+function get_shmemMainKernel()
+    
+end
 
 ## now we need to make use of occupancy API to get optimal number of threads and blocks fo each kernel
-threadsBoollKernel,blocksBoollKernel = getThreadsAndBlocksNumbForKernel(get_shmem,kernelFun,args)
+threadsBoollKernel,blocksBoollKernel = getThreadsAndBlocksNumbForKernel(get_shmemBoolKernel,kernelFun,args)
+threadsMainHKernel,blocksMainHKernel = getThreadsAndBlocksNumbForKernel(get_shmemMainKernel,kernelFun,args)
 
 
 """
