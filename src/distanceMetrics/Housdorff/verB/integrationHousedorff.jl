@@ -19,43 +19,45 @@ metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
 metaDataDims= size(metaData);
 loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta=calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
+loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
+    minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp  =getSmallForBoolKernel();
+    reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB=  getLargeForBoolKernel(mainArrDims);
 
-
-
-totalFp,totalFn= 500,500
-resList,resListIndicies= allocateResultLists(totalFp,totalFn)
-iterNumb=3
-isGold = 1
-queueNumber = 11
-xMeta,yMeta,zMeta = 1,1,1 # here by assumption that we have all meta indicies 0 based
-isToBeValidated = true
-resShmem = CUDA.zeros(Bool,(dataBdim[1]+2,dataBdim[2]+2,dataBdim[3]+2)) # we need this additional 33th an 34th spots
 
 mainArrGPU = CuArray(mainArrCPU);
-## IMPORTANT in that way we set all points to agree so all should be aded to results !
-# refArrGPU= CuArray(mainArrCPU);
 refArrGPU= CuArray(mainArrCPU);
-#setting offsets for all result queues
-for qn in 1:14
-    # resShmem[qn,1,1]=true
-    #checking is it marked as to be validates
-    # resShmem[qn,dataBdim[2],1]=true
-    for a in [-1,0,1], b in [-1,0,1], c in [-1,0,1]
-        metaData[xMeta+a+1,yMeta+b+1,zMeta+c+1,getResOffsetsBeg()+qn]=qn*50
-        metaData[xMeta+a+1,yMeta+b+1,zMeta+c+1,getIsToBeAnalyzedNumb()+qn]=1
-    end    
-end
-loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ
-inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(dataBdim[1] ,threads[1]),fld(dataBdim[2] ,threads[2]),dataBdim[3]    );
-sourceShmem = CUDA.zeros(Bool,(dataBdim));
-areToBeValidated= CUDA.ones(Bool,14)
-isAnythingInPadding= CUDA.zeros(Bool,6)
-function executeDataIterWithPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
-    isMaskFull= true
-    @executeDataIterWithPadding(mainArrDims, inBlockLoopX,inBlockLoopY,inBlockLoopZ,mainArrGPU,refArrGPU,xMeta,yMeta,zMeta,isGold,iterNumb)
-
+    """
+    for invoking getBoolCubeKernel
+    """
+    function boolKernelLoad(mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,gold3d,segm3d,numberToLooFor,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta)
+        @getBoolCubeKernel()
     return
+    end
+"""
+main function responsible for calculations of Housedorff distance
+"""
+function mainKernelLoad()
+    @mainLoopKernel
 end
+
+
+## now we need to make use of occupancy API to get optimal number of threads and blocks fo each kernel
+threadsBoollKernel,blocksBoollKernel = getThreadsAndBlocksNumbForKernel(get_shmem,kernelFun,args)
+
+
+"""
+connecs all functions to complete Housedorff distance kernel Lounch
+"""
+function fullHouseDorfKernelAct()
+    
+    @cuda threads=threads blocks=blocks boolKernelLoad(mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,gold3d,segm3d,numberToLooFor,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta)
+    #now time to get data structures dependent on bool kernel like for example loading subsections of meta data, creating work queue ...
+    
+    krowa
+    #main calculations
+    @cuda threads=threads blocks=blocks  cooperative=true mainKernelLoad()
+end    
+
 
 @cuda threads=threads blocks=blocks executeDataIterWithPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
 
