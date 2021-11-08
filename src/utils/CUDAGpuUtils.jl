@@ -4,7 +4,7 @@ module CUDAGpuUtils
 using CUDA, StaticArrays
 
 export syncThreadsAnd,gridDimX,atomicallySetValueTrreeDim,atomicallyAddOneInt,clearLocArrdefineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc,reduce_warp_max,reduce_warp_min,reduce_warp_min,reduce_warp_or,reduce_warp_and,blockIdxZ,blockIdxY,blockIdxX,blockDimZ, blockDimY, blockDimX, threadIdxX, threadIdxY, threadIdxZ
-export @unroll, @ifX, @ifY, @ifXY, @widL, @wid, @lan
+export @unroll, @ifX, @ifY, @ifXY, @widL, @wid, @lan,getThreadsAndBlocksNumbForKernel
 
 
 """
