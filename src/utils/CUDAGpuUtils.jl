@@ -4,7 +4,7 @@ module CUDAGpuUtils
 using CUDA, StaticArrays
 
 export syncThreadsAnd,gridDimX,atomicallySetValueTrreeDim,atomicallyAddOneInt,clearLocArrdefineIndicies,computeBlocksFromOccupancy,reduce_warp,getKernelContants,assignWorkToCooperativeBlocks,getMaxBlocksPerMultiproc,reduce_warp_max,reduce_warp_min,reduce_warp_min,reduce_warp_or,reduce_warp_and,blockIdxZ,blockIdxY,blockIdxX,blockDimZ, blockDimY, blockDimX, threadIdxX, threadIdxY, threadIdxZ
-export @unroll, @ifX, @ifY, @ifXY, @widL, @wid, @lan
+export @unroll, @ifX, @ifY, @ifXY, @widL, @wid, @lan,getThreadsAndBlocksNumbForKernel
 
 
 """
@@ -375,10 +375,33 @@ end #assignWorkToCooperativeBlocks
 #   nv-nsight-cu-cli --mode=launch julia 
 
 
+"""
+function to be invoked on CPU
+use the occupancy API to calculate optimal number of threads and blocks 
+it assumes that we always want to have x dimension of thread block to be 32 
+the Y dimension will vary depending on kernel and GPU
+get_shmem - function accepting  integer that is representing number of threads and returning number of bytes that the kernel will utilize with given number of threads
+kernelFun - reference to kernel function that is to be analyzed by occupancy API
+args - arguments tuple  for kernel function
+reurn 2 tuple with optimal threads and blocks number (threads,blocks)
+"""
+function getThreadsAndBlocksNumbForKernel(get_shmem,kernelFun,args)
+    # calculate the amount of dynamic shared memory for a 2D block size
+    #get_shmem(threads) = (sizeof(UInt32)*3*4)
+    
+    function get_threads(threads)
+        threads_x = 32
+        threads_y = cld(threads,threads_x )
+        return (threads_x, threads_y)
+    end
 
-
-
-
+    kernel = @cuda launch=false kernelFun(args...)
+   
+    config = launch_configuration(kernel.fun, shmem=threads->get_shmem(get_threads(threads)))
+    threads = get_threads(config.threads)
+    blocks = UInt32(config.blocks)
+    return (threads,blocks)
+end
 
 
 

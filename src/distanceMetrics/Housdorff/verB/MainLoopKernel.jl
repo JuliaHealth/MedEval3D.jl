@@ -1,8 +1,7 @@
 module MainLoopKernel
 using CUDA, Logging,Main.CUDAGpuUtils, Main.ResultListUtils,Main.WorkQueueUtils,Main.ScanForDuplicates, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils
 using Main.MetadataAnalyzePass, Main.ScanForDuplicates
-export @iterateOverWorkQueue,@clearBeforeNextDilatation,@mainLoop,@mainLoopKernelAllocations,@innersingleDataBlockPass,@privateWorkQueueAnalysis, @analyzeTail,@prepareForNextDilation
-export mainLoopKernel
+export loadDataAtTheBegOfDilatationStep,@prepareForNextDilation,@mainLoopKernel, @iterateOverWorkQueue,@mainLoop,@mainLoopKernelAllocations,@clearBeforeNextDilatation
 
 
 
@@ -23,6 +22,7 @@ macro clearBeforeNextDilatation( clearIterResShmemLoop,clearIterSourceShmemLoop,
    
 end)#quote
 end#clearBeforeNextDilatation
+
 
 
 
@@ -96,8 +96,6 @@ macro  innersingleDataBlockPass()
            #@executeDataIterWithPadding() 
 end) #quote
 end
-
-
 
 
 
@@ -198,11 +196,13 @@ macro iterateOverWorkQueue(workQueauecounter,workQueaue,goldToBeDilatated, segmT
     end)#quote 
 end    
 
+
+
 """
 main kernel managing 
 """
-function mainLoopKernel()
-
+macro mainLoopKernel()
+  return esc(quote
     @mainLoopKernelAllocations(dataBdim)
     MetadataAnalyzePass.@analyzeMetadataFirstPass()
     loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,iterationNumber,positionInMainWorkQueaue,workCounterInshmem,mainQuesCounterArr,isAnyBiggerThanZero,goldToBeDilatated,segmToBeDilatated, resArraysCounters  )    
@@ -218,7 +218,7 @@ function mainLoopKernel()
     while((goldToBeDilatated[1] || segmToBeDilatated[1]) && workCounterBiggerThan0[1])
         @mainLoop()
     end#while we did not yet finished    
-
+end)#quote
 
 end
 
@@ -267,7 +267,6 @@ end
 
 
 
-
 """
 after dilatation prepare
 """
@@ -305,6 +304,7 @@ function loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,it
 end
 
 
+<<<<<<< HEAD
 """
 allocates memory for small GPU Arrays
 """
@@ -336,3 +336,6 @@ function getBigGPUForHousedorffAfterBoolKernel(metaData)
 end 
 
 end#MainLoopKernel
+=======
+end#MainLoopKernel
+>>>>>>> 4a6152fb93f2afc5fd4c912d7489df95829ef68e
