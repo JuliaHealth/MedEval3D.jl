@@ -44,11 +44,10 @@ function  scanForDuplicatesMainPart(shmemSum,innerWarpNumb,resListIndicies,metaD
         #as we can analyze 32 numbers at once if the amount of new results is bigger we need to do it in multiple passes 
         @unroll for scanIter in 0:fld(shmemSum[34,innerWarpNumb],32)
                 # here we are loading data about linearized indicies of result in main  array depending on a queue we are analyzing it will tell about gold or other pas
-                if(((scanIter*32) + threadIdxX())< shmemSum[34,innerWarpNumb]  )
-                     indexx = (shmemSum[33,innerWarpNumb]  +shmemSum[35,innerWarpNumb] + (scanIter*32) + threadIdxX())
-                    shmemSum[threadIdxX(),innerWarpNumb] = resListIndicies[indexx]
+                # if(((scanIter*32) + threadIdxX())< shmemSum[34,innerWarpNumb]  )
+                    shmemSum[threadIdxX(),innerWarpNumb] = resListIndicies[(shmemSum[33,innerWarpNumb]  +shmemSum[35,innerWarpNumb] + (scanIter*32) + threadIdxX())]
 
-                end
+                # end
             sync_warp() # now we have 32 linear indicies loaded into the shared memory
             #so we need to load some value into single value into thread and than go over all value in shared memory  
             scanWhenDataInShmem(shmemSum,innerWarpNumb, scanIter,resListIndicies,metaData,xMeta,yMeta,zMeta,metaDataDims,threadNumber,maxResListIndex,outerWarpLoop ,alreadyCoveredInQueues )           
@@ -113,9 +112,31 @@ function scanWhenDataInShmem(shmemSum,innerWarpNumb, scanIter,resListIndicies,me
         if((resListCurrIndex!=( (shmemSum[33,innerWarpNumb]  +shmemSum[35,innerWarpNumb] + (scanIter*32) + threadIdxX()) ) ) && resListCurrIndex < maxResListIndex  )
             #finally we iterate over all values in any given thread and compare to associated value in shared memory
             if(shmemSum[threadIdxX(),innerWarpNumb]>0)
-           
+                #now we can make small optimazation and reduce global memory use and if reslist currindex is in range of currently loaded value in shared memory we will load them from shared memory
+                shmemIndexBase = (shmemSum[33,innerWarpNumb]  +shmemSum[35,innerWarpNumb] + (scanIter*32))
+                scannedVal = if(resListCurrIndex>shmemIndexBase && resListCurrIndex<(shmemIndexBase+32)  ) # range that is in the shmem
+                                shmemSum[(resListCurrIndex- shmemIndexBase),innerWarpNumb]
+                            else 
+                                resListIndicies[resListCurrIndex] 
+                            end
+                            
+                            # if(resListCurrIndex>shmemIndexBase && resListCurrIndex<=(shmemIndexBase+32) && shmemSum[(resListCurrIndex- shmemIndexBase),innerWarpNumb]!=0 )
+                            #     if(resListIndicies[resListCurrIndex]!= (shmemSum[(resListCurrIndex- shmemIndexBase),innerWarpNumb]) )
+                            #         jjj1 = 0
+                            #         jjj2 = 0
+                            #         for j in 1:32
+                            #             if(shmemSum[j,innerWarpNumb] ==resListIndicies[resListCurrIndex] )
+                            #                 jjj2=j
+                            #                 if(jjj1==0) jjj1=j   end
+                            #             end    
+                            #         end
+
+                            #          CUDA.@cuprint "$(resListIndicies[resListCurrIndex]== (shmemSum[(resListCurrIndex- shmemIndexBase),innerWarpNumb]) )   resListCurrIndex $(resListCurrIndex) shmemIndexBase $(shmemIndexBase) vall $(resListIndicies[resListCurrIndex])    altVal $(shmemSum[(resListCurrIndex- shmemIndexBase),innerWarpNumb]) inddB $((resListCurrIndex- shmemIndexBase)) shoud be $(jjj1) $(jjj2) \n  "#   
+                            #     end    
+                            # end 
+
                 #we need also to remember that we can have only 2 copies of the same result entry  we will keep only first one and second one we will remove
-                if( (resListIndicies[resListCurrIndex]  == shmemSum[threadIdxX(),innerWarpNumb]) &&  (tempCount>  ((scanIter*32) + threadIdxX()))   )
+                if( ( scannedVal == shmemSum[threadIdxX(),innerWarpNumb]) &&  (tempCount>  ((scanIter*32) + threadIdxX()))   )
                    
 
                     #incrementing shared memory to later actualize counter
