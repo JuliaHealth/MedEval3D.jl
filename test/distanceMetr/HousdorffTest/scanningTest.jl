@@ -172,21 +172,21 @@ for i in 1:30
             summA+=alreadyCoveredInQueues[i]
             suumB+=i*10
          end  
-         CUDA.@cuprint " alreadyCoveredInQueues[1] $(alreadyCoveredInQueues[1])   should be $(1*5)\n "
-         CUDA.@cuprint " alreadyCoveredInQueues[2] $(alreadyCoveredInQueues[2]) should be $(2*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[3] $(alreadyCoveredInQueues[3]) should be $(3*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[4] $(alreadyCoveredInQueues[4]) should be $(4*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[5] $(alreadyCoveredInQueues[5]) should be $(5*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[6] $(alreadyCoveredInQueues[6]) should be $(6*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[7] $(alreadyCoveredInQueues[7]) should be $(7*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[8] $(alreadyCoveredInQueues[8]) should be $(8*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[9] $(alreadyCoveredInQueues[9]) should be $(9*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[10] $(alreadyCoveredInQueues[10]) should be $(10*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[11] $(alreadyCoveredInQueues[11]) should be $(11*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[12] $(alreadyCoveredInQueues[12]) should be $(12*5) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[13] $(alreadyCoveredInQueues[13]) should be $(13*10) \n "
-         CUDA.@cuprint " alreadyCoveredInQueues[14] $(alreadyCoveredInQueues[14]) should be $(14*10) \n "
-         CUDA.@cuprint "summA  $(summA) should be  $(suumB) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[1] $(alreadyCoveredInQueues[1])   should be $(1*5)\n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[2] $(alreadyCoveredInQueues[2]) should be $(2*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[3] $(alreadyCoveredInQueues[3]) should be $(3*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[4] $(alreadyCoveredInQueues[4]) should be $(4*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[5] $(alreadyCoveredInQueues[5]) should be $(5*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[6] $(alreadyCoveredInQueues[6]) should be $(6*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[7] $(alreadyCoveredInQueues[7]) should be $(7*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[8] $(alreadyCoveredInQueues[8]) should be $(8*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[9] $(alreadyCoveredInQueues[9]) should be $(9*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[10] $(alreadyCoveredInQueues[10]) should be $(10*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[11] $(alreadyCoveredInQueues[11]) should be $(11*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[12] $(alreadyCoveredInQueues[12]) should be $(12*5) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[13] $(alreadyCoveredInQueues[13]) should be $(13*10) \n "
+         # CUDA.@cuprint " alreadyCoveredInQueues[14] $(alreadyCoveredInQueues[14]) should be $(14*10) \n "
+         # CUDA.@cuprint "summA  $(summA) should be  $(suumB) \n "
    
       end 
          #   CUDA.@cuprint """  valuee fp $(alreadyCoveredInQueues[1]+ alreadyCoveredInQueues[3]+ alreadyCoveredInQueues[5]+ alreadyCoveredInQueues[7]+ alreadyCoveredInQueues[9]+ alreadyCoveredInQueues[11]+ alreadyCoveredInQueues[13]) 

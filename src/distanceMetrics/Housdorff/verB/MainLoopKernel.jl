@@ -304,7 +304,6 @@ function loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,it
 end
 
 
-<<<<<<< HEAD
 """
 allocates memory for small GPU Arrays
 """
@@ -336,6 +335,3 @@ function getBigGPUForHousedorffAfterBoolKernel(metaData)
 end 
 
 end#MainLoopKernel
-=======
-end#MainLoopKernel
->>>>>>> 4a6152fb93f2afc5fd4c912d7489df95829ef68e
