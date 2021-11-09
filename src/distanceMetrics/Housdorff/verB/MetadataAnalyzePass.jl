@@ -40,19 +40,19 @@ macro metaDataWarpIter(metaDataDims,loopWarpMeta,metaDataLength,ex)
     return  esc(quote
     isInRange = true
     linIdexMeta = UInt32(0)
+
+    # gridDimX()*blockDimX()
+
     @unroll for j in 0:($loopWarpMeta-1)
-        linIdexMeta= blockIdxX()+ j*gridDimX()-1+ threadIdxX()
+        linIdexMeta= ((blockIdxX()-1)*$loopWarpMeta*blockDimX())+j*blockDimX()+ threadIdxX()-1
+        # linIdexMeta= ((blockIdxX()-1)*(gridDimX())*blockDimX()*$loopWarpMeta)+j*blockDimX()+ threadIdxX()
+        isInRange=(linIdexMeta<$metaDataLength)
         xMeta= rem(linIdexMeta,$metaDataDims[1])
         zMeta= fld((linIdexMeta),$metaDataDims[1]*$metaDataDims[2])
         yMeta= fld((linIdexMeta-((zMeta*$metaDataDims[1]*$metaDataDims[2] ) + xMeta )),$metaDataDims[1])
       $ex
     end 
-    linIdexMeta= blockIdxX()+ $loopWarpMeta*gridDimX() -1+ threadIdxX()
-            isInRange=(linIdexMeta<$metaDataLength)
-            xMeta= rem(linIdexMeta,$metaDataDims[1])
-            zMeta= fld((linIdexMeta),$metaDataDims[1]*$metaDataDims[2])
-            yMeta= fld((linIdexMeta-((zMeta*$metaDataDims[1]*$metaDataDims[2] ) + xMeta )),$metaDataDims[1])
-        $ex
+
     end)
 
 
@@ -88,7 +88,7 @@ macro loadCounters()
         @unroll for i in 1:14
            @exOnWarp i begin 
             if(isInRange) 
-                shmemSum[threadIdxX(),i]= metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ i]
+                shmemSum[threadIdxX(),i]= @accMeta(getBeginingOfFpFNcounts()+ i)
             end   
            end
         end#for
@@ -98,7 +98,7 @@ macro loadCounters()
         # we need to supply linear coordinate for atomicallyAddToSpot
         @exOnWarp 15 begin 
             if(isInRange)
-            count = metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ 16]
+            count = @accMeta(getBeginingOfFpFNcounts()+ 16)
                 if(count>0)     
                     shmemSum[threadIdxX(),15]= atomicAdd(globalFpResOffsetCounter,  ceil(count*1.5)  )+1
                 else
@@ -109,7 +109,7 @@ macro loadCounters()
         end
         @exOnWarp 16 begin 
             if(isInRange) 
-            count = metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ 17]
+            count = @accMeta(getBeginingOfFpFNcounts()+ 17)
                 if(count>0)     
                     shmemSum[threadIdxX(),16]= atomicAdd(globalFnResOffsetCounter,  ceil( count*1.5 )  )+1
                 else
@@ -135,7 +135,7 @@ end #loadCounters
  macro analyzeMetadataFirstPass()
          return esc(quote
          # we need to iterate over all metadata blocks with checks so the blocks can not be  outside the area of intrest defined by  minX, minY,minZ and maxX,maxY,maxZ
-         @metaDataWarpIter(metaDataDims,loopMeta,metaDataLength,begin
+         @metaDataWarpIter(metaDataDims,loopWarpMeta,metaDataLength,begin
              #now we upload all data related to amount of data that is of our intrest 
              #as we need to perform basically the same work across all warps - instead on specializing threads in warp we will execute the same fynction across all warps
              # so warp will execute the same function just with varying data as it should be 
@@ -154,10 +154,9 @@ end #loadCounters
             @ifY 2 if(shmemSum[threadIdxX(),16]>0 && isInRange) begin 
                  appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 ) end  
                 end      
-           # @exOnWarp 2 CUDA.@cuprint "is true $((shmemSum[threadIdxX(),16]>0.0 ))"   #if(shmemSum[threadIdxX(),16]>0.0 ) appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 ) end        
             
-            @exOnWarp 3 if((shmemSum[threadIdxX(),15]) >0 && isInRange) setBlockasCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)    end 
-            @exOnWarp 4 if((shmemSum[threadIdxX(),16]) >0 && isInRange) setBlockasCurrentlyActiveInGold(metaData, xMeta,yMeta+1,zMeta+1)     end 
+            @exOnWarp 3 if((shmemSum[threadIdxX(),15]) >0 && isInRange) setBlockasCurrentlyActiveInSegm(metaData, xMeta+1,yMeta+1,zMeta+1)    end 
+            @exOnWarp 4 if((shmemSum[threadIdxX(),16]) >0 && isInRange) setBlockasCurrentlyActiveInGold(metaData, xMeta+1,yMeta+1,zMeta+1)     end 
  
  
             #####3set offsets
@@ -171,7 +170,7 @@ end #loadCounters
                     value+= ceil(shmemSum[threadIdxX(),((i-1)*2+1)]*1.45)
                    end
                    shmemSum[threadIdxX(),15]= value
-                   metaData[xMeta,yMeta+1,zMeta+1,((getResOffsetsBeg()-1) +i*2+1)  ]=value
+                   @setMeta(((getResOffsetsBeg()-1) +i*2+1) ,value)
                      end#for
                     end #if
                 end
@@ -183,7 +182,7 @@ end #loadCounters
                     value+= ceil(shmemSum[threadIdxX(),((i-1)*2+2)]*1.45)+1 #multiply as we can have some entries potentially repeating
                  end
                  shmemSum[threadIdxX(),16]= value
-                 metaData[xMeta,yMeta+1,zMeta+1,((getResOffsetsBeg()-1) +i*2+2)  ]=value
+                 @setMeta(((getResOffsetsBeg()-1) +i*2+2) ,value)
                 end#for
             end#if
         end
@@ -199,13 +198,13 @@ establish is the  block  is active full or be activated, and we are saving this 
 """
 macro checkIsActiveOrFullOr()
     return esc(quote
-        @exOnWarp 30 if(isInRange) sourceShmem[(threadIdxX())] = metaData[xMeta,yMeta+1,zMeta+1,getFullInGoldNumb() ] end#  isBlockFulliInGold(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 31 if(isInRange)   sourceShmem[(threadIdxX())+33] = metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInGoldNumb() ] end # isBlockToBeActivatediInGold(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 32 if(isInRange)  sourceShmem[(threadIdxX())+33*2] = metaData[xMeta,yMeta+1,zMeta+1,getActiveGoldNumb() ] end # isBlockCurrentlyActiveiInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 30 if(isInRange) sourceShmem[(threadIdxX())] = @accMeta(getFullInGoldNumb() ) end#  isBlockFulliInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 31 if(isInRange)   sourceShmem[(threadIdxX())+33] = @accMeta(getIsToBeActivatedInGoldNumb() ) end # isBlockToBeActivatediInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 32 if(isInRange)  sourceShmem[(threadIdxX())+33*2] = @accMeta(getActiveGoldNumb() ) end # isBlockCurrentlyActiveiInGold(metaData, xMeta,yMeta+1,zMeta+1)
        
-        @exOnWarp 33 if(isInRange) sourceShmem[(threadIdxX())+33*3] = metaData[xMeta,yMeta+1,zMeta+1,getFullInSegmNumb() ] end # isBlockFullInSegm(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 34 if(isInRange) sourceShmem[(threadIdxX())+33*4] = metaData[xMeta,yMeta+1,zMeta+1,getIsToBeActivatedInSegmNumb() ] end # isBlockToBeActivatedInSegm(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 35 if(isInRange) sourceShmem[(threadIdxX())+33*5] = metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb()] end # isBlockCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 33 if(isInRange) sourceShmem[(threadIdxX())+33*3] = @accMeta(getFullInSegmNumb()) end # isBlockFullInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 34 if(isInRange) sourceShmem[(threadIdxX())+33*4] = @accMeta(getIsToBeActivatedInSegmNumb() ) end # isBlockToBeActivatedInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 35 if(isInRange) sourceShmem[(threadIdxX())+33*5] = @accMeta(getActiveSegmNumb()) end # isBlockCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)
 end)#quote
 end#checkIsActiveOrFullOr
 
@@ -216,11 +215,11 @@ given data in sourceShmem loaded by checkIsActiveOrFullOr() we will  mark the bl
 macro setIsToBeActive()
     return esc(quote
         @exOnWarp 1 if(!sourceShmem[(threadIdxX())]  && (sourceShmem[(threadIdxX())+33]  ||  sourceShmem[(threadIdxX())+33*2]) &&isInRange  )  
-                        metaData[xMeta,yMeta+1,zMeta+1,getActiveGoldNumb() ]=1
+                        @setMeta(getActiveGoldNumb(),1)
                         appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 )
                     end
         @exOnWarp 2 if(!sourceShmem[(threadIdxX())+33*3]  && (sourceShmem[(threadIdxX())+33*4]  ||  sourceShmem[(threadIdxX())+33*5]) &&isInRange ) 
-                        metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb() ]=1     
+                        @setMeta(getActiveSegmNumb(),1)
                         appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 )             
             end
     end)#quote
@@ -247,7 +246,7 @@ end
         $locArr=0
         $offsetIter=0
         isMaskFull=false
-        @metaDataWarpIter(metaDataDims,loopXMeta,loopYZMeta ,begin
+        @metaDataWarpIter(metaDataDims,loopWarpMeta,metaDataLength, begin
         isMaskOkForProcessing=false
             #first we will check is block full active or be activated and we will set later on this basis what blocks should be put to work queue
              @checkIsActiveOrFullOr() 
@@ -292,7 +291,7 @@ end
              end
                 #now we need to set old caounters to the value of new counters so at next dilatation we will count only new values ...
             for i in 1:14
-                @exOnWarp (i+37) metaData[xMeta, (yMeta+1),(zMeta+1), (getOldCountersBeg() +i) ]=metaData[xMeta, (yMeta+1),(zMeta+1), (getNewCountersBeg() +i) ]
+                @exOnWarp (i+37) @setMeta((getOldCountersBeg() +i),@accMeta(getNewCountersBeg() +i))
             end  
             $locArr=0
             $offsetIter=0

@@ -305,4 +305,34 @@ function loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,it
 end
 
 
+"""
+allocates memory for small GPU Arrays
+"""
+function getSmallGPUForHousedorff()
+    globalFpResOffsetCounter= CUDA.zeros(UInt32,1)
+    globalFnResOffsetCounter= CUDA.zeros(UInt32,1)
+    workQueaueCounter= CUDA.zeros(UInt32,1)
+
+end    
+
+"""
+allocate memory for bigger arrays 
+"""
+function getBigGPUForHousedorff()
+
+
+end 
+
+"""
+allocate after prepare bool kernel had finished execution
+"""
+function getBigGPUForHousedorffAfterBoolKernel(metaData)
+
+    ###we need to return subset of metadata that we are intrested in 
+
+    ###we return only subset of boolean arrays that we are intrested in 
+    workQueaue= WorkQueueUtils.allocateWorkQueue(fpTotal,fnTotal)
+
+end 
+
 end#MainLoopKernel

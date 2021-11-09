@@ -111,8 +111,9 @@ end#for quueueNumb
 maxResListIndex= length(resListIndicies)
 
 globalCurrentFnCount,globalCurrentFpCount= CUDA.zeros(UInt32,1),CUDA.zeros(UInt32,1)
+loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
-function loadAndSanForDuplKernel(globalCurrentFnCount,globalCurrentFpCount,maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,dataBdim)
+function loadAndSanForDuplKernel(loopWarpMeta,metaDataLength,globalCurrentFnCount,globalCurrentFpCount,maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,dataBdim)
    locArr= UInt32(0)
    localOffset= UInt32(0)
    offsetIter= UInt16(0)
@@ -131,7 +132,7 @@ function loadAndSanForDuplKernel(globalCurrentFnCount,globalCurrentFpCount,maxRe
       shmemSum[(threadIdxX()),i]= 0
    end
 
-   MetadataAnalyzePass.@metaDataWarpIter( metaDataDims,loopXMeta,loopYZMeta,
+   MetadataAnalyzePass.@metaDataWarpIter( metaDataDims,loopWarpMeta,metaDataLength,
        begin
 
         # @exOnWarp 16 CUDA.@cuprint "idX $(threadIdxX())  xMeta $(xMeta) yMeta $(yMeta+1) zMeta $(zMeta+1)  \n "
@@ -171,21 +172,21 @@ for i in 1:30
             summA+=alreadyCoveredInQueues[i]
             suumB+=i*10
          end  
-         # CUDA.@cuprint " alreadyCoveredInQueues[1] $(alreadyCoveredInQueues[1])   should be $(1*5)\n "
-         # CUDA.@cuprint " alreadyCoveredInQueues[2] $(alreadyCoveredInQueues[2]) should be $(2*5) \n "
-         # CUDA.@cuprint " alreadyCoveredInQueues[3] $(alreadyCoveredInQueues[3]) should be $(3*5) \n "
-         # CUDA.@cuprint " alreadyCoveredInQueues[4] $(alreadyCoveredInQueues[4]) should be $(4*5) \n "
-         # CUDA.@cuprint " alreadyCoveredInQueues[5] $(alreadyCoveredInQueues[5]) should be $(5*5) \n "
-         # CUDA.@cuprint " alreadyCoveredInQueues[6] $(alreadyCoveredInQueues[6]) should be $(6*5) \n "
-         # CUDA.@cuprint " alreadyCoveredInQueues[7] $(alreadyCoveredInQueues[7]) should be $(7*5) \n "
-         # CUDA.@cuprint " alreadyCoveredInQueues[8] $(alreadyCoveredInQueues[8]) should be $(8*5) \n "
-         # CUDA.@cuprint " alreadyCoveredInQueues[9] $(alreadyCoveredInQueues[9]) should be $(9*5) \n "
-         # CUDA.@cuprint " alreadyCoveredInQueues[10] $(alreadyCoveredInQueues[10]) should be $(10*5) \n "
-         # CUDA.@cuprint " alreadyCoveredInQueues[11] $(alreadyCoveredInQueues[11]) should be $(11*5) \n "
-         # CUDA.@cuprint " alreadyCoveredInQueues[12] $(alreadyCoveredInQueues[12]) should be $(12*5) \n "
-         # CUDA.@cuprint " alreadyCoveredInQueues[13] $(alreadyCoveredInQueues[13]) should be $(13*10) \n "
-         # CUDA.@cuprint " alreadyCoveredInQueues[14] $(alreadyCoveredInQueues[14]) should be $(14*10) \n "
-         # CUDA.@cuprint "summA  $(summA) should be  $(suumB) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[1] $(alreadyCoveredInQueues[1])   should be $(1*5)\n "
+         CUDA.@cuprint " alreadyCoveredInQueues[2] $(alreadyCoveredInQueues[2]) should be $(2*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[3] $(alreadyCoveredInQueues[3]) should be $(3*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[4] $(alreadyCoveredInQueues[4]) should be $(4*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[5] $(alreadyCoveredInQueues[5]) should be $(5*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[6] $(alreadyCoveredInQueues[6]) should be $(6*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[7] $(alreadyCoveredInQueues[7]) should be $(7*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[8] $(alreadyCoveredInQueues[8]) should be $(8*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[9] $(alreadyCoveredInQueues[9]) should be $(9*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[10] $(alreadyCoveredInQueues[10]) should be $(10*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[11] $(alreadyCoveredInQueues[11]) should be $(11*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[12] $(alreadyCoveredInQueues[12]) should be $(12*5) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[13] $(alreadyCoveredInQueues[13]) should be $(13*10) \n "
+         CUDA.@cuprint " alreadyCoveredInQueues[14] $(alreadyCoveredInQueues[14]) should be $(14*10) \n "
+         CUDA.@cuprint "summA  $(summA) should be  $(suumB) \n "
    
       end 
          #   CUDA.@cuprint """  valuee fp $(alreadyCoveredInQueues[1]+ alreadyCoveredInQueues[3]+ alreadyCoveredInQueues[5]+ alreadyCoveredInQueues[7]+ alreadyCoveredInQueues[9]+ alreadyCoveredInQueues[11]+ alreadyCoveredInQueues[13]) 
@@ -216,7 +217,7 @@ numbOfFn+=7*2
 
 numbOfFp+=5
 
-@cuda threads=threads blocks=blocks loadAndSanForDuplKernel(globalCurrentFnCount,globalCurrentFpCount,maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,dataBdim)
+@cuda threads=threads blocks=blocks loadAndSanForDuplKernel(loopWarpMeta,metaDataLength,globalCurrentFnCount,globalCurrentFpCount,maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,dataBdim)
 
 Int64(globalCurrentFnCount[1]+globalCurrentFpCount[1])== 660+5
 offset = -49
@@ -224,7 +225,7 @@ offset = -49
    for quueueNumb in 1:12
          offset+=350
         #the bigger the number the more repetitions and more non repeated elements 
-         @test metaData[1,1,1,getNewCountersBeg()+quueueNumb]==quueueNumb*5#j instead of quueueNumb*quueueNumb
+         @test Int64(metaData[1,1,1,getNewCountersBeg()+quueueNumb])==quueueNumb*5#j instead of quueueNumb*quueueNumb
          tempList= Array(resListIndicies[offset:offset+350])
          @test length(filter(el->el>0,tempList))==quueueNumb*5#+1 becouse of 0's entry
   end#for

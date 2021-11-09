@@ -10,6 +10,9 @@ using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.Wor
 singleVal = CUDA.zeros(14)
 
 threads=(32,5)
+# blocks =2
+# mainArrDims= (5,5,5)
+# dataBdim = (2,2,2)
 blocks =8
 mainArrDims= (516,523,421)
 dataBdim = (43,21,17)
@@ -24,8 +27,9 @@ function metaDataWarpIterKernel(singleVal,metaDataDims,loopWarpMeta,metaDataLeng
     MetadataAnalyzePass.@metaDataWarpIter(metaDataDims,loopWarpMeta,metaDataLength,
     begin
       @ifY 1 if(isInRange) @atomic singleVal[]+=1 end
-      #@ifX 1 CUDA.@cuprint "   xMeta $(xMeta)  yMeta $(yMeta)  zMeta $(zMeta) id  idX $(blockIdxX()) \n"   
-
+      #if(linIdexMeta>7000) 
+      #@ifY 1 CUDA.@cuprint "linIdexMeta $(linIdexMeta) offset = $(((blockIdxX()-1)*loopWarpMeta*blockDimX()))  xMeta $(xMeta)  yMeta $(yMeta)  zMeta $(zMeta) isInRange $(isInRange) id  idX $(blockIdxX()) \n"   
+      #end  
     # @ifXY 1 1    CUDA.@cuprint "linIndex $(linIndex)"
     #CUDA.@cuprint "linIndex $(linIndex) \n "
 end)
@@ -119,6 +123,7 @@ dataBdim = (43,21,17)
 metaDataDims=size(metaData)
 loopXMeta= fld(metaDataDims[1],threads[1])
 loopYZMeta= fld(metaDataDims[2]*metaDataDims[3],blocks )
+loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
 globalFpResOffsetCounter= CUDA.zeros(UInt32,1)
 globalFnResOffsetCounter= CUDA.zeros(UInt32,1)
@@ -139,11 +144,11 @@ end
 
 #as we have counters we check in shmem are they correct
 
-function loadCountersKernel(metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
+function loadCountersKernel(loopWarpMeta,metaDataLength,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
 
   tobeEx= true
   locArr= UInt32(0)
-    MetadataAnalyzePass.@metaDataWarpIter(metaDataDims,loopXMeta,loopYZMeta,
+    MetadataAnalyzePass.@metaDataWarpIter(metaDataDims,loopWarpMeta,metaDataLength,
     begin
       MetadataAnalyzePass.@loadCounters()
     #@ifY 1    CUDA.@cuprint "xMeta $(xMeta) yMeta $(xMeta) zMeta $(zMeta)" 
@@ -152,7 +157,7 @@ end)
     
     return
 end
-@cuda threads=threads blocks=blocks loadCountersKernel(metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
+@cuda threads=threads blocks=blocks loadCountersKernel(loopWarpMeta,metaDataLength,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
 sum(shmemSum)
 
 @test Int64(globalFpResOffsetCounter[1]) ==Int64(ceil((16*1.5)+(17*1.5)))
@@ -170,7 +175,7 @@ threads=(32,4)
 blocks =3
 mainArrDims= (516,523,826)
 dataBdim = (43,21,17)
- metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:3,2:5,4:6,: );
+metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:3,2:5,4:6,: );
 #metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:9,2:3,4:6,: );
 metaDataDims=size(metaData)
 loopXMeta= fld(metaDataDims[1],threads[1])
@@ -197,17 +202,18 @@ for j in 1:2
   metaData[j,j,j, getBeginingOfFpFNcounts()+16]=15+j
   metaData[j,j,j, getBeginingOfFpFNcounts()+17]=16+j
 end  
+loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
-function analyzeMetadataFirstPassKernel(workQueaue,workQueaueCounter,metaData,metaDataDims,loopXMeta,loopYZMeta,globalFpResOffsetCounter, globalFnResOffsetCounter)
+function analyzeMetadataFirstPassKernel(loopWarpMeta,metaDataLength,workQueaue,workQueaueCounter,metaData,metaDataDims,loopXMeta,loopYZMeta,globalFpResOffsetCounter, globalFnResOffsetCounter)
   shmemSum =  @cuStaticSharedMem(Float32,(35,16)) # we need this additional 33th an 34th spots
   MetadataAnalyzePass.@analyzeMetadataFirstPass()
     
     return
 end
-@cuda threads=threads blocks=blocks analyzeMetadataFirstPassKernel(workQueaue,workQueaueCounter,metaData,metaDataDims,loopXMeta,loopYZMeta,globalFpResOffsetCounter, globalFnResOffsetCounter)
+@cuda threads=threads blocks=blocks analyzeMetadataFirstPassKernel(loopWarpMeta,metaDataLength,workQueaue,workQueaueCounter,metaData,metaDataDims,loopXMeta,loopYZMeta,globalFpResOffsetCounter, globalFnResOffsetCounter)
 
 
-@test length(filter(it-> it>0,Array(workQueaue[:,3])))== 4
+# @test length(filter(it-> it>0,Array(workQueaue[:,3])))== 4
 @test workQueaueCounter[1]== 4
 
 @test metaData[1,1,1,1]==1
@@ -310,16 +316,17 @@ metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb() ]=1
 metaData[xMeta,yMeta+1,zMeta+1,getFullInSegmNumb() ]=1
 
 
+loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
 #as we have counters we check in shmem are they correct
 
-function checkIsToBeActive(dataBdim,workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
+function checkIsToBeActive(loopWarpMeta,metaDataLength,dataBdim,workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
  
   shmemSum =  @cuStaticSharedMem(Float32,(35,16)) # we need this additional 33th an 34th spots
   sourceShmem =  @cuDynamicSharedMem(Bool,(dataBdim[1]+2,dataBdim[2]+2,dataBdim[3]+2)) # we need this additional 33th an 34th spots
   tobeEx= true
   locArr= UInt32(0)
-  MetadataAnalyzePass.@metaDataWarpIter( metaDataDims,loopXMeta,loopYZMeta,
+  MetadataAnalyzePass.@metaDataWarpIter( metaDataDims,loopWarpMeta,metaDataLength,
       begin
        MetadataAnalyzePass.@checkIsActiveOrFullOr()
       sync_threads()
@@ -336,7 +343,7 @@ function checkIsToBeActive(dataBdim,workQueaueCounter,workQueaue,metaData,metaDa
     
     return
 end
-@cuda threads=threads blocks=blocks checkIsToBeActive(dataBdim,workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
+@cuda threads=threads blocks=blocks checkIsToBeActive(loopWarpMeta,metaDataLength,dataBdim,workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
 workQueaue[1,:]
 Int64(sum(workQueaue))
 Int64(workQueaueCounter[1])
@@ -351,8 +358,8 @@ ss
 
 function testForPresenceInWorkQueue(arr)::Bool
   outBool = false
-  for i in 1:100
-    if(workQueaue[i,:]==arr )
+  for i in 1:size(workQueaue)[2]
+    if(workQueaue[:,i]==arr )
       outBool=true
     end  
   end  
@@ -360,24 +367,24 @@ return outBool
 end
 
 using Logging
-for i in 1:33
-  @info Int64.(workQueaue[i,:])
+for i in 1:10
+  @info "$(Int64.(workQueaue[:,i])) \n"
 end
 
-metaData[1,0+1,0+1,getFullInGoldNumb() ]
+metaData[1,1,1,getFullInGoldNumb() ]
+workQueaue
 
-
+@test  testForPresenceInWorkQueue([0,1,1,1])
 @test  testForPresenceInWorkQueue([1,1,1,1])
-@test  testForPresenceInWorkQueue([2,1,1,1])
 
-@test  !testForPresenceInWorkQueue([2,2,1,1])#full
-@test  !testForPresenceInWorkQueue([2,2,2,1])#full
+@test  !testForPresenceInWorkQueue([1,2,1,1])#full
+@test  !testForPresenceInWorkQueue([1,2,2,1])#full
 
-@test  testForPresenceInWorkQueue([3,3,1,0])
-@test  testForPresenceInWorkQueue([3,1,1,0])
+@test  testForPresenceInWorkQueue([2,3,1,0])
+@test  testForPresenceInWorkQueue([2,1,1,0])
 
-@test  !testForPresenceInWorkQueue([3,2,1,0])#full
-@test  !testForPresenceInWorkQueue([3,2,2,0])#full
+@test  !testForPresenceInWorkQueue([2,2,1,0])#full
+@test  !testForPresenceInWorkQueue([2,2,2,0])#full
 
 
 

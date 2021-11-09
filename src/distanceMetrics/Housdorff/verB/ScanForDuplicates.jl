@@ -67,12 +67,12 @@ function  scanForDuplicatesMainPart(shmemSum,innerWarpNumb,resListIndicies,metaD
                 end    
                 #we set the counter to new value only if there were some subtractions done - some values were duplicated
                 if((shmemSum[36,innerWarpNumb]>0 ) && isInRange )
-                    metaData[xMeta,yMeta+1,zMeta+1,((getNewCountersBeg()) +innerWarpNumb) ]= updated
+                   @setMeta(((getNewCountersBeg()) +innerWarpNumb) , updated)
                 end
                 #it shoud NOT be analyzed if corrected counter value is the same as the total number for this queue
                 # but we need to analyze this only if there was any new value added relatively to last pass
                 if( (shmemSum[34,innerWarpNumb]-shmemSum[36,innerWarpNumb])  >0)
-                    if(isInRange && updated!= metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+innerWarpNumb ])
+                    if(isInRange && updated!= @accMeta((getBeginingOfFpFNcounts()+innerWarpNumb)) )
                         #so in res shmem we have information weather we should  validate this queue ...
                         resShmem[(threadIdxX())+(innerWarpNumb+15)*33]= true
                     #     sourceShmem[(threadIdxX())+(33*(6+(isodd(innerWarpNumb)*2)) )]= true
@@ -148,11 +148,11 @@ end #scanWhenDataInShmem
                         if(isInRange)
                             #store result in registers
                             #old count
-                            $locArr =  metaData[xMeta,yMeta+1,zMeta+1,((getOldCountersBeg()) +innerWarpNumb) ]
+                            $locArr = @accMeta((getOldCountersBeg()) +innerWarpNumb) 
                             #diffrence new - old 
-                            $offsetIter=  metaData[xMeta,yMeta+1,zMeta+1,((getNewCountersBeg()) +innerWarpNumb) ] - $locArr
+                            $offsetIter=   @accMeta(((getNewCountersBeg()) +innerWarpNumb) )- $locArr
                             #offset to find where are the results associated with given queue
-                            $localOffset = metaData[xMeta,yMeta+1,zMeta+1, getResOffsetsBeg()+innerWarpNumb]+$locArr
+                            $localOffset =  @accMeta((getResOffsetsBeg()+innerWarpNumb))+$locArr
                             # enable access to information is it bigger than 0 to all threads in block
                             resShmem[(threadIdxX())+(innerWarpNumb)*33] = $offsetIter >0
                             #for all border queues this information will be written down after scanning for duplicates here we are just getting info from main part ...
@@ -174,7 +174,7 @@ end #scanWhenDataInShmem
                     @exOnWarp innerWarpNumb begin
                         if(innerWarpNumb==13 || innerWarpNumb==14)# so queaue 13 or 14
                             if($offsetIter>0) 
-                                if($offsetIter!= metaData[xMeta,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+innerWarpNumb ])
+                                if($offsetIter!=  @accMeta((getBeginingOfFpFNcounts()+innerWarpNumb)) )
                                     resShmem[(threadIdxX())+(innerWarpNumb+15)*33]= true
                                     #sourceShmem[(threadIdxX())+33*(6+(isodd(innerWarpNumb) *2) )]= true
                                 end
@@ -216,11 +216,11 @@ end #scanWhenDataInShmem
                 end         
             end#for    
             @exOnWarp 15 if(isInRange) 
-               metaData[xMeta,yMeta+1,zMeta+1,getIsToBeAnalyzedNumb()+15]= (@getIsToVal(1) || @getIsToVal(3)|| @getIsToVal(5)|| @getIsToVal(7)|| @getIsToVal(11)|| @getIsToVal(13)) #sourceShmem[(threadIdxX())+33*8]
+               @setMeta((getIsToBeAnalyzedNumb()+15), (@getIsToVal(1) || @getIsToVal(3)|| @getIsToVal(5)|| @getIsToVal(7)|| @getIsToVal(11)|| @getIsToVal(13)) )#sourceShmem[(threadIdxX())+33*8]
                #resShmem[(threadIdxX())+(1+15)*33] || resShmem[(threadIdxX())+(3+15)*33] 
             end
             @exOnWarp 16 if(isInRange)
-                metaData[xMeta,yMeta+1,zMeta+1,getIsToBeAnalyzedNumb()+16 ]=(@getIsToVal(2) || @getIsToVal(4)|| @getIsToVal(6)|| @getIsToVal(8)|| @getIsToVal(10)|| @getIsToVal(12)) #sourceShmem[(threadIdxX())+33*6] 
+                @setMeta((getIsToBeAnalyzedNumb()+16 ),(@getIsToVal(2) || @getIsToVal(4)|| @getIsToVal(6)|| @getIsToVal(8)|| @getIsToVal(10)|| @getIsToVal(12)) )#sourceShmem[(threadIdxX())+33*6] 
             end
     sync_threads()
 
@@ -255,12 +255,12 @@ end)#quote
              if(( innerWarpNumb)<15 && isInRange)
                 #we need also to remember that data wheather there are any futher points of intrest is not only in the current block
                 # so here we establish what are the coordinates of metadata of intrest so for example  our left fp and left FN are of intrest to block to the left ...
-                newXmeta = xMeta+ (-1 * (innerWarpNumb==1 || innerWarpNumb==2)) + (innerWarpNumb==3 || innerWarpNumb==4)
+                newXmeta = xMeta+ (-1 * (innerWarpNumb==1 || innerWarpNumb==2)) + (innerWarpNumb==3 || innerWarpNumb==4)+1
                 newYmeta = yMeta+ (-1 * (innerWarpNumb==5 || innerWarpNumb==6)) + (innerWarpNumb==7 || innerWarpNumb==8)+1
                 newZmeta = zMeta+ (-1 * (innerWarpNumb==9 || innerWarpNumb==10)) + (innerWarpNumb==11 || innerWarpNumb==12)+1
                 #check are we in range 
                 if(newXmeta>0 && newYmeta>0 && newZmeta>0 && newXmeta<=metaDataDims[1] && newYmeta<=metaDataDims[2]  && newZmeta<=metaDataDims[3] && innerWarpNumb<13 )
-                 metaData[newXmeta,newYmeta,newZmeta,getIsToBeAnalyzedNumb()+innerWarpNumb ] =  resShmem[(threadIdxX())+(innerWarpNumb+15)*33] 
+                 @setMeta((getIsToBeAnalyzedNumb()+innerWarpNumb ), (resShmem[(threadIdxX())+(innerWarpNumb+15)*33]) )
                 end #if in meta data range
              end#if   
              end#ox on warp    

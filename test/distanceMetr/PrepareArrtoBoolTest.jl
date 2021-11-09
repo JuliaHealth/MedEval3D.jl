@@ -246,161 +246,160 @@ using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUt
 using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
 
 
-########### uploadDataToMetaData
- @testset "uploadDataToMetaData 1 " begin
+# ########### uploadDataToMetaData
+#  @testset "uploadDataToMetaData 1 " begin
    
-    localQuesValues = CUDA.zeros(Float32,14)
-    threads=(32,5)
-    blocks =8
+#     localQuesValues = CUDA.zeros(Float32,14)
+#     threads=(32,5)
+#     blocks =8
+#     mainArrDims= (634,521,632)
+#     dataBdim = (43,21,17)
 
-    mainArrDims= (634,521,632)
-    dataBdim = (43,21,17)
+#     metaDataDims= (cld(mainArrDims[1],dataBdim[1] ),cld(mainArrDims[2],dataBdim[2]),cld(mainArrDims[3],dataBdim[3]))
+#     loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
-    metaDataDims= (cld(mainArrDims[1],dataBdim[1] ),cld(mainArrDims[2],dataBdim[2]),cld(mainArrDims[3],dataBdim[3]))
+#     #we are iterating here block by block sequentially
+#     metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
+#     metaDataLength= metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
+#     loopMeta= fld(metaDataLength,blocks )
+#     function uploadDataToMetaDataKernel(loopMeta,metaDataLength,mainArrDims,metaDataDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaData)
+#         localQuesValues= @cuStaticSharedMem(UInt32, 14)   
+#         localBool=false
+#         anyPositive=false
 
-    inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(dataBdim[1] ,threads[1]),fld(dataBdim[2] ,threads[2]),dataBdim[3]    )
-    #we are iterating here block by block sequentially
-    loopXMeta,loopYZMeta= (metaDataDims[1],fld(metaDataDims[2]*metaDataDims[3] ,blocks)  )
-    yTimesZmeta= metaDataDims[2]*metaDataDims[3]
-    metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
-    metaDataLength= metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
-    loopMeta= fld(metaDataLength,blocks )
-    function uploadDataToMetaDataKernel(loopMeta,metaDataLength,mainArrDims,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaData)
-        localQuesValues= @cuStaticSharedMem(UInt32, 14)   
-        localBool=false
-        @iter3dOuter(metaDataDims,loopMeta,metaDataLength,
-        begin 
+#         @iter3dOuter(metaDataDims,loopMeta,metaDataLength,
+#         begin 
 
-            @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
-            begin
-                        boolGold=true
-                        boolSegm=false
-                        localBool=true
-                        if(xMeta==2 && yMeta==2 && zMeta==4)
+#             @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
+#             begin
+#                         boolGold=true
+#                         boolSegm=false
+#                         localBool=true
+#                         if(xMeta==2 && yMeta==2 && zMeta==4)
 
-                            PrepareArrtoBool.@uploadLocalfpFNCounters()
-                        end    
+#                             PrepareArrtoBool.@uploadLocalfpFNCounters()
+#                         end    
                     
-                    end)
-                    sync_threads()
+#                     end)
+#                     sync_threads()
 
-                    isAnyPositive= true
-                        PrepareArrtoBool.@uploadDataToMetaData()
-                        sync_threads()
+#                     isAnyPositive= true
+#                         PrepareArrtoBool.@uploadDataToMetaData()
+#                         sync_threads()
 
-                        sync_threads()
-                        #threadfence()
-                        @ifY 1 if(threadIdxX()<15)
-                            localQuesValues[threadIdxX()]=0
-                        end
-                end)
+#                         sync_threads()
+#                         #threadfence()
+#                         @ifY 1 if(threadIdxX()<15)
+#                             localQuesValues[threadIdxX()]=0
+#                         end
+#                 end)
         
-        return
-    end
+#         return
+#     end
 
 
 
-    @cuda threads=threads blocks=blocks uploadDataToMetaDataKernel(loopMeta,metaDataLength,mainArrDims,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaData)
+#     @cuda threads=threads blocks=blocks uploadDataToMetaDataKernel(loopMeta,metaDataLength,mainArrDims,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaData)
 
-    @test metaData[3,3,5,getBeginingOfFpFNcounts()+1]==dataBdim[2]*dataBdim[3]
-    @test metaData[3,3,5,getBeginingOfFpFNcounts()+3]==dataBdim[2]*dataBdim[3]
+#     @test metaData[3,3,5,getBeginingOfFpFNcounts()+1]==dataBdim[2]*dataBdim[3]
+#     @test metaData[3,3,5,getBeginingOfFpFNcounts()+3]==dataBdim[2]*dataBdim[3]
 
-    @test metaData[3,3,5,getBeginingOfFpFNcounts()+5]==dataBdim[1]*dataBdim[3]-2*dataBdim[3]
-    @test metaData[3,3,5,getBeginingOfFpFNcounts()+7]==dataBdim[1]*dataBdim[3]-2*dataBdim[3]
+#     @test metaData[3,3,5,getBeginingOfFpFNcounts()+5]==dataBdim[1]*dataBdim[3]-2*dataBdim[3]
+#     @test metaData[3,3,5,getBeginingOfFpFNcounts()+7]==dataBdim[1]*dataBdim[3]-2*dataBdim[3]
 
-    @test metaData[3,3,5,getBeginingOfFpFNcounts()+9]==(dataBdim[1]-2)*(dataBdim[2]-2) 
-    @test metaData[3,3,5,getBeginingOfFpFNcounts()+11]==(dataBdim[1]-2)*(dataBdim[2]-2) 
+#     @test metaData[3,3,5,getBeginingOfFpFNcounts()+9]==(dataBdim[1]-2)*(dataBdim[2]-2) 
+#     @test metaData[3,3,5,getBeginingOfFpFNcounts()+11]==(dataBdim[1]-2)*(dataBdim[2]-2) 
 
-    @test metaData[3,3,5,getBeginingOfFpFNcounts()+13]==dataBdim[1]*dataBdim[2]*dataBdim[3] - sum(metaData[3,3,5,getBeginingOfFpFNcounts():getBeginingOfFpFNcounts()+12])
+#     @test metaData[3,3,5,getBeginingOfFpFNcounts()+13]==dataBdim[1]*dataBdim[2]*dataBdim[3] - sum(metaData[3,3,5,getBeginingOfFpFNcounts():getBeginingOfFpFNcounts()+12])
 
-    @test metaData[3,3,5,getBeginingOfFpFNcounts()+15]==dataBdim[1]*dataBdim[2]*dataBdim[3] 
+#     @test metaData[3,3,5,getBeginingOfFpFNcounts()+15]==dataBdim[1]*dataBdim[2]*dataBdim[3] 
 
-    sum(Array(metaData[3,3,5,getBeginingOfFpFNcounts():getBeginingOfFpFNcounts()+13]))
-
-
-    metaData[3,3,5,getBeginingOfFpFNcounts()+1]+ metaData[3,3,5,getBeginingOfFpFNcounts()+3]+ metaData[3,3,5,getBeginingOfFpFNcounts()+5]+ metaData[3,3,5,getBeginingOfFpFNcounts()+7]+ metaData[3,3,5,getBeginingOfFpFNcounts()+9]+ metaData[3,3,5,getBeginingOfFpFNcounts()+11]+ metaData[3,3,5,getBeginingOfFpFNcounts()+13]
+#     sum(Array(metaData[3,3,5,getBeginingOfFpFNcounts():getBeginingOfFpFNcounts()+13]))
 
 
-end #test set 
-########### uploadDataToMetaData 2  !!! sth strange happen below
-@testset "uploadDataToMetaData2" begin
+#     metaData[3,3,5,getBeginingOfFpFNcounts()+1]+ metaData[3,3,5,getBeginingOfFpFNcounts()+3]+ metaData[3,3,5,getBeginingOfFpFNcounts()+5]+ metaData[3,3,5,getBeginingOfFpFNcounts()+7]+ metaData[3,3,5,getBeginingOfFpFNcounts()+9]+ metaData[3,3,5,getBeginingOfFpFNcounts()+11]+ metaData[3,3,5,getBeginingOfFpFNcounts()+13]
 
 
-    # localQuesValues = CUDA.zeros(Float32,14)
-    # threads=(32,5)
-    # blocks =8
+# end #test set 
+# ########### uploadDataToMetaData 2 
+# @testset "uploadDataToMetaData2" begin
 
-    # mainArrDims= (634,521,632)
-    # dataBdim = (43,21,17)
 
-    # metaDataDims= (cld(mainArrDims[1],dataBdim[1] ),cld(mainArrDims[2],dataBdim[2]),cld(mainArrDims[3],dataBdim[3]))
-    # metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
+#     # localQuesValues = CUDA.zeros(Float32,14)
+#     # threads=(32,5)
+#     # blocks =8
 
-    # inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(dataBdim[1] ,threads[1]),fld(dataBdim[2] ,threads[2]),dataBdim[3]    )
-    # #we are iterating here block by block sequentially
-    # loopXMeta,loopYZMeta= (metaDataDims[1],fld(metaDataDims[2]*metaDataDims[3] ,blocks)  )
-    # yTimesZmeta= metaDataDims[2]*metaDataDims[3]
-    # metaDataLength= metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
-    # loopMeta= fld(metaDataLength,blocks )
-    # function uploadDataToMetaDataKernel(loopMeta,metaDataLength,mainArrDims,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaData)
+#     # mainArrDims= (634,521,632)
+#     # dataBdim = (43,21,17)
 
-    #     localQuesValues= @cuStaticSharedMem(UInt32, 14)   
-    #     localBool=false
-    #     @iter3dOuter(metaDataDims,loopMeta,metaDataLength,
-    #     begin 
+#     # metaDataDims= (cld(mainArrDims[1],dataBdim[1] ),cld(mainArrDims[2],dataBdim[2]),cld(mainArrDims[3],dataBdim[3]))
+#     # metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
 
-    #         @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
-    #         begin
-    #                     boolGold=false
-    #                     boolSegm=true
-    #                     localBool=true
-    #                     if(xMeta==2 && yMeta==2 && zMeta==4)
+#     # inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(dataBdim[1] ,threads[1]),fld(dataBdim[2] ,threads[2]),dataBdim[3]    )
+#     # #we are iterating here block by block sequentially
+#     # loopXMeta,loopYZMeta= (metaDataDims[1],fld(metaDataDims[2]*metaDataDims[3] ,blocks)  )
+#     # yTimesZmeta= metaDataDims[2]*metaDataDims[3]
+#     # metaDataLength= metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
+#     # loopMeta= fld(metaDataLength,blocks )
+#     # function uploadDataToMetaDataKernel(loopMeta,metaDataLength,mainArrDims,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaData)
 
-    #                         PrepareArrtoBool.@uploadLocalfpFNCounters()
-    #                     end    
+#     #     localQuesValues= @cuStaticSharedMem(UInt32, 14)   
+#     #     localBool=false
+#     #     @iter3dOuter(metaDataDims,loopMeta,metaDataLength,
+#     #     begin 
+
+#     #         @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
+#     #         begin
+#     #                     boolGold=false
+#     #                     boolSegm=true
+#     #                     localBool=true
+#     #                     if(xMeta==2 && yMeta==2 && zMeta==4)
+
+#     #                         PrepareArrtoBool.@uploadLocalfpFNCounters()
+#     #                     end    
                     
-    #                 end)
-    #                 sync_threads()
+#     #                 end)
+#     #                 sync_threads()
 
-    #                 isAnyPositive= true
-    #                     PrepareArrtoBool.@uploadDataToMetaData()
-    #                     sync_threads()
+#     #                 isAnyPositive= true
+#     #                     PrepareArrtoBool.@uploadDataToMetaData()
+#     #                     sync_threads()
 
-    #                     sync_threads()
-    #                     #threadfence()
-    #                     @ifY 1 if(threadIdxX()<15)
-    #                         localQuesValues[threadIdxX()]=0
-    #                     end
-    #             end)
+#     #                     sync_threads()
+#     #                     #threadfence()
+#     #                     @ifY 1 if(threadIdxX()<15)
+#     #                         localQuesValues[threadIdxX()]=0
+#     #                     end
+#     #             end)
         
-    #     return
-    # end
+#     #     return
+#     # end
 
 
 
-    # @cuda threads=threads blocks=blocks uploadDataToMetaDataKernel(loopMeta,metaDataLength,mainArrDims,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaData)
+#     # @cuda threads=threads blocks=blocks uploadDataToMetaDataKernel(loopMeta,metaDataLength,mainArrDims,metaDataDims,loopXMeta,loopYZMeta,yTimesZmeta,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaData)
 
 
-    # @test metaData[3,3,5,getBeginingOfFpFNcounts()+2]==dataBdim[2]*dataBdim[3]
-    # @test metaData[3,3,5,getBeginingOfFpFNcounts()+4]==dataBdim[2]*dataBdim[3]
+#     # @test metaData[3,3,5,getBeginingOfFpFNcounts()+2]==dataBdim[2]*dataBdim[3]
+#     # @test metaData[3,3,5,getBeginingOfFpFNcounts()+4]==dataBdim[2]*dataBdim[3]
 
-    # @test metaData[3,3,5,getBeginingOfFpFNcounts()+6]==dataBdim[1]*dataBdim[3]-2*dataBdim[3]
-    # @test metaData[3,3,5,getBeginingOfFpFNcounts()+8]==dataBdim[1]*dataBdim[3]-2*dataBdim[3]
+#     # @test metaData[3,3,5,getBeginingOfFpFNcounts()+6]==dataBdim[1]*dataBdim[3]-2*dataBdim[3]
+#     # @test metaData[3,3,5,getBeginingOfFpFNcounts()+8]==dataBdim[1]*dataBdim[3]-2*dataBdim[3]
 
-    # @test metaData[3,3,5,getBeginingOfFpFNcounts()+10]==(dataBdim[1]-2)*(dataBdim[2]-2) 
-    # @test metaData[3,3,5,getBeginingOfFpFNcounts()+12]==(dataBdim[1]-2)*(dataBdim[2]-2) 
+#     # @test metaData[3,3,5,getBeginingOfFpFNcounts()+10]==(dataBdim[1]-2)*(dataBdim[2]-2) 
+#     # @test metaData[3,3,5,getBeginingOfFpFNcounts()+12]==(dataBdim[1]-2)*(dataBdim[2]-2) 
 
-    # @test metaData[3,3,5,getBeginingOfFpFNcounts()+14]==dataBdim[1]*dataBdim[2]*dataBdim[3] - sum(metaData[3,3,5,getBeginingOfFpFNcounts():getBeginingOfFpFNcounts()+12])
+#     # @test metaData[3,3,5,getBeginingOfFpFNcounts()+14]==dataBdim[1]*dataBdim[2]*dataBdim[3] - sum(metaData[3,3,5,getBeginingOfFpFNcounts():getBeginingOfFpFNcounts()+12])
 
-    # @test metaData[3,3,5,getBeginingOfFpFNcounts()+16]==dataBdim[1]*dataBdim[2]*dataBdim[3] 
+#     # @test metaData[3,3,5,getBeginingOfFpFNcounts()+16]==dataBdim[1]*dataBdim[2]*dataBdim[3] 
 
-    # sum(Array(metaData[3,3,5,getBeginingOfFpFNcounts():getBeginingOfFpFNcounts()+13]))
-
-
+#     # sum(Array(metaData[3,3,5,getBeginingOfFpFNcounts():getBeginingOfFpFNcounts()+13]))
 
 
 
-end#testset
+
+
+# end#testset
 
 
 
@@ -571,7 +570,7 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl"
 using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils, Main.PrepareArrtoBool
 using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
 
-@testset "getBoolCubeKernel 2 " begin
+ @testset "getBoolCubeKernel 2 " begin
     localQuesValues = CUDA.zeros(Float32,14)
     threads=(32,5)
     blocks =7
@@ -731,14 +730,14 @@ using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.Wor
     gold3d,segm3d = CuArray(arrGold), CuArray(arrSegm)
     numberToLooFor =Int32(2)
 
-    function locForKernel(mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,gold3d,segm3d,numberToLooFor,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta)
+    function locForKernelB(mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,gold3d,segm3d,numberToLooFor,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta)
 
     @getBoolCubeKernel()
 
     return
     end
 
-    @cuda threads=threads blocks=blocks locForKernel(mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,gold3d,segm3d,numberToLooFor,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta)
+    @cuda threads=threads blocks=blocks locForKernelB(mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,gold3d,segm3d,numberToLooFor,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta)
 
 
 

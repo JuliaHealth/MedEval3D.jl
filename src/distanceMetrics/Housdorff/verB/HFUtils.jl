@@ -35,7 +35,7 @@ function calculateLoopsIter(dataBdim,threadsXdim,threadsYdim,metaDataDims,blocks
     inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(dataBdim[1] ,threadsXdim),fld(dataBdim[2] ,threadsYdim),dataBdim[3]    );
     metaDataLength= metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
     loopMeta= fld(metaDataLength,blocks )
-    loopWarpMeta= fld(metaDataLength,(blocks*threadsXdim ))
+    loopWarpMeta= cld(metaDataLength,(blocks*threadsXdim ))
 return (loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta) 
 
 end    
