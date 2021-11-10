@@ -11,6 +11,41 @@ using Main.MainOverlap, Main.RandIndex, Main.ProbabilisticMetrics, Main.VolumeMe
 
 
 """
+prepares all needed data structures and run occupancy API to enable running occupancy API to get the optimal number of blocks and threads per block
+goldGPU , segmGPU - example of arrays of gold standard and algorithm output they need to be of the same dimensions 
+numberToLooFor - number we will look for in the arrays
+conf - configuration struct telling which metrics exactly we want
+"""
+function prepareForconfusionTableMetrics(goldGPU    , segmGPU    ,numberToLooFor  ,conf)
+    tp,tn,fp,fn= CUDA.zeros(UInt32,1),CUDA.zeros(UInt32,1),CUDA.zeros(UInt32,1),CUDA.zeros(UInt32,1)
+    mainArrDims= size(goldGPU)
+    sliceMetricsTupl= CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3])
+                            ,CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3])
+                            ,CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3])
+    metricsTuplGlobal=  (CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1)
+,CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1)
+,CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1) )#eleven entries
+    totalNumbOfVoxels= (mainArrDims[1]*mainArrDims[2]*mainArrDims[3])
+    args = (goldGPU#goldBoolGPU
+        , segmGPU#segmBoolGPU
+        ,sliceMetricsTupl
+        ,tp,tn,fp,fn#tp,tn,fp,fn
+        ,arrDims,totalNumbOfVoxels,loopXdim,loopYdim,loopZdim,totalNumbOfVoxels
+        ,numberToLooFor#numberToLooFor
+        ,metricsTuplGlobal
+        ,conf)
+    
+      get_shmem() = 4*33  #the same for both kernels
+  
+  threads,blocks = getThreadsAndBlocksNumbForKernel(get_shmem,kernel_InterClassCorr_means,argsMeans)
+    #corrections for loop x,y,z variables
+    args[3] = UInt32(fld(mainArrDims[1], threads[1]))
+    args[4] = UInt32(fld(mainArrDims[2], threads[2])) 
+    args[5] = UInt32(fld(mainArrDims[3],blocks )) 
+    return(args,threads,blocks )
+end
+
+"""
 returning the data  from a kernel that  calclulate number of true positives,
 true negatives, false positives and negatives par image and per slice in given data 
 goldBoolGPU - array holding data of gold standard bollean array
@@ -23,31 +58,17 @@ numberToLooFor - num
 conf- adapted ConfigurtationStruct - used to pass information what metrics should be
 
 """
-function getTpfpfnData!(goldBoolGPU
-    , segmBoolGPU
-    ,tp,tn,fp,fn
-    ,sliceMetricsTupl
-    ,metricsTuplGlobal
-    ,pixelNumberPerSlice::Int64
-    ,numberOfSlices::Int64
-    ,numberToLooFor::T
-    ,conf
-    ,totalNumberOfVoxels::Int64) where T
+function getTpfpfnData!(goldGPU
+    , segmGPU
+    ,args,threads,blocks) where T
+args[1]= goldGPU
+args[2]= segmGPU  
+    
 
-args = ( goldBoolGPU
-        ,segmBoolGPU
-        ,sliceMetricsTupl
-        ,tp,tn,fp,fn
-        ,cld(pixelNumberPerSlice,1024)
-        ,pixelNumberPerSlice
-        ,numberToLooFor
-        ,conf )
 #getMaxBlocksPerMultiproc(args, getBlockTpFpFn) -- evaluates to 3
 
 #get tp,fp,fna and slicewise results if required
-@cuda threads=(32,32) blocks=numberOfSlices getBlockTpFpFn(args...) 
-#get global metrics tp,fp, fn,totalNumbOfVoxels,metricsTuplGlobal,conf
-@cuda threads=(32,32) blocks=1  getGlobalMetricsKernel(tp,fp, fn,totalNumberOfVoxels,metricsTuplGlobal,conf)
+@cuda threads=threads blocks=blocks getBlockTpFpFn(args...) 
 
 return args
 end#getTpfpfnData
@@ -62,23 +83,24 @@ loopNumb - number of times the single lane needs to loop in order to get all nee
 sliceEdgeLength - length of edge of the slice we need to square this number to get number of pixels in a slice
 conf- adapted ConfigurtationStruct - used to pass information what metrics should be
 """
-function getBlockTpFpFn(goldBoolGPU#goldBoolGPU
-        , segmBoolGPU#segmBoolGPU
+function getBlockTpFpFn(goldGPU#goldBoolGPU
+        , segmGPU#segmBoolGPU
         ,sliceMetricsTupl
         ,tp,tn,fp,fn#tp,tn,fp,fn
-        ,arrDims,loopXdim,loopYdim,loopZdim,
+        ,arrDims,totalNumbOfVoxels,loopXdim,loopYdim,loopZdim,totalNumbOfVoxels
         ,numberToLooFor#numberToLooFor
+        ,metricsTuplGlobal
         ,conf)
     
-    
+    grid_handle = this_grid()
     shmemSum = @cuStaticSharedMem(UInt32, (33,3))  
     locArr= zeros(MVector{3,UInt16})
       @iter3dAdditionalzActs(arrDims,loopXdim,loopYdim,loopZdim,
     #inner expression
     begin
         #updating variables needed to calculate means
-           boolGold = goldBoolGPU[ind]==numberToLooFor  
-           boolSegm = segmBoolGPU[ind]==numberToLooFor     
+           boolGold = goldGPU[ind]==numberToLooFor  
+           boolSegm = segmGPU[ind]==numberToLooFor     
              @inbounds locArr[ (boolGold & boolSegm + boolSegm +1) ]+=(boolGold | boolSegm)
     end,
     #after z expression - we get slice wise true counts from it 
@@ -88,6 +110,10 @@ function getBlockTpFpFn(goldBoolGPU#goldBoolGPU
     @redWitAct(offsetIter,shmemSum,  locArr[1],+,     locArr[2],+,     locArr[3],+   )
     sync_threads()
     @sendAtomicHelperAndAdd(shmemSum, fn, fp,tp)
+    sync_grid(grid_handle)
+    if(blockIdxX==1)
+        getMetrics(tp[1],fp[1], fn[1],(totalNumbOfVoxels-(tp[1] +fn[1]+ fp[1] )) ,metricsTuplGlobal,conf,1 )
+    end
     #   @ifXY 1 1  @inbounds @atomic tp[]+= shmemSum[1,3]
 #   @ifXY 1 2  @inbounds @atomic fp[]+= shmemSum[1,2]
 #   @ifXY 1 3  @inbounds @atomic fn[]+= shmemSum[1,1]
@@ -156,17 +182,17 @@ function getBlockTpFpFn(goldBoolGPU#goldBoolGPU
    return  
    end
 
-"""
-this will be invoked in order to get global metrics besed on tp,fp,fn calculated in previous kernel 
-tp,tn,fp - true positive, true negative, false positive
-totalNumbOfVoxels - number of voxels in all image
-metricsTuplGlobal - tuple with array of length one for storing global metrics
-conf - ConfigurtationStruct - marking in what metrics we are intrested in 
-"""
-function getGlobalMetricsKernel(tp,fp, fn,totalNumbOfVoxels::Int64,metricsTuplGlobal,conf)
-  getMetrics(tp[1],fp[1], fn[1],(totalNumbOfVoxels-(tp[1] +fn[1]+ fp[1] )) ,metricsTuplGlobal,conf,1 )
-  return
-end
+# """
+# this will be invoked in order to get global metrics besed on tp,fp,fn calculated in previous kernel 
+# tp,tn,fp - true positive, true negative, false positive
+# totalNumbOfVoxels - number of voxels in all image
+# metricsTuplGlobal - tuple with array of length one for storing global metrics
+# conf - ConfigurtationStruct - marking in what metrics we are intrested in 
+# """
+# function getGlobalMetricsKernel(tp,fp, fn,totalNumbOfVoxels::Int64,metricsTuplGlobal,conf)
+#   getMetrics(tp[1],fp[1], fn[1],(totalNumbOfVoxels-(tp[1] +fn[1]+ fp[1] )) ,metricsTuplGlobal,conf,1 )
+#   return
+# end
 
 
 
@@ -204,90 +230,90 @@ end
 
 
 
-"""
-add value to the shared memory in the position i, x where x is 1 ,2 or 3 and is calculated as described below
-boolGold & boolSegm + boolGold +1 will evaluate to 
-    3 in case  of true positive
-    2 in case of false positive
-    1 in case of false negative
-"""
-@inline function incr_locArr(boolGold::Bool,boolSegm::Bool,locArr::MVector{3, UInt16} ,shmemSum,wid)
+# """
+# add value to the shared memory in the position i, x where x is 1 ,2 or 3 and is calculated as described below
+# boolGold & boolSegm + boolGold +1 will evaluate to 
+#     3 in case  of true positive
+#     2 in case of false positive
+#     1 in case of false negative
+# """
+# @inline function incr_locArr(boolGold::Bool,boolSegm::Bool,locArr::MVector{3, UInt16} ,shmemSum,wid)
 
-  @inbounds locArr[ (boolGold & boolSegm + boolSegm +1) ]+=(boolGold | boolSegm)
+#   @inbounds locArr[ (boolGold & boolSegm + boolSegm +1) ]+=(boolGold | boolSegm)
   
-    return true
-end
-"""
-get which warp it is in a block and which lane in warp 
-"""
-function getWidAndLane(threadIdx)::Tuple{UInt8, UInt8}
-      return fldmod1(threadIdx,32)
-end
+#     return true
+# end
+# """
+# get which warp it is in a block and which lane in warp 
+# """
+# function getWidAndLane(threadIdx)::Tuple{UInt8, UInt8}
+#       return fldmod1(threadIdx,32)
+# end
 
-"""
-creates shared memory and initializes it to 0
-wid - the number of the warp in the block
-"""
-function createAndInitializeShmem(wid,lane)
-   #for storing results from warp reductions
-   shmemSum = @cuStaticSharedMem(UInt16, (33,3))
+# """
+# creates shared memory and initializes it to 0
+# wid - the number of the warp in the block
+# """
+# function createAndInitializeShmem(wid,lane)
+#    #for storing results from warp reductions
+#    shmemSum = @cuStaticSharedMem(UInt16, (33,3))
 
-    if(wid==1)
-    shmemSum[lane,1]=0
-    end
-    if(wid==2)
-        shmemSum[lane,2]=0
-    end
-    if(wid==3)
-    shmemSum[lane,3]=0
-    end            
+#     if(wid==1)
+#     shmemSum[lane,1]=0
+#     end
+#     if(wid==2)
+#         shmemSum[lane,2]=0
+#     end
+#     if(wid==3)
+#     shmemSum[lane,3]=0
+#     end            
 
-return shmemSum
+# return shmemSum
 
-end#createAndInitializeShmem
+# end#createAndInitializeShmem
 
 
-"""
-reduction across the warp and adding to appropriate spots in the  shared memory
-"""
-function firstReduce(shmemSum ,locArr)
-    @inbounds shmemSum[threadIdxX(),1] = reduce_warp(locArr[1],32)
-    @inbounds shmemSum[threadIdxX(),2] = reduce_warp(locArr[2],32)
-    @inbounds shmemSum[threadIdxX(),3] = reduce_warp(locArr[3],32)
-end#firstReduce
+# """
+# reduction across the warp and adding to appropriate spots in the  shared memory
+# """
+# function firstReduce(shmemSum ,locArr)
+#     @inbounds shmemSum[threadIdxX(),1] = reduce_warp(locArr[1],32)
+#     @inbounds shmemSum[threadIdxX(),2] = reduce_warp(locArr[2],32)
+#     @inbounds shmemSum[threadIdxX(),3] = reduce_warp(locArr[3],32)
+# end#firstReduce
 
-"""
-sets the final block amount of true positives, false positives and false negatives and saves it
-to the  array representing each slice, 
-wid - the warp in a block we want to use
-numb - number associated with constant - used to access shared memory for example
-chosenWid - on which block we want to make a reduction to happen
-intermediateRes - array with intermediate -  slice wise results
-singleREs - the final  constant holding image witde values (usefull for example for debugging)
-shmemSum - shared memory where we get the  results to be reduced now and to which we will also save the output
-blockId - number related to block we are currently in 
-lane - the lane in the warp
-"""
-function getSecondBlockReduce(chosenWid,numb,wid, intermediateRes,singleREs,shmemSum,blockId,lane,IndexesArray)
-    if(wid==chosenWid )
-      IndexesArray[blockId+lane]=shmemSum[lane,numb]
-      shmemSum[33,numb] = reduce_warp(shmemSum[lane,numb],32 )
-      #probably we do not need to sync warp as shfl dow do it for us         
-      if(lane==1)
-        @inbounds @atomic singleREs[]+=shmemSum[33,numb]
-      end    
-      if(lane==2)
+# """
+# sets the final block amount of true positives, false positives and false negatives and saves it
+# to the  array representing each slice, 
+# wid - the warp in a block we want to use
+# numb - number associated with constant - used to access shared memory for example
+# chosenWid - on which block we want to make a reduction to happen
+# intermediateRes - array with intermediate -  slice wise results
+# singleREs - the final  constant holding image witde values (usefull for example for debugging)
+# shmemSum - shared memory where we get the  results to be reduced now and to which we will also save the output
+# blockId - number related to block we are currently in 
+# lane - the lane in the warp
+# """
+# function getSecondBlockReduce(chosenWid,numb,wid, intermediateRes,singleREs,shmemSum,blockId,lane,IndexesArray)
+#     if(wid==chosenWid )
+#       IndexesArray[blockId+lane]=shmemSum[lane,numb]
+#       shmemSum[33,numb] = reduce_warp(shmemSum[lane,numb],32 )
+#       #probably we do not need to sync warp as shfl dow do it for us         
+#       if(lane==1)
+#         @inbounds @atomic singleREs[]+=shmemSum[33,numb]
+#       end    
+#       if(lane==2)
 
-        @inbounds intermediateRes[blockId]=shmemSum[33,numb]
-      end    
-    #   if(lane==3)
-    #     #ovewriting the value 
-    #     @inbounds shmemSum[1,numb]=vall
-    #   end     
+#         @inbounds intermediateRes[blockId]=shmemSum[33,numb]
+#       end    
+#     #   if(lane==3)
+#     #     #ovewriting the value 
+#     #     @inbounds shmemSum[1,numb]=vall
+#     #   end     
 
-  end  
+#   end  
 
-end#getSecondBlockReduce
+# end#getSecondBlockReduce
 
 
 
