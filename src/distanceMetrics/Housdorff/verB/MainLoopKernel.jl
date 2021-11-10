@@ -1,9 +1,7 @@
 module MainLoopKernel
 using CUDA, Logging,Main.CUDAGpuUtils, Main.ResultListUtils,Main.WorkQueueUtils,Main.ScanForDuplicates, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils
 using Main.MetadataAnalyzePass, Main.ScanForDuplicates
-export loadDataAtTheBegOfDilatationStep,@prepareForNextDilation,@mainLoopKernel, @iterateOverWorkQueue,@mainLoop,@mainLoopKernelAllocations,@clearBeforeNextDilatation
-
-
+export @loadDataAtTheBegOfDilatationStep,@prepareForNextDilation,@mainLoopKernel, @iterateOverWorkQueue,@mainLoop,@mainLoopKernelAllocations,@clearBeforeNextDilatation
 
 
 """
@@ -104,14 +102,13 @@ main loop logic
 """
 macro mainLoop()
     return esc(quote
-    MetadataAnalyzePass.@setMEtaDataOtherPasses(locArr,offsetIter,iterThrougWarNumb, globalCurrentFpCount, globalCurrentFnCount)
+    MetadataAnalyzePass.@setMEtaDataOtherPasses(locArr,offsetIter,iterationNumberShmem[1])
     sync_grid(grid_handle)
     loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,iterationNumber,positionInMainWorkQueaue,workCounterInshmem,mainQuesCounterArr,isAnyBiggerThanZero,goldToBeDilatated,segmToBeDilatated, resArraysCounters  )
     sync_threads()
-    @iterateOverWorkQueue(workQueauecounter,workQueaue,goldToBeDilatated, segmToBeDilatated,shmemSumLengthMaxDiv4) 
+    @iterateOverWorkQueue(workQueauecounter,workQueaue,goldToBeDilatated[1], segmToBeDilatated[1],shmemSumLengthMaxDiv4) 
 end) #quote
 end#mainLoop
-
 
 """
 iterating over elements in work queaue  in order to make it work we need  to 
@@ -288,7 +285,7 @@ macro prepareForNextDilation()
     #we clear  and add negation to !isOddPassShmem becouse we want to set the previously updated counter to 0 
     @clearBeforeNextDilatation( clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength, sourceShmemTotalLength)
 
-    loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,iterationNumber,positionInMainWorkQueaue,workCounterInshmem,mainQuesCounterArr,isAnyBiggerThanZero,goldToBeDilatated,segmToBeDilatated, resArraysCounters)
+    @loadDataAtTheBegOfDilatationStep()
 end)#quote
 end    #prepareForNextDilation
 
@@ -298,26 +295,29 @@ remember to reset work queue counter
 
 add 
 ,dilatationArrs[shmemSum[shmemIndex*4+4]+1]
-,referenceArrs[shmemSum[shmemIndex*4+4]+1]        
+,referenceArrs[shmemSum[shmemIndex*4+4]+1]   
+        workQueauecounter,workQueaue,shmemSumLengthMaxDiv4
+
         
 """
 loads data at the begining of each dilatation step
     we need to set some variables in shared memory ro initial values
     fp, fn  
 """
-function loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,iterationNumber,positionInMainWorkQueaue,workCounterInshmem,mainQuesCounterArr,isAnyBiggerThanZero,goldToBeDilatated,segmToBeDilatated, resArraysCounters  )
+function loadDataAtTheBegOfDilatationStep(  )
+    return esc(quote
     #so we know that becouse of sync grid we will have evrywhere the same  iterationNumberShmem and positionInMainWorkQueaue
     
     @ifXY 1 1 iterationNumberShmem[1]+=1
     #@ifXY 2 2 positionInMainWorkQueaue[1]=0 
 
     @ifXY 2 1 begin
-        workCounterInshmem[1]= mainQuesCounterArr[isOddPassShmem[1]+1]
+        workCounterInshmem[1]= mainQuesCounterArr[isOddPassShmem[1]+1] krowa
         workCounterBiggerThan0[1]= (workCounterInshmem[1]>0)
                     end 
-    @ifXY 3 1 goldToBeDilatated[1]=(resArraysCounters[2] < fp[1])
-    @ifXY 4 1 segmToBeDilatated[1]=(resArraysCounters[1] < fn[1])
-
+    @ifXY 3 1 goldToBeDilatated[1]=(resArraysCounters[2] <= fp[1])
+    @ifXY 4 1 segmToBeDilatated[1]=(resArraysCounters[1] <= fn[1])
+        end)#quote
 end
 
 
