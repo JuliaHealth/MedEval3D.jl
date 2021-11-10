@@ -80,22 +80,22 @@ end)#quote
 end    
 
 
-"""
-stores the most important part of the kernel where we analyze supplied data blocks
-do the dilatation and add to the result queue
-"""
-macro  innersingleDataBlockPass()
-   return esc(quote
+# """
+# stores the most important part of the kernel where we analyze supplied data blocks
+# do the dilatation and add to the result queue
+# """
+# macro  innersingleDataBlockPass()
+#    return esc(quote
 
-            #in order to be able to skip some of the validations we will load now informations about this block and neighbouring blocks 
-           #like for example are there any futher results to be written in this block including border queues
-           #and is there sth in border queues of the neighbouring data blocks
+#             #in order to be able to skip some of the validations we will load now informations about this block and neighbouring blocks 
+#            #like for example are there any futher results to be written in this block including border queues
+#            #and is there sth in border queues of the neighbouring data blocks
 
-           sync_threads()
-           ############### execution
-           #@executeDataIterWithPadding() 
-end) #quote
-end
+#            sync_threads()
+#            ############### execution
+#            #@executeDataIterWithPadding() 
+# end) #quote
+# end
 
 
 
@@ -108,9 +108,7 @@ macro mainLoop()
     sync_grid(grid_handle)
     loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,iterationNumber,positionInMainWorkQueaue,workCounterInshmem,mainQuesCounterArr,isAnyBiggerThanZero,goldToBeDilatated,segmToBeDilatated, resArraysCounters  )
     sync_threads()
-    @iterateOverWorkQueue(workQueauecounter,workQueaue,goldToBeDilatated, segmToBeDilatated,shmemSumLengthMaxDiv4,begin 
-#        @executeDataIterWithPadding(isGoldPass,isToBeAnalyzedMain)
-    end) 
+    @iterateOverWorkQueue(workQueauecounter,workQueaue,goldToBeDilatated, segmToBeDilatated,shmemSumLengthMaxDiv4) 
 end) #quote
 end#mainLoop
 
@@ -185,17 +183,30 @@ macro iterateOverWorkQueue(workQueauecounter,workQueaue,goldToBeDilatated, segmT
 #sync_threads()
             # checking is there any point in futher dilatations of this block
             #if((isGold==1 && goldToBeDilatated[1]) || (isGold==0 && segmToBeDilatated[1]) )
-                #finally all ready for dilatation step to be executed on this particular block
                 # @ifXY 1 1  CUDA.@cuprint " xMeta $(xMeta) yMeta $(yMeta)  zMeta $(zMeta) isGold $(isGold) \n "
                 #@ifXY 1 1  CUDA.@cuprint " xMeta $(xMeta) shmemIndex $(shmemIndex) indd $(shmemIndex*4+1) outerIter $(outerIter)  range $(fld(shmemSumLengthMaxDiv4,4))  numbOfDataBlockPerThreadBlock $(numbOfDataBlockPerThreadBlock) \n "
-                $ex 
+
+            #finally all ready for dilatation step to be executed on this particular block
+            @executeDataIterWithPadding(mainArrDims krowa
+                                        ,inBlockLoopX
+                                        ,inBlockLoopY
+                                        ,inBlockLoopZ
+                                        ,dilatationArrs[shmemSum[shmemIndex*4+4]+1]
+                                        ,referenceArrs[shmemSum[shmemIndex*4+4]+1]
+                                        ,shmemSum[shmemIndex*4+1]#xMeta
+                                        ,shmemSum[shmemIndex*4+2]#yMeta
+                                        ,shmemSum[shmemIndex*4+3]#zMeta
+                                        ,shmemSum[shmemIndex*4+4]#isGold
+                                        ,iterationNumberShmem[1]#iterNumb
+            )
+    
+                $ex # left just for debugging purposes
             #end    
             end#if in range
         end# main functional loop for dilatation and validation  
     end#outer for 
     end)#quote 
 end    
-
 
 
 """
@@ -282,7 +293,13 @@ end)#quote
 end    #prepareForNextDilation
 
 
+in lounch of kernel do correction for fp and fns that we are passing to kernel using *robustFraction
+remember to reset work queue counter
 
+add 
+,dilatationArrs[shmemSum[shmemIndex*4+4]+1]
+,referenceArrs[shmemSum[shmemIndex*4+4]+1]        
+        
 """
 loads data at the begining of each dilatation step
     we need to set some variables in shared memory ro initial values
