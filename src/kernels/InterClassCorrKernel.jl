@@ -90,6 +90,7 @@ function kernel_InterClassCorr_means(goldlGPU
 
     #tell what variables are to be reduced and by what operation
     @redWitAct(offsetIter,shmemSum,  locValA,+,     locValB,+  )
+  sync_threads()
     @sendAtomicHelperAndAdd(shmemSum, sumOfGold, sumOfSegm)
 
 #     #offset for lloking for values in source arrays 
