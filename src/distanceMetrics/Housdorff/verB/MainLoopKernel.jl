@@ -213,7 +213,7 @@ macro mainLoopKernel()
   return esc(quote
     @mainLoopKernelAllocations(dataBdim)
     MetadataAnalyzePass.@analyzeMetadataFirstPass()
-    loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,iterationNumber,positionInMainWorkQueaue,workCounterInshmem,mainQuesCounterArr,isAnyBiggerThanZero,goldToBeDilatated,segmToBeDilatated, resArraysCounters  )    
+    @loadDataAtTheBegOfDilatationStep()
     sync_grid(grid_handle)
     #loadDataAtTheBegOfDilatationStep(true,iterationNumberShmem,iterationNumber,positionInMainWorkQueaue,workCounterInshmem,mainQuesCounterArr,isAnyBiggerThanZero,goldToBeDilatated,segmToBeDilatated, resArraysCounters  )
     
@@ -304,7 +304,7 @@ loads data at the begining of each dilatation step
     we need to set some variables in shared memory ro initial values
     fp, fn  
 """
-function loadDataAtTheBegOfDilatationStep(  )
+macro loadDataAtTheBegOfDilatationStep(  )
     return esc(quote
     #so we know that becouse of sync grid we will have evrywhere the same  iterationNumberShmem and positionInMainWorkQueaue
     
