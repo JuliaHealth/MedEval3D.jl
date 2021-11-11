@@ -241,7 +241,7 @@ end
         we will do all by using single warp per metadata block     
         globalCurrentFpCount, globalCurrentFnCount - representing current number of already covere fp and fns
     """
-    macro setMEtaDataOtherPasses(locArr,offsetIter,iterThrougWarNumb, globalCurrentFpCount, globalCurrentFnCount)
+    macro setMEtaDataOtherPasses(locArr,offsetIter,iterThrougWarNumb)
         return esc(quote
         $locArr=0
         $offsetIter=0

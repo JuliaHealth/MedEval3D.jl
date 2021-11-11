@@ -20,11 +20,32 @@ preparation for the interclass correlation kernel - we prepare the  GPU arrays -
 and using occupancy API calculate optimal number of  threads and blocks for both kernels 
 also return arguments lists for both kernels
 """
-function prepareInterClassCorrKernel(goldlGPU,segmGPU)
+function prepareInterClassCorrKernel(goldGPU,segmGPU,numberToLooFor)
+  mainArrDims= size(goldGPU)
+  loopXdim,loopYdim,loopZdim= 1,1,1
+  sumOfGold= CuArray([0]);
+  sumOfSegm= CuArray([0]);
+  sswTotal= CUDA.zeros(1);
+  ssbTotal= CUDA.zeros(1);
+  grandMean=Float32(1)
+  argsMeans= (goldGPU,segmGPU ,loopXdim,loopYdim,loopZdim,sumOfGold,sumOfSegm,numberToLooFor )
   
-  argsMeans= (goldlGPU,segmGPU,loopXdim,loopYdim,loopZdim ,sumOfGold,sumOfSegm ,numberToLooFor )
+  get_shmem() = 4*33  #the same for both kernels
   
-  argsMain= (goldlGPU,segmGPU  ,loopXdim,loopYdim,loopZdim ,sswTotal ,ssbTotal  ,grandMean  ,numberToLooFo)
+  threadsMean,blocksMean = getThreadsAndBlocksNumbForKernel(get_shmem,kernel_InterClassCorr_means,argsMeans)
+    #corrections for loop x,y,z variables
+    argsMeans[3] = UInt32(fld(mainArrDims[1], threadsMean[1]))
+    argsMeans[4] = UInt32(fld(mainArrDims[2], threadsMean[2])) 
+    argsMeans[5] = UInt32(fld(mainArrDims[3],blocksMean )) 
+  
+  argsMain= (goldGPU,segmGPU  ,loopXdim,loopYdim,loopZdim ,sswTotal ,ssbTotal ,grandMean ,numberToLooFor)
+  threadsMain,blocksMain =getThreadsAndBlocksNumbForKernel(get_shmem,kernel_InterClassCorr,argsMain)
+  
+    argsMain[3] = UInt32(fld(mainArrDims[1], threadsMain[1]))
+    argsMain[4] = UInt32(fld(mainArrDims[2], blocksMain[2])) 
+    argsMain[5] = UInt32(fld(mainArrDims[3],blocksMean )) 
+  
+  return(argsMeans,argsMain, threadsMean, threadsMain, blocksMean, blocksMain,mainArrDims)
 end
 
 
@@ -33,11 +54,20 @@ end
 calculates slicewise and global interclass correlation metric
 
 threadsForMeans, threadsForMain - tuples indicating dimensionality  of thread block 
+bsically all needed arguments apart from gold standard and algorithm 3 dm arrays  and numberToLooFor should be given by prepareInterClassCorrKernel
 """
-function calculateInterclassCorr(argsMeans,argsMain, threadsForMeans, threadsForMain, blocksForMeans, blocksForMain)::Float64
+function calculateInterclassCorr(goldGPU,segmGPU,numberToLooFor,argsMeans,argsMain, threadsForMeans, threadsForMain, blocksForMeans, blocksForMain,mainArrayDims)::Float64
 
-pixelNumberPerBlock = cld(mainArrayDims[1]*mainArrayDims[2]*mainArrayDims[3],maxBlocksPerKernel)-1 # some single pixels at the ends may be ignored
-pixelNumberPerSlice = mainArrayDims[1]*mainArrayDims[2]
+  # actualization of the arguments 
+  argsMeans[1]= goldGPU
+  argsMain[1]=goldGPU
+  argsMeans[2]= segmGPU
+  argsMain[2]=segmGPU
+  argsMeans[8]= numberToLooFor
+  argsMain[9]=numberToLooFor
+  
+# pixelNumberPerBlock = cld(mainArrayDims[1]*mainArrayDims[2]*mainArrayDims[3],maxBlocksPerKernel)-1 # some single pixels at the ends may be ignored
+# pixelNumberPerSlice = mainArrayDims[1]*mainArrayDims[2]
 #first we need to calculate means
 @cuda threads=threadsForMeans blocks=blocksForMeans  kernel_InterClassCorr_means(argsMeans )
   
@@ -90,6 +120,7 @@ function kernel_InterClassCorr_means(goldlGPU
 
     #tell what variables are to be reduced and by what operation
     @redWitAct(offsetIter,shmemSum,  locValA,+,     locValB,+  )
+  sync_threads()
     @sendAtomicHelperAndAdd(shmemSum, sumOfGold, sumOfSegm)
 
 #     #offset for lloking for values in source arrays 
@@ -153,7 +184,7 @@ function kernel_InterClassCorr(goldlGPU,segmGPU
      ,loopXdim,loopYdim,loopZdim
      ,sswTotal
      ,ssbTotal
-     ,grandMean
+     ,grandMean::Float32
      ,numberToLooFor )
   
   ssw = Float32(0)
