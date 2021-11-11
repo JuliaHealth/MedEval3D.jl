@@ -24,6 +24,7 @@ loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdata
     reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB=  getLargeForBoolKernel(mainArrDims);
 
 
+    
 mainArrGPU = CuArray(mainArrCPU);
 refArrGPU= CuArray(mainArrCPU);
     """
@@ -40,14 +41,31 @@ function mainKernelLoad()
     @mainLoopKernel
 end
 boolKernelArgs = (mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,gold3d,segm3d,numberToLooFor,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta)
+
+totalFp,totalFn = 1,1 #later we will increase it 
+resList,resListIndicies= allocateResultLists(totalFp,totalFn)
+workQueaue= WorkQueueUtils.allocateWorkQueue(totalFp,totalFn)
+
+workQueaueCounter= CUDA.zeros(UInt32,1)
+
 mainKernelArgs= ()
 
 function get_shmemBoolKernel()
-    
+    resShmem = cld((dataBdim[1]+2)*(dataBdim[2]+2)*(dataBdim[2]+2),8) #dividing by 8 as we want bytes
+    sourceShmem = cld((dataBdim[1])*(dataBdim[2])*(dataBdim[2]),8) #dividing by 8 as we want bytes
+    shmemSum= cld(36*14*32,8)
+    areToBeValidated= cld(14,8)
+    isAnythingInPadding= cld(6,8)
+    alreadyCoveredInQueues= cld(32*14,8)
+    someBools = 3
+    return resShmem+sourceShmem+shmemSum+areToBeValidated+isAnythingInPadding+alreadyCoveredInQueues+someBools
 end
 
 function get_shmemMainKernel()
-    
+    shmemSum= cld(32*32*2,8)
+    minMaxes = 6
+    localQuesValues = cld(32*14,8)
+    return shmemSum+minMaxes+localQuesValues
 end
 
 ## now we need to make use of occupancy API to get optimal number of threads and blocks fo each kernel

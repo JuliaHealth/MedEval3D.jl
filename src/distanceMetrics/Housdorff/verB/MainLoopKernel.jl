@@ -1,7 +1,7 @@
 module MainLoopKernel
 using CUDA, Logging,Main.CUDAGpuUtils, Main.ResultListUtils,Main.WorkQueueUtils,Main.ScanForDuplicates, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils
 using Main.MetadataAnalyzePass, Main.ScanForDuplicates
-export loadDataAtTheBegOfDilatationStep,@prepareForNextDilation,@mainLoopKernel, @iterateOverWorkQueue,@mainLoop,@mainLoopKernelAllocations,@clearBeforeNextDilatation
+export getSmallGPUForHousedorff,getBigGPUForHousedorffAfterBoolKernel,loadDataAtTheBegOfDilatationStep,@prepareForNextDilation,@mainLoopKernel, @iterateOverWorkQueue,@mainLoop,@mainLoopKernelAllocations,@clearBeforeNextDilatation
 
 
 
@@ -311,27 +311,35 @@ function getSmallGPUForHousedorff()
     globalFpResOffsetCounter= CUDA.zeros(UInt32,1)
     globalFnResOffsetCounter= CUDA.zeros(UInt32,1)
     workQueaueCounter= CUDA.zeros(UInt32,1)
-
+return (globalFpResOffsetCounter,globalFnResOffsetCounter,workQueaueCounter )
 end    
 
-"""
-allocate memory for bigger arrays 
-"""
-function getBigGPUForHousedorff()
+# """
+# allocate memory for bigger arrays 
+# """
+# function getBigGPUForHousedorff()
 
 
-end 
+# end 
+
 
 """
 allocate after prepare bool kernel had finished execution
+return metaData,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,workQueaue,resList,resListIndicies
 """
-function getBigGPUForHousedorffAfterBoolKernel(metaData)
-
-    ###we need to return subset of metadata that we are intrested in 
-
+function getBigGPUForHousedorffAfterBoolKernel(metaData,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB)
     ###we return only subset of boolean arrays that we are intrested in 
-    workQueaue= WorkQueueUtils.allocateWorkQueue(fpTotal,fnTotal)
-
+    workQueaue= WorkQueueUtils.allocateWorkQueue(fp[1],fn[1])
+    resList,resListIndicies= allocateResultLists(fp[1],fn[1])
+    ###we need to return subset of metadata that we are intrested in 
+    return(metaData[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]   ]
+            ,reducedGoldA[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]]
+            ,reducedSegmA[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]]
+            ,reducedGoldB[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]]
+            ,reducedSegmB[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]]
+            ,workQueaue
+            ,resList,resListIndicies
+    )
 end 
 
 end#MainLoopKernel
