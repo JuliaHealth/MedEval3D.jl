@@ -190,7 +190,7 @@ macro iterateOverWorkQueue(workQueauecounter,workQueaue,goldToBeDilatated, segmT
                 #@ifXY 1 1  CUDA.@cuprint " xMeta $(xMeta) shmemIndex $(shmemIndex) indd $(shmemIndex*4+1) outerIter $(outerIter)  range $(fld(shmemSumLengthMaxDiv4,4))  numbOfDataBlockPerThreadBlock $(numbOfDataBlockPerThreadBlock) \n "
 
             #finally all ready for dilatation step to be executed on this particular block
-            @executeDataIterWithPadding(mainArrDims krowa
+            @executeDataIterWithPadding(mainArrDims 
                                         ,inBlockLoopX
                                         ,inBlockLoopY
                                         ,inBlockLoopZ
@@ -296,13 +296,6 @@ end)#quote
 end    #prepareForNextDilation
 
 
-in lounch of kernel do correction for fp and fns that we are passing to kernel using *robustFraction
-remember to reset work queue counter
-
-add 
-,dilatationArrs[shmemSum[shmemIndex*4+4]+1]
-,referenceArrs[shmemSum[shmemIndex*4+4]+1]   
-        workQueauecounter,workQueaue,shmemSumLengthMaxDiv4
 
         
 """
@@ -364,5 +357,8 @@ function getBigGPUForHousedorffAfterBoolKernel(metaData,minxRes,maxxRes,minyRes,
             ,resList,resListIndicies
     )
 end 
+
+
+
 
 end#MainLoopKernel
