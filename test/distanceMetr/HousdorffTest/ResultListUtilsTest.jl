@@ -38,7 +38,7 @@ mainArrGPU = CuArray(mainArrCPU);
 metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
 metaDataDims= size(metaData);
 totalFp,totalFn= 500,500
-resList,resListIndicies= allocateResultLists(totalFp,totalFn)
+resList,resListIndicies,maxResListIndex= allocateResultLists(totalFp,totalFn)
 
 xMeta,yMeta,zMeta= 1,1,1 #aaume 0 based
 x,y,z = 1,2,3
@@ -47,14 +47,14 @@ queueNumber = 1
 isGold=4
 iterNumb=6
 metaData[xMeta+1,yMeta+1,zMeta+1,getResOffsetsBeg()+queueNumber]=7
-function addResKernel(metaData ,xMeta,yMeta,zMeta, resList,resListIndicies,x,y,z, dir,iterNumb,queueNumber,metaDataDims ,mainArrDims,isGold )
-    @ifXY 1 1 @addResult(metaData ,xMeta,yMeta,zMeta, resList,resListIndicies,x,y,z, dir,iterNumb,queueNumber,metaDataDims,mainArrDims ,isGold  )     
-    @ifXY 2 1 @addResult(metaData ,xMeta,yMeta,zMeta, resList,resListIndicies,x,y,z, dir,iterNumb,queueNumber,metaDataDims ,mainArrDims,isGold  )     
-    @ifXY 3 1 @addResult(metaData ,xMeta,yMeta,zMeta, resList,resListIndicies,x,y,z, dir,iterNumb,queueNumber,metaDataDims,mainArrDims ,isGold  )     
+function addResKernel(metaData ,xMeta,yMeta,zMeta, resList,resListIndicies,maxResListIndex,x,y,z, dir,iterNumb,queueNumber,metaDataDims ,mainArrDims,isGold )
+    @ifXY 1 1 @addResult(metaData ,xMeta,yMeta,zMeta, resList,resListIndicies,maxResListIndex,x,y,z, dir,iterNumb,queueNumber,metaDataDims,mainArrDims ,isGold  )     
+    @ifXY 2 1 @addResult(metaData ,xMeta,yMeta,zMeta, resList,resListIndicies,maxResListIndex,x,y,z, dir,iterNumb,queueNumber,metaDataDims ,mainArrDims,isGold  )     
+    @ifXY 3 1 @addResult(metaData ,xMeta,yMeta,zMeta, resList,resListIndicies,maxResListIndex,x,y,z, dir,iterNumb,queueNumber,metaDataDims,mainArrDims ,isGold  )     
     return
 end
 
-@cuda threads=threads blocks=blocks addResKernel(metaData ,xMeta,yMeta,zMeta, resList,resListIndicies,x,y,z, dir,iterNumb,queueNumber,metaDataDims ,mainArrDims,isGold )
+@cuda threads=threads blocks=blocks addResKernel(metaData ,xMeta,yMeta,zMeta, resList,resListIndicies,maxResListIndex,x,y,z, dir,iterNumb,queueNumber,metaDataDims ,mainArrDims,isGold )
 @test length(filter(it-> it>0,Array(resListIndicies)))==6
 
 # @test  Int64.(Array(resList[7,:]))==[1,2,3,4,5,6]

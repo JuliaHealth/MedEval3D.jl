@@ -188,11 +188,11 @@ end #scanWhenDataInShmem
                         end#if in range
                     end #@exOnWarp
                 end#if
-                # if(innerWarpNumb==7)
-                #     if($offsetIter>0)
-                #     CUDA.@cuprint "aaaa diff no correction $($offsetIter) innerWarpNumb $(innerWarpNumb) idX $(threadIdxX()) xMeta $(xMeta) yMeta $(yMeta) zMeta $(zMeta) \n"
-                #     end
-                # end   
+                if(innerWarpNumb==7)
+                    if($offsetIter>0)
+                    CUDA.@cuprint "aaaa diff no correction $($offsetIter) innerWarpNumb $(innerWarpNumb) idX $(threadIdxX()) xMeta $(xMeta) yMeta $(yMeta) zMeta $(zMeta) \n"
+                    end
+                end   
 
                 sync_threads()
                 # so queaue 13 or 14
@@ -220,8 +220,10 @@ end #scanWhenDataInShmem
                     sync_threads()
 
                 #main function for scanning
+              
                @scanForDuplicatesB($locArr, $offsetIter,$localOffset)#$locArr, $offsetIter,innerWarpNumb,resShmem,shmemSum,resListIndicies,metaData,xMeta,yMeta,zMeta,metaDataDims,$localOffset,maxResListIndex,outerWarpLoop,alreadyCoveredInQueues,sourceShmem)
-                if(innerWarpNumb<15)
+             
+               if(innerWarpNumb<15)
                     shmemSum[threadIdxX(),innerWarpNumb]=0
                 end
 
@@ -232,9 +234,12 @@ end #scanWhenDataInShmem
             @unroll for outerWarpLoop in 0:$iterThrougWarNumb     
                 #represents the number of queue if we have enought warps at disposal it equals warp number so idY
                 innerWarpNumb = (threadIdxY()+ outerWarpLoop*blockDimY())
+                 CUDA.@cuprint "aaaa innerWarpNumb $(innerWarpNumb) \n"
                 #at this point we have actual counters with correction for duplicated values  we can compare it with the  total values of fp or fn of a given queue  if we already covered
                 #all points of intrest there is no point to futher analyze this block or padding
-                @setIsToBeValidated()  
+                
+                @setIsToBeValidated()   
+                
                 if(innerWarpNumb<15)
                     shmemSum[34,innerWarpNumb]= 0
                     shmemSum[35,innerWarpNumb]=0
@@ -281,8 +286,8 @@ end)#quote
      """
        macro setIsToBeValidated()
      return esc(quote
-         @exOnWarp (innerWarpNumb) begin
-             if(( innerWarpNumb)<15 && isInRange)
+         @exOnWarp innerWarpNumb begin
+             if(innerWarpNumb<15 && isInRange)
                 #we need also to remember that data wheather there are any futher points of intrest is not only in the current block
                 # so here we establish what are the coordinates of metadata of intrest so for example  our left fp and left FN are of intrest to block to the left ...
                 newXmeta = xMeta+ (-1 * (innerWarpNumb==1 || innerWarpNumb==2)) + (innerWarpNumb==3 || innerWarpNumb==4)+1
@@ -294,7 +299,7 @@ end)#quote
 
                 end #if in meta data range
              end#if   
-             end#ox on warp    
+             end#ex on warp    
              # if(xMeta==1 && yMeta==0 && zMeta==0)
              #     CUDA.@cuprint """shmemSum[33,innerWarpNumb] $(shmemSum[33,innerWarpNumb]) shmemSum[threadIdxX(),innerWarpNumb]  $(shmemSum[threadIdxX(),innerWarpNumb] )  valuee fp $(shmemSum[1,1]+ shmemSum[1,3]+ shmemSum[1,5]+ shmemSum[1,7]+ shmemSum[1,9]+ shmemSum[1,11]+ shmemSum[1,13]) 
              #     shmemSum[1,1] $(shmemSum[1,1]) shmemSum[1,3] $(shmemSum[1,3]) shmemSum[1,5] $(shmemSum[1,5]) shmemSum[1,7] $(shmemSum[1,7]) shmemSum[1,9] $(shmemSum[1,9]) shmemSum[1,11] $(shmemSum[1,11]) shmemSum[1,13] $(shmemSum[1,13]) 

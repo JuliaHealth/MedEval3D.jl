@@ -151,7 +151,7 @@ end #"iter3dOuter"
     function iterDataBlocksKernel(loopMeta,metaDataLength,mainArrDims,singleVal,metaDataDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ ,indices)
         @iter3dOuter(metaDataDims,loopMeta,metaDataLength,
         begin 
-            @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
+            @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,xMeta,yMeta,zMeta,
             begin
             @atomic singleVal[1]+=1
             indices[x,y,z]=true
@@ -200,7 +200,7 @@ end #iter data block
             zMeta= 2
             yMeta= 2
 
-            @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
+            @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,xMeta,yMeta,zMeta,
             begin
                         boolGold=true
                         boolSegm=false
@@ -438,7 +438,7 @@ using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.Wor
         @iter3dOuter(metaDataDims,loopMeta,metaDataLength,
         begin 
 
-            @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
+            @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,xMeta,yMeta,zMeta,
             begin
                     
                         if(xMeta>=2 && yMeta>=1 && zMeta>=3 && xMeta<=4 && yMeta<=5 && zMeta<=6  )

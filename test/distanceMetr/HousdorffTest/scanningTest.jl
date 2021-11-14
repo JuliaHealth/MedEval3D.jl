@@ -16,7 +16,7 @@ metaDataDims=size(metaData)
 iterThrougWarNumb = cld(14,threads[2])
 resShmem = CuArray(falses(dataBdim[1]+2, dataBdim[2]+2, dataBdim[3]+2 ))
 totalFp,totalFn = 100000,100000
-resList,resListIndicies= allocateResultLists(totalFp,totalFn)
+resList,resListIndicies,maxResListIndex= allocateResultLists(totalFp,totalFn)
 
 
 loopXMeta= fld(metaDataDims[1],threads[1])

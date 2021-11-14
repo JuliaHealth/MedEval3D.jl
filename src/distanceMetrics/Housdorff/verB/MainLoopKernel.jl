@@ -106,26 +106,26 @@ macro mainLoop()
     sync_grid(grid_handle)
     @loadDataAtTheBegOfDilatationStep()
     sync_threads()
-    @iterateOverWorkQueue(workQueauecounter,workQueaue,goldToBeDilatated[1], segmToBeDilatated[1],shmemSumLengthMaxDiv4,:()) 
+    @iterateOverWorkQueue(workQueaueCounter,workQueaue,goldToBeDilatated[1], segmToBeDilatated[1],shmemSumLengthMaxDiv4,:()) 
 end) #quote
 end#mainLoop
 
 """
 iterating over elements in work queaue  in order to make it work we need  to 
-    know how many elements are in the work queue - we need workQueauecounter
+    know how many elements are in the work queue - we need workQueaueCounter
     workQueaue - matrix with work queue data  
     goldToBeDilatated, segmToBeDilatated - shared memory values needed to establish weather we finished dilatations in given pass
     shmemSum will be used to store loaded data from workqueue 
     shmemSumLengthMaxDiv4 - number indicating linear length of shmemSum but reduced such that it will be divisible by 4
     ex - actions invoked on the data block when its xMeta,yMeta,zMeta and is gold pass informations are already known
     """
-macro iterateOverWorkQueue(workQueauecounter,workQueaue,goldToBeDilatated, segmToBeDilatated,shmemSumLengthMaxDiv4,ex )
+macro iterateOverWorkQueue(workQueaueCounter,workQueaue,goldToBeDilatated, segmToBeDilatated,shmemSumLengthMaxDiv4,ex )
    return esc(quote
     #first part we load data from work queue to shmem sum 
     # we will treat shmemSum as 1 dimensional array and write data from work queue
     #mod 1 - xMeta, mod 2 - uMeta, mod 3 - zMeta mod 4 - isGoldPass
     #first we need to  establish how many items in work queue will be analyzed by this block 
-    numbOfDataBlockPerThreadBlock = cld(workQueauecounter[1],gridDimX() )
+    numbOfDataBlockPerThreadBlock = cld(workQueaueCounter[1],gridDimX() )
 
     #we need to stuck all of the blocks data into shared memory 4 entries for each block
     @unroll for outerIter in 0: fld((numbOfDataBlockPerThreadBlock*4),shmemSumLengthMaxDiv4)
@@ -138,18 +138,18 @@ macro iterateOverWorkQueue(workQueauecounter,workQueaue,goldToBeDilatated, segmT
 
             # sync_threads()
             # if(workQuueueLinearIndex>(480) && workQuueueLinearIndex<=36*14 )
-            #     CUDA.@cuprint " workQuueueLinearIndex  $(workQuueueLinearIndex)  i $(i) < $(shmemSumLengthMaxDiv4)  aa$(((outerIter*shmemSumLengthMaxDiv4)+i))< bb $((numbOfDataBlockPerThreadBlock*4))  cc $((workQueauecounter[1]*4))   blockidX $(blockIdxX()) i $(i) outerIter $(outerIter) numbOfDataBlockPerThreadBlock $(numbOfDataBlockPerThreadBlock)  shmemSumLengthMaxDiv4 $(shmemSumLengthMaxDiv4) workQuueueLinearIndexOffset $(workQuueueLinearIndexOffset)  \n "
+            #     CUDA.@cuprint " workQuueueLinearIndex  $(workQuueueLinearIndex)  i $(i) < $(shmemSumLengthMaxDiv4)  aa$(((outerIter*shmemSumLengthMaxDiv4)+i))< bb $((numbOfDataBlockPerThreadBlock*4))  cc $((workQueaueCounter[1]*4))   blockidX $(blockIdxX()) i $(i) outerIter $(outerIter) numbOfDataBlockPerThreadBlock $(numbOfDataBlockPerThreadBlock)  shmemSumLengthMaxDiv4 $(shmemSumLengthMaxDiv4) workQuueueLinearIndexOffset $(workQuueueLinearIndexOffset)  \n "
             # end
             # sync_threads()
 
             if(i<=shmemSumLengthMaxDiv4 )
 
-                if( ((outerIter*shmemSumLengthMaxDiv4)+i)<=((numbOfDataBlockPerThreadBlock*4)) && workQuueueLinearIndex<=(workQueauecounter[1]*4)  )
+                if( ((outerIter*shmemSumLengthMaxDiv4)+i)<=((numbOfDataBlockPerThreadBlock*4)) && workQuueueLinearIndex<=(workQueaueCounter[1]*4)  )
                     # if(workQuueueLinearIndex>(480) && workQuueueLinearIndex<=36*14 )
-                    #     CUDA.@cuprint " workQuueueLinearIndex  $(workQuueueLinearIndex)  i $(i) < $(shmemSumLengthMaxDiv4)  aa$(((outerIter*shmemSumLengthMaxDiv4)+i))<  $((numbOfDataBlockPerThreadBlock*4))   bb $(workQuueueLinearIndex) < $((workQueauecounter[1]*4))   blockidX $(blockIdxX()) i $(i) outerIter $(outerIter) numbOfDataBlockPerThreadBlock $(numbOfDataBlockPerThreadBlock)  shmemSumLengthMaxDiv4 $(shmemSumLengthMaxDiv4) workQuueueLinearIndexOffset $(workQuueueLinearIndexOffset)  \n "
+                    #     CUDA.@cuprint " workQuueueLinearIndex  $(workQuueueLinearIndex)  i $(i) < $(shmemSumLengthMaxDiv4)  aa$(((outerIter*shmemSumLengthMaxDiv4)+i))<  $((numbOfDataBlockPerThreadBlock*4))   bb $(workQuueueLinearIndex) < $((workQueaueCounter[1]*4))   blockidX $(blockIdxX()) i $(i) outerIter $(outerIter) numbOfDataBlockPerThreadBlock $(numbOfDataBlockPerThreadBlock)  shmemSumLengthMaxDiv4 $(shmemSumLengthMaxDiv4) workQuueueLinearIndexOffset $(workQuueueLinearIndexOffset)  \n "
                     # end
                     # if(workQuueueLinearIndex>(79*4))
-            #     CUDA.@cuprint " workQuueueLinearIndex  $(workQuueueLinearIndex)  loops $(cld(shmemSumLengthMaxDiv4,blockDimX()*blockDimY()))  i $(i) < $(shmemSumLengthMaxDiv4)  aa$(((outerIter*shmemSumLengthMaxDiv4)+i))< bb $((numbOfDataBlockPerThreadBlock*4))  cc $((workQueauecounter[1]*4))   blockidX $(blockIdxX()) i $(i) outerIter $(outerIter) numbOfDataBlockPerThreadBlock $(numbOfDataBlockPerThreadBlock)  shmemSumLengthMaxDiv4 $(shmemSumLengthMaxDiv4) workQuueueLinearIndexOffset $(workQuueueLinearIndexOffset)  \n "
+            #     CUDA.@cuprint " workQuueueLinearIndex  $(workQuueueLinearIndex)  loops $(cld(shmemSumLengthMaxDiv4,blockDimX()*blockDimY()))  i $(i) < $(shmemSumLengthMaxDiv4)  aa$(((outerIter*shmemSumLengthMaxDiv4)+i))< bb $((numbOfDataBlockPerThreadBlock*4))  cc $((workQueaueCounter[1]*4))   blockidX $(blockIdxX()) i $(i) outerIter $(outerIter) numbOfDataBlockPerThreadBlock $(numbOfDataBlockPerThreadBlock)  shmemSumLengthMaxDiv4 $(shmemSumLengthMaxDiv4) workQuueueLinearIndexOffset $(workQuueueLinearIndexOffset)  \n "
             # end
                     #CUDA.@cuprint "workQuueueLinearIndex $(Int64(workQuueueLinearIndex))  (((numbOfDataBlockPerThreadBlock-1)*4) $((((numbOfDataBlockPerThreadBlock-1)*4)))  (((numbOfDataBlockPerThreadBlock-1)*4)*(blockDimX()-1)) $((((numbOfDataBlockPerThreadBlock-1)*4)*(blockDimX()-1))) (outerIter*shmemSumLengthMaxDiv4) $((outerIter*shmemSumLengthMaxDiv4))  workQueaue[workQuueueLinearIndex] $(Int64(workQueaue[workQuueueLinearIndex])) \n"
                 shmemSum[i] = workQueaue[workQuueueLinearIndex]
@@ -340,12 +340,12 @@ end
 
 """
 allocate after prepare bool kernel had finished execution
-return metaData,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,workQueaue,resList,resListIndicies
+return metaData,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,workQueaue,resList,resListIndicies,maxResListIndex
 """
 function getBigGPUForHousedorffAfterBoolKernel(metaData,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB)
     ###we return only subset of boolean arrays that we are intrested in 
     workQueaue= WorkQueueUtils.allocateWorkQueue(fp[1],fn[1])
-    resList,resListIndicies= allocateResultLists(fp[1],fn[1])
+    resList,resListIndicies,maxResListIndex= allocateResultLists(fp[1],fn[1])
     ###we need to return subset of metadata that we are intrested in 
     return(metaData[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]   ]
             ,reducedGoldA[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]]
@@ -353,7 +353,7 @@ function getBigGPUForHousedorffAfterBoolKernel(metaData,minxRes,maxxRes,minyRes,
             ,reducedGoldB[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]]
             ,reducedSegmB[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]]
             ,workQueaue
-            ,resList,resListIndicies
+            ,resList,resListIndicies,maxResListIndex
     )
 end 
 

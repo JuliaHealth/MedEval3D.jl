@@ -196,7 +196,7 @@ macro getBoolCubeKernel()
     @iter3dOuter(metaDataDims,loopMeta,metaDataLength,
          begin
          #inner loop is over the data indicated by metadata
-         @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ
+         @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,xMeta,yMeta,zMeta
                          ,begin 
                                 boolGold=goldGPU[x,y,z]==numberToLooFor
                                 boolSegm=segmGPU[x,y,z]==numberToLooFor    

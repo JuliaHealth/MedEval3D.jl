@@ -253,10 +253,11 @@ end
           
             #now we need to go through  those numbers and in case some of the border queues were incremented we need to analyze those added entries to establish is there 
             # any duplicate in case there will be we need to decrement counter and set the corresponding duplicated entry to 0 
-            @loadAndScanForDuplicates(iterThrougWarNumb,$locArr,$offsetIter,localOffset)
             #here we load data about wheather there is anything to be validated here - we save data so it can be read from the perspective of this block
-            #and the blocks aroud that will want to analyze paddings
-            @setIsToBeValidated() 
+            # #and the blocks aroud that will want to analyze paddings
+            @loadAndScanForDuplicates(iterThrougWarNumb,$locArr,$offsetIter,localOffset)
+
+
 
             #we set information that block should be activated in gold  and segm
              @setIsToBeActive() 
@@ -279,6 +280,16 @@ end
 
             sync_threads()
     
+
+
+            @metaDataWarpIter(metaDataDims,loopWarpMeta,metaDataLength, begin
+            #now we need to set old caounters to the value of new counters so at next dilatation we will count only new values ...
+            for i in 1:14
+                @exOnWarp (i+37) @setMeta((getOldCountersBeg() +i),@accMeta(getNewCountersBeg() +i))
+            end  
+            end)   
+
+
             #clear used shmem - we used linear indicies so we can clear only those used
             for i in 0:30
                 @exOnWarp i resShmem[(threadIdxX())+(i)*33]= false
@@ -289,10 +300,7 @@ end
              for i in 1:14
                 @exOnWarp (i+23) shmemSum[threadIdxX(),i]= 0
              end
-                #now we need to set old caounters to the value of new counters so at next dilatation we will count only new values ...
-            for i in 1:14
-                @exOnWarp (i+37) @setMeta((getOldCountersBeg() +i),@accMeta(getNewCountersBeg() +i))
-            end  
+
             $locArr=0
             $offsetIter=0
             sync_threads()

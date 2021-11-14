@@ -20,8 +20,8 @@ goldGPU = CuArray(mainArrCPU);
 segmGPU= CuArray(mainArrCPU);
 
 robustnessPercent= 0.95
-numberToLooFor=2
-Housdorff.preparehousedorfKernel(goldGPU,segmGPU,robustnessPercent,numberToLooFor)
+numberToLooFor=1
+boolKernelArgs, mainKernelArgs,threadsBoolKern,blocksBoolKern ,threadsMainKern,blocksMainKern= Housdorff.preparehousedorfKernel(goldGPU,segmGPU,robustnessPercent,numberToLooFor);
 
 
 

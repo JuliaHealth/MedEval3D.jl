@@ -109,7 +109,7 @@ end #iter3dOuter
 """
 will enable iterating over the data of data block
 """
-macro iterDataBlock(mainArrDims,dataBlockDims,loopXdim ,loopYdim,loopZdim,ex)
+macro iterDataBlock(mainArrDims,dataBlockDims,loopXdim ,loopYdim,loopZdim,xMeta,yMeta,zMeta, ex)
     mainExp = generalizedItermultiDim(;arrDims=mainArrDims
     ,loopXdim
     ,loopYdim
@@ -120,11 +120,11 @@ macro iterDataBlock(mainArrDims,dataBlockDims,loopXdim ,loopYdim,loopZdim,ex)
     ,xCheck = :(((xdim * blockDimX())+threadIdxX()) <= $dataBlockDims[1] && x<=$mainArrDims[1])
     ,yCheck = :(((ydim * blockDimY())+threadIdxY()) <= $dataBlockDims[2] && y<=$mainArrDims[2])
     ,zCheck = :((zdim+1) <= $dataBlockDims[3]  &&   z <= $mainArrDims[3])
-    ,zOffset= :(zMeta* ( ($dataBlockDims[3])))
+    ,zOffset= :($zMeta* ( ($dataBlockDims[3])))
     ,zAdd =:(zdim+1)
-   ,yOffset = :(ydim* blockDimY()+yMeta* $dataBlockDims[2])
+   ,yOffset = :(ydim* blockDimY()+$yMeta* $dataBlockDims[2])
    ,yAdd= :(threadIdxY())
-   ,xOffset= :( (xdim * blockDimX()) +xMeta* $dataBlockDims[1])
+   ,xOffset= :( (xdim * blockDimX()) +$xMeta* $dataBlockDims[1])
     ,xAdd= :(threadIdxX())
     ,isFullBoundaryCheckX =true
     , isFullBoundaryCheckY=true

@@ -20,7 +20,7 @@ export getDir,@validateData, @executeDataIterWithPadding, @loadMainValues,setNex
 """                
 macro validateData(mainArrDims, inBlockLoopX,inBlockLoopY,inBlockLoopZ,mainArr,refArr,xMeta,yMeta,zMeta,isGold,iterNumb)
     return esc(quote
-    @iterDataBlock($mainArrDims,dataBdim, $inBlockLoopX,$inBlockLoopY,$inBlockLoopZ,begin
+    @iterDataBlock($mainArrDims,dataBdim, $inBlockLoopX,$inBlockLoopY,$inBlockLoopZ,$xMeta,$yMeta,$zMeta,begin
         locVal = @inbounds  sourceShmem[xpos,ypos,zpos]
         resShemVal = @inbounds resShmem[xpos+1,ypos+1,zpos+1]             
         locValOrShmem = (locVal | resShemVal)
@@ -99,9 +99,9 @@ end#processMaskData
    it all works under the assumption that x and y dimension of the thread block and data block is the same           
 """                
                 
-macro loadMainValues(mainArrGPU)
+macro loadMainValues(mainArrGPU,xMeta,yMeta,zMeta)
     return esc(quote
-    @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ, begin
+    @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,$xMeta,$yMeta,$zMeta, begin
 
      maskBool=$mainArrGPU[x,y,z]
     #  if(maskBool)
@@ -152,7 +152,7 @@ macro executeDataIterWithPadding(mainArrDims, inBlockLoopX,inBlockLoopY,inBlockL
     return esc(quote
   ############## upload data
   @ifY 1 if(threadIdxX()<15) areToBeValidated[threadIdxX()] =metaData[($xMeta+1),($yMeta+1),($zMeta+1),(getIsToBeAnalyzedNumb() +threadIdxX())]  end 
-  @loadMainValues($mainArr)                                       
+  @loadMainValues($mainArr,$xMeta,$yMeta,$zMeta)                                       
   sync_threads()
   ########## check data aprat from padding
   #can be skipped if we have the block with already all results analyzed 
@@ -213,7 +213,7 @@ end
 combines above function to make it more convinient to call
 """
 macro paddingProcessCombined(loopX,loopY,maxXdim, maxYdim,a,b,c , xMetaChange,yMetaChange,zMetaChange, mainArr,refArr, dir,iterNumb,queueNumber,xMeta,yMeta,zMeta,isGold)
- #   function paddingProcessCombined(loopX,loopY,maxXdim, maxYdim,a,b,c , xMetaChange,yMetaChange,zMetaChange, mainArr,refArr, dir,iterNumb,queueNumber,xMeta,yMeta,zMeta,isGold,resShmem,dataBdim,metaData,resList,resListIndicies,metaDataDims )
+ #   function paddingProcessCombined(loopX,loopY,maxXdim, maxYdim,a,b,c , xMetaChange,yMetaChange,zMetaChange, mainArr,refArr, dir,iterNumb,queueNumber,xMeta,yMeta,zMeta,isGold,resShmem,dataBdim,metaData,resList,resListIndicies,maxResListIndex,metaDataDims )
     return esc(quote
     @paddingIter($loopX,$loopY,$maxXdim, $maxYdim, begin
         if(resShmem[$a,$b,$c])

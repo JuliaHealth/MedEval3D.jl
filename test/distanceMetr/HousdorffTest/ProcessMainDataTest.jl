@@ -28,7 +28,7 @@ function processDataKernel(mainArrGPU,sourceShmem,resShmem,mainArrDims,metaDataD
     begin 
         # @ifXY 1 1    CUDA.@cuprint "  xMeta $(xMeta) yMeta $(yMeta)  zMeta $(zMeta) \n"   
 
-        @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
+        @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,xMeta,yMeta,zMeta,
         begin
             #@ifXY 1 1    CUDA.@cuprint "  x $(x) y $(y)  z $(z) \n"   
 
@@ -82,7 +82,7 @@ function processDataKernel(mainArrGPU,sourceShmem,resShmem,mainArrDims,metaDataD
     begin 
         #@ifXY 1 1    CUDA.@cuprint "  xMeta $(xMeta) yMeta $(yMeta)  zMeta $(zMeta) \n"   
 
-        @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
+        @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,xMeta,yMeta,zMeta,
         begin
             ProcessMainDataVerB.@loadMainValues( mainArrGPU,dataBdim)
 
@@ -142,7 +142,7 @@ refArrCPU[dataBdim[1]+1,dataBdim[2]+2,dataBdim[3]+2]
 metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
 metaDataDims= size(metaData);
 totalFp,totalFn= 500,500
-resList,resListIndicies= allocateResultLists(totalFp,totalFn)
+resList,resListIndicies,maxResListIndex= allocateResultLists(totalFp,totalFn)
 iterNumb=3
 isGold = 1
 xMeta,yMeta,zMeta = 2,2,2
@@ -196,7 +196,7 @@ refArrCPU = falses(mainArrDims);
 metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
 metaDataDims= size(metaData);
 totalFp,totalFn= 500,500
-resList,resListIndicies= allocateResultLists(totalFp,totalFn)
+resList,resListIndicies,maxResListIndex= allocateResultLists(totalFp,totalFn)
 iterNumb=3
 isGold = 1
 queueNumber = 11
@@ -217,7 +217,7 @@ dataBdim[2]+2
 dataBdim[3]+1
 metaData[xMeta,yMeta,zMeta-1,getResOffsetsBeg()+queueNumber]=7
 
-function paddingIterKernel(resShmem,metaData,resList,resListIndicies,metaDataDims,refArrGPU,mainArrDims,loopAZFixed,loopBZfixed,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta)
+function paddingIterKernel(resShmem,metaData,resList,resListIndicies,maxResListIndex,metaDataDims,refArrGPU,mainArrDims,loopAZFixed,loopBZfixed,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta)
 
     # paddingIter(loopX,loopY,maxXdim, maxYdim,a,b,c , xMetaChange,yMetaChange,zMetaChange, mainArr,refArr, dir,iterNumb,queueNumber,xMeta,yMeta,zMeta)
 
@@ -226,7 +226,7 @@ function paddingIterKernel(resShmem,metaData,resList,resListIndicies,metaDataDim
     return
 end
 
-@cuda threads=threads blocks=blocks paddingIterKernel(resShmem,metaData,resList,resListIndicies,metaDataDims,refArrGPU,mainArrDims,loopAZFixed,loopBZfixed,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta)
+@cuda threads=threads blocks=blocks paddingIterKernel(resShmem,metaData,resList,resListIndicies,maxResListIndex,metaDataDims,refArrGPU,mainArrDims,loopAZFixed,loopBZfixed,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta)
 @test Int64(sum(resListIndicies))>0
 @test  Int64.(Array(resList[8,:]))==[dataBdim[1]+2,dataBdim[2]+2,dataBdim[3]+1,1,5,3]
 
@@ -262,7 +262,7 @@ refArrCPU = falses(mainArrDims);
 metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
 metaDataDims= size(metaData);
 totalFp,totalFn= 500,500
-resList,resListIndicies= allocateResultLists(totalFp,totalFn)
+resList,resListIndicies,maxResListIndex= allocateResultLists(totalFp,totalFn)
 iterNumb=3
 isGold = 1
 queueNumber = 11
@@ -435,10 +435,10 @@ inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(dataBdim[1] ,threads[1]),fld(dataBd
 sourceShmem = CUDA.zeros(Bool,(dataBdim));
 areToBeValidated= CUDA.ones(Bool,14)
 isAnythingInPadding= CUDA.zeros(Bool,6)
-function processPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
+function processPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,maxResListIndex,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
 
     # paddingIter(loopX,loopY,maxXdim, maxYdim,a,b,c , xMetaChange,yMetaChange,zMetaChange, mainArr,refArr, dir,iterNumb,queueNumber,xMeta,yMeta,zMeta)
-    @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,
+    @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,xMeta,yMeta,zMeta,
     begin
         ProcessMainDataVerB.@loadMainValues(mainArrGPU,dataBdim)
     end)
@@ -450,7 +450,7 @@ function processPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,i
     return
 end
 
-@cuda threads=threads blocks=blocks processPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
+@cuda threads=threads blocks=blocks processPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,maxResListIndex,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
 
 @test Int64(metaData[1,2,2,getIsToBeActivatedInGoldNumb()])==1
 @test Int64(metaData[3,2,2,getIsToBeActivatedInGoldNumb()])==1
@@ -522,7 +522,7 @@ refArrCPU = falses(mainArrDims);
 metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
 metaDataDims= size(metaData);
 totalFp,totalFn= 500,500
-resList,resListIndicies= allocateResultLists(totalFp,totalFn)
+resList,resListIndicies,maxResListIndex= allocateResultLists(totalFp,totalFn)
 iterNumb=3
 isGold = 1
 queueNumber = 11
@@ -696,14 +696,14 @@ inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(dataBdim[1] ,threads[1]),fld(dataBd
 sourceShmem = CUDA.zeros(Bool,(dataBdim));
 areToBeValidated= CUDA.ones(Bool,14)
 isAnythingInPadding= CUDA.zeros(Bool,6)
-function executeDataIterWithPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
+function executeDataIterWithPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,maxResListIndex,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
     isMaskFull= true
     @executeDataIterWithPadding(mainArrDims, inBlockLoopX,inBlockLoopY,inBlockLoopZ,mainArrGPU,refArrGPU,xMeta,yMeta,zMeta,isGold,iterNumb)
 
     return
 end
 
-@cuda threads=threads blocks=blocks executeDataIterWithPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
+@cuda threads=threads blocks=blocks executeDataIterWithPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,maxResListIndex,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
 
 @test Int64(metaData[1,2,2,getIsToBeActivatedInGoldNumb()])==1
 @test Int64(metaData[3,2,2,getIsToBeActivatedInGoldNumb()])==1
@@ -762,7 +762,7 @@ refArrCPU = falses(mainArrDims);
 metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
 metaDataDims= size(metaData);
 totalFp,totalFn= 500,500
-resList,resListIndicies= allocateResultLists(totalFp,totalFn)
+resList,resListIndicies,maxResListIndex= allocateResultLists(totalFp,totalFn)
 iterNumb=3
 isGold = 1
 queueNumber = 11
@@ -790,14 +790,14 @@ inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(dataBdim[1] ,threads[1]),fld(dataBd
 sourceShmem = CUDA.zeros(Bool,(dataBdim));
 areToBeValidated= CUDA.ones(Bool,14)
 isAnythingInPadding= CUDA.zeros(Bool,6)
-function executeDataIterWithPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
+function executeDataIterWithPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,maxResListIndex,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
     isMaskFull= true
     @executeDataIterWithPadding(mainArrDims, inBlockLoopX,inBlockLoopY,inBlockLoopZ,mainArrGPU,refArrGPU,xMeta,yMeta,zMeta,isGold,iterNumb)
 
     return
 end
 
-@cuda threads=threads blocks=blocks executeDataIterWithPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
+@cuda threads=threads blocks=blocks executeDataIterWithPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,maxResListIndex,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
 
 metaCorrX = 2
 metaCorrY = 2
@@ -841,7 +841,7 @@ refArrCPU = falses(mainArrDims);
 metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
 metaDataDims= size(metaData);
 totalFp,totalFn= 500,500
-resList,resListIndicies= allocateResultLists(totalFp,totalFn)
+resList,resListIndicies,maxResListIndex= allocateResultLists(totalFp,totalFn)
 iterNumb=3
 isGold = 1
 queueNumber = 11
@@ -869,14 +869,14 @@ inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(dataBdim[1] ,threads[1]),fld(dataBd
 sourceShmem = CUDA.zeros(Bool,(dataBdim));
 areToBeValidated= CUDA.ones(Bool,14)
 isAnythingInPadding= CUDA.zeros(Bool,6)
-function executeDataIterWithPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
+function executeDataIterWithPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,maxResListIndex,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
     isMaskFull= true
     @executeDataIterWithPadding(mainArrDims, inBlockLoopX,inBlockLoopY,inBlockLoopZ,mainArrGPU,refArrGPU,xMeta,yMeta,zMeta,isGold,iterNumb)
 
     return
 end
 
-@cuda threads=threads blocks=blocks executeDataIterWithPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
+@cuda threads=threads blocks=blocks executeDataIterWithPaddingKernel(isAnythingInPadding,areToBeValidated,sourceShmem,inBlockLoopX,inBlockLoopY,inBlockLoopZ,resShmem,metaData,resList,resListIndicies,maxResListIndex,metaDataDims,refArrGPU,mainArrDims,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,dataBdim,mainArrGPU,iterNumb,isGold,xMeta,yMeta,zMeta,isToBeValidated)
 
 metaCorrX = 2
 metaCorrY = 2
