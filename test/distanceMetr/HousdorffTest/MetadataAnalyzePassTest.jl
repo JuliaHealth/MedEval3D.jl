@@ -19,7 +19,7 @@ dataBdim = (43,21,17)
 metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
 #metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:9,2:3,4:6,: );
 metaDataDims=size(metaData)
-loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
+loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
 function metaDataWarpIterKernel(singleVal,metaDataDims,loopWarpMeta,metaDataLength)
 
@@ -123,7 +123,7 @@ dataBdim = (43,21,17)
 metaDataDims=size(metaData)
 loopXMeta= fld(metaDataDims[1],threads[1])
 loopYZMeta= fld(metaDataDims[2]*metaDataDims[3],blocks )
-loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
+loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
 globalFpResOffsetCounter= CUDA.zeros(UInt32,1)
 globalFnResOffsetCounter= CUDA.zeros(UInt32,1)
@@ -202,7 +202,7 @@ for j in 1:2
   metaData[j,j,j, getBeginingOfFpFNcounts()+16]=15+j
   metaData[j,j,j, getBeginingOfFpFNcounts()+17]=16+j
 end  
-loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
+loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
 function analyzeMetadataFirstPassKernel(loopWarpMeta,metaDataLength,workQueaue,workQueaueCounter,metaData,metaDataDims,loopXMeta,loopYZMeta,globalFpResOffsetCounter, globalFnResOffsetCounter)
   shmemSum =  @cuStaticSharedMem(Float32,(35,16)) # we need this additional 33th an 34th spots
@@ -316,7 +316,7 @@ metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb() ]=1
 metaData[xMeta,yMeta+1,zMeta+1,getFullInSegmNumb() ]=1
 
 
-loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
+loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
 #as we have counters we check in shmem are they correct
 

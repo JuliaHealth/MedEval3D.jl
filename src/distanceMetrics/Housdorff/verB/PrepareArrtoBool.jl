@@ -147,8 +147,8 @@ end
 """
 we need to give back number of false positive and false negatives and min,max x,y,x of block containing all data 
 adapted from https://github.com/JuliaGPU/CUDA.jl/blob/afe81794038dddbda49639c8c26469496543d831/src/mapreduce.jl
-gold3d - array holding 3 dimensional data of gold standard bollean array
-segm3d - array with 3 dimensional the data we want to compare with gold standard
+goldGPU - array holding 3 dimensional data of gold standard bollean array
+segmGPU - array with 3 dimensional the data we want to compare with gold standard
 reducedGold - the smallest boolean block (3 dim array) that contains all positive entris from both masks
 reducedSegm - the smallest boolean block (3 dim array) that contains all positive entris from both masks
 numberToLooFor - number we will analyze whether is the same between two sets
@@ -163,8 +163,8 @@ loopXMeta,loopYZMeta- indicates how many times we need to iterate over the metad
 inBlockLoopX,inBlockLoopY,inBlockLoopZ - indicates how many times we need to iterate over the data block using our size of thread block
                                           basically data block size will be established by the thread block size of main kernel  
 """
-# function getBoolCubeKernel(gold3d
-#         ,segm3d
+# function getBoolCubeKernel(goldGPU
+#         ,segmGPU
 #         ,numberToLooFor::T
 #         ,reducedGoldA
 #         ,reducedSegmA
@@ -198,8 +198,8 @@ macro getBoolCubeKernel()
          #inner loop is over the data indicated by metadata
          @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ
                          ,begin 
-                                boolGold=gold3d[x,y,z]==numberToLooFor
-                                boolSegm=segm3d[x,y,z]==numberToLooFor    
+                                boolGold=goldGPU[x,y,z]==numberToLooFor
+                                boolSegm=segmGPU[x,y,z]==numberToLooFor    
      
                                 #we need to also collect data about how many fp and fn we have in main part and borders
                                 #important in case of corners we will first analyze z and y dims and z dim on last resort only !

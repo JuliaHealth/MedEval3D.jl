@@ -111,7 +111,7 @@ end#for quueueNumb
 maxResListIndex= length(resListIndicies)
 
 globalCurrentFnCount,globalCurrentFpCount= CUDA.zeros(UInt32,1),CUDA.zeros(UInt32,1)
-loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
+loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
 function loadAndSanForDuplKernel(loopWarpMeta,metaDataLength,globalCurrentFnCount,globalCurrentFpCount,maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,dataBdim)
    locArr= UInt32(0)

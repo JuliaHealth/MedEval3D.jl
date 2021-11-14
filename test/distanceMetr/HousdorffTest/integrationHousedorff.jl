@@ -11,16 +11,17 @@ mainArrDims= (67,177,90);
 mainArrCPU= falses(mainArrDims);
 refArrCPU = falses(mainArrDims);
 ##### we will create two planes 20 units apart from each 
-mainArrCPU[10:50,10:50,10]= true
-refArrCPU[10:50,10:50,30]= true
+mainArrCPU[10:50,10:50,10].= true;
+refArrCPU[10:50,10:50,30].= true;
 
 
     
-mainArrGPU = CuArray(mainArrCPU);
-refArrGPU= CuArray(mainArrCPU);
- 
+goldGPU = CuArray(mainArrCPU);
+segmGPU= CuArray(mainArrCPU);
 
-
+robustnessPercent= 0.95
+numberToLooFor=2
+Housdorff.preparehousedorfKernel(goldGPU,segmGPU,robustnessPercent,numberToLooFor)
 
 
 

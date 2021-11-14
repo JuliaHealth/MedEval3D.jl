@@ -1,13 +1,7 @@
 module MainLoopKernel
 using CUDA, Logging,Main.CUDAGpuUtils, Main.ResultListUtils,Main.WorkQueueUtils,Main.ScanForDuplicates, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils
 using Main.MetadataAnalyzePass, Main.ScanForDuplicates
-<<<<<<< HEAD
-export getSmallGPUForHousedorff,getBigGPUForHousedorffAfterBoolKernel,loadDataAtTheBegOfDilatationStep,@prepareForNextDilation,@mainLoopKernel, @iterateOverWorkQueue,@mainLoop,@mainLoopKernelAllocations,@clearBeforeNextDilatation
-
-
-=======
-export @loadDataAtTheBegOfDilatationStep,@prepareForNextDilation,@mainLoopKernel, @iterateOverWorkQueue,@mainLoop,@mainLoopKernelAllocations,@clearBeforeNextDilatation
->>>>>>> 9fea8d023a40ad85116f6fecb2baa663eba49f0e
+export getSmallGPUForHousedorff,getBigGPUForHousedorffAfterBoolKernel,@loadDataAtTheBegOfDilatationStep,@prepareForNextDilation,@mainLoopKernel, @iterateOverWorkQueue,@mainLoop,@mainLoopKernelAllocations,@clearBeforeNextDilatation
 
 
 """
@@ -69,11 +63,11 @@ alreadyCoveredInQueues =@cuStaticSharedMem(UInt32,(14))
  segmToBeDilatated =  @cuStaticSharedMem(Bool,1)
  #true when we have more than 0 blocks to analyze in next iteration
  workCounterBiggerThan0 =  @cuStaticSharedMem(Bool,1) 
+ workCounterInshmem= @cuStaticSharedMem(UInt16,1)
+ positionInMainWorkQueaue= @cuStaticSharedMem(UInt16,1)
  @ifXY 1 1 iterationNumberShmem[1]= 0
  @ifXY 2 1 isAnyBiggerThanZero[1]= 0
-#  @ifXY 3 1 tailCounterInShmem[1]= 0
- @ifXY 5 1 isOddPassShmem[1]= 0
- @ifXY 6 1 currentTailPosition[1]= 0
+ @ifXY 3 1 workCounterInshmem[1]= 0
  @ifXY 7 1 goldToBeDilatated[1]= 0
  @ifXY 8 1 segmToBeDilatated[1]= 0
  @ifXY 9 1 workCounterBiggerThan0[1]= 0
@@ -110,9 +104,9 @@ macro mainLoop()
     return esc(quote
     MetadataAnalyzePass.@setMEtaDataOtherPasses(locArr,offsetIter,iterationNumberShmem[1])
     sync_grid(grid_handle)
-    loadDataAtTheBegOfDilatationStep(isOddPassShmem,iterationNumberShmem,iterationNumber,positionInMainWorkQueaue,workCounterInshmem,mainQuesCounterArr,isAnyBiggerThanZero,goldToBeDilatated,segmToBeDilatated, resArraysCounters  )
+    @loadDataAtTheBegOfDilatationStep()
     sync_threads()
-    @iterateOverWorkQueue(workQueauecounter,workQueaue,goldToBeDilatated[1], segmToBeDilatated[1],shmemSumLengthMaxDiv4) 
+    @iterateOverWorkQueue(workQueauecounter,workQueaue,goldToBeDilatated[1], segmToBeDilatated[1],shmemSumLengthMaxDiv4,:()) 
 end) #quote
 end#mainLoop
 
@@ -179,10 +173,10 @@ macro iterateOverWorkQueue(workQueauecounter,workQueaue,goldToBeDilatated, segmT
            # @ifXY 1 1  CUDA.@cuprint " indd $(workQuueueLinearIndexOffset+shmemIndex) \n "
 
             # data used block wide
-            xMeta= shmemSum[shmemIndex*4+1]
-            yMeta= shmemSum[shmemIndex*4+2]
-            zMeta= shmemSum[shmemIndex*4+3]
-            isGold= shmemSum[shmemIndex*4+4]
+            # xMeta= shmemSum[shmemIndex*4+1]
+            # yMeta= shmemSum[shmemIndex*4+2]
+            # zMeta= shmemSum[shmemIndex*4+3]
+            # isGold= shmemSum[shmemIndex*4+4]
 #sync_threads()
             # checking is there any point in futher dilatations of this block
             #if((isGold==1 && goldToBeDilatated[1]) || (isGold==0 && segmToBeDilatated[1]) )
@@ -311,11 +305,12 @@ macro loadDataAtTheBegOfDilatationStep(  )
     #@ifXY 2 2 positionInMainWorkQueaue[1]=0 
 
     @ifXY 2 1 begin
-        workCounterInshmem[1]= mainQuesCounterArr[isOddPassShmem[1]+1] krowa
+        workCounterInshmem[1]= workQueaueCounter[1] 
         workCounterBiggerThan0[1]= (workCounterInshmem[1]>0)
                     end 
-    @ifXY 3 1 goldToBeDilatated[1]=(resArraysCounters[2] <= fp[1])
-    @ifXY 4 1 segmToBeDilatated[1]=(resArraysCounters[1] <= fn[1])
+    #we do corection for robustness so we can ignore some of the most distant points - this will reduce the influence of outliers                
+    @ifXY 3 1 goldToBeDilatated[1]=(globalCurrentFpCount[1] <= ceil(fp[1]*robustnessPercent))
+    @ifXY 4 1 segmToBeDilatated[1]=(globalCurrentFnCount[1] <= ceil(fn[1]*robustnessPercent))
         end)#quote
 end
 
@@ -327,7 +322,11 @@ function getSmallGPUForHousedorff()
     globalFpResOffsetCounter= CUDA.zeros(UInt32,1)
     globalFnResOffsetCounter= CUDA.zeros(UInt32,1)
     workQueaueCounter= CUDA.zeros(UInt32,1)
-return (globalFpResOffsetCounter,globalFnResOffsetCounter,workQueaueCounter )
+    globalIterationNumber = CUDA.zeros(UInt32,1)
+    globalCurrentFnCount= CUDA.zeros(UInt32,1)
+    globalCurrentFpCount= CUDA.zeros(UInt32,1)
+
+return (globalFpResOffsetCounter,globalFnResOffsetCounter,workQueaueCounter,globalIterationNumber,globalCurrentFnCount,globalCurrentFpCount )
 end    
 
 # """
