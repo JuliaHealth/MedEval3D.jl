@@ -29,7 +29,8 @@ function prepareInterClassCorrKernel(goldGPU,segmGPU,numberToLooFor)
   ssbTotal= CUDA.zeros(1);
   grandMean=Float32(1)
   argsMeans= (goldGPU,segmGPU ,loopXdim,loopYdim,loopZdim,sumOfGold,sumOfSegm,numberToLooFor )
-  
+
+
   get_shmem() = 4*33  #the same for both kernels
   
   threadsMean,blocksMean = getThreadsAndBlocksNumbForKernel(get_shmem,kernel_InterClassCorr_means,argsMeans)
@@ -45,6 +46,7 @@ function prepareInterClassCorrKernel(goldGPU,segmGPU,numberToLooFor)
     argsMain[4] = UInt32(fld(mainArrDims[2], blocksMain[2])) 
     argsMain[5] = UInt32(fld(mainArrDims[3],blocksMean )) 
   
+
   return(argsMeans,argsMain, threadsMean, threadsMain, blocksMean, blocksMain,mainArrDims)
 end
 
@@ -65,6 +67,13 @@ function calculateInterclassCorr(goldGPU,segmGPU,numberToLooFor,argsMeans,argsMa
   argsMain[2]=segmGPU
   argsMeans[8]= numberToLooFor
   argsMain[9]=numberToLooFor
+  
+  ## resetting some entries to 0 
+
+ CUDA.fill!(0,  argsMeans[6] )
+ CUDA.fill!(0,  argsMeans[7] )
+ CUDA.fill!(0,  argsMain[6] )
+ CUDA.fill!(0,  argsMain[7] )
   
 # pixelNumberPerBlock = cld(mainArrayDims[1]*mainArrayDims[2]*mainArrayDims[3],maxBlocksPerKernel)-1 # some single pixels at the ends may be ignored
 # pixelNumberPerSlice = mainArrayDims[1]*mainArrayDims[2]
