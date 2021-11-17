@@ -63,7 +63,17 @@ function getTpfpfnData!(goldGPU
     ,args,threads,blocks) where T
 args[1]= goldGPU
 args[2]= segmGPU  
-    
+#resetting to 0     
+for i in 1:11    
+    CUDA.fill!(0,args[3][i])
+end   
+for i in  4:7   
+    CUDA.fill!(0,args[i])
+end   
+
+for i in 1:11    
+    CUDA.fill!(0,args[15][i])
+end   
 
 #getMaxBlocksPerMultiproc(args, getBlockTpFpFn) -- evaluates to 3
 
