@@ -281,9 +281,14 @@ end
 creates large memory footprint GPU variables for getBoolCubeKernel
     return reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB
 """
-function getLargeForBoolKernel(mainArrDims)
+function getLargeForBoolKernel(mainArrDims,dataBdim)
+    #this is in order to be sure that array is divisible by data block so we reduce necessity of boundary checks
+    xDim= cld(mainArrDims[1],dataBdim[1])*dataBdim[1]
+    yDim = cld(mainArrDims[2],dataBdim[2])*dataBdim[2]
+    zDim = cld(mainArrDims[3],dataBdim[3])*dataBdim[3]
+    newDims = (xDim,yDim,zDim)
 return (
-    CuArray(falses(mainArrDims)),CuArray(falses(mainArrDims)),CuArray(falses(mainArrDims)),CuArray(falses(mainArrDims))
+    CuArray(falses(newDims)),CuArray(falses(newDims)),CuArray(falses(newDims)),CuArray(falses(newDims))
     )
 
 end

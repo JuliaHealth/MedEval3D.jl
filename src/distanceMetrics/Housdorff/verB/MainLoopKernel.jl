@@ -13,8 +13,20 @@ resShmemTotalLength, sourceShmemTotalLength - total (treating as 1 dimensional a
 macro clearBeforeNextDilatation( clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength, sourceShmemTotalLength)
     return esc(quote
     isMaskFull=true
-    @iterateLinearly clearIterResShmemLoop resShmemTotalLength  resShmem[i]=false
-    @iterateLinearly clearIterSourceShmemLoop sourceShmemTotalLength  sourceShmem[i]=false
+    # @ifXY 1 1  CUDA.@cuprint "rrrr $(resShmem[10,10,10]) \n" #lll $(length(resShmem)) \n"
+    #  for i in 1:resShmemTotalLength #resShmemTotalLength-1
+    #     resShmem[i]=false
+    #  end    
+ #   @iterateLinearly clearIterResShmemLoop resShmemTotalLength  resShmem[i]=false
+  #  @iterateLinearly clearIterSourceShmemLoop sourceShmemTotalLength  sourceShmem[i]=false
+    # @iterateLinearly clearIterResShmemLoop 34*20*34  resShmem[i]=false
+    # @iterateLinearly clearIterSourceShmemLoop 34*20*34  sourceShmem[i]=false
+for i in 1:34,j in 1:20, n in 1:34
+    resShmem[i,j,n]=false
+end
+for i in 1:32,j in 1:20, n in 1:32
+    resShmem[i,j,n]=false
+end
     @ifY 1 if(threadIdxX()<15) areToBeValidated[threadIdxX()]=false end 
     @ifY 2 if(threadIdxX()<7) isAnythingInPadding[threadIdxX()]=false end 
    
@@ -34,9 +46,11 @@ macro mainLoopKernelAllocations(dataBdim)
     #needed to manage cooperative groups functions
  grid_handle = this_grid()
  #storing intermidiate results +2 in order to get the one padding 
- resShmem =  @cuDynamicSharedMem(Bool,($dataBdim[1]+2,$dataBdim[2]+2,$dataBdim[3]+2)) # we need this additional 33th an 34th spots
+#  $resShmemExp
+ #  resShmem =  @cuDynamicSharedMem(Bool,($dataBdim[1]+2,$dataBdim[2]+2,$dataBdim[3]+2)) # we need this additional 33th an 34th spots
+ #resShmem =  @cuDynamicSharedMem(Bool,(($dataBdim[1]),($dataBdim[2]),($dataBdim[3]))) # we need this additional 33th an 34th spots
  #storing values loaded from analyzed array ...
- sourceShmem =  @cuDynamicSharedMem(Bool,($dataBdim[1],$dataBdim[2],$dataBdim[3]))
+# sourceShmem =  @cuDynamicSharedMem(Bool,($dataBdim[1],$dataBdim[2],$dataBdim[3]))
  #for storing sums for reductions
  shmemSum =  @cuStaticSharedMem(UInt32,(36,14)) # we need this additional spots
 #used to load from metadata information are ques to be validated 
@@ -71,7 +85,8 @@ alreadyCoveredInQueues =@cuStaticSharedMem(UInt32,(14))
  @ifXY 7 1 goldToBeDilatated[1]= 0
  @ifXY 8 1 segmToBeDilatated[1]= 0
  @ifXY 9 1 workCounterBiggerThan0[1]= 0
-    
+ sync_threads()
+
  @clearBeforeNextDilatation(clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength, sourceShmemTotalLength)
  sync_threads()
 end)#quote
@@ -211,67 +226,28 @@ main kernel managing
 """
 macro mainLoopKernel()
   return esc(quote
+  resShmem =  @cuStaticSharedMem(Bool,(34,20,34))
+  sourceShmem =  @cuStaticSharedMem(Bool,(32,20,32))
+
     @mainLoopKernelAllocations(dataBdim)
     MetadataAnalyzePass.@analyzeMetadataFirstPass()
-    @loadDataAtTheBegOfDilatationStep()
-    sync_grid(grid_handle)
-    #loadDataAtTheBegOfDilatationStep(true,iterationNumberShmem,iterationNumber,positionInMainWorkQueaue,workCounterInshmem,mainQuesCounterArr,isAnyBiggerThanZero,goldToBeDilatated,segmToBeDilatated, resArraysCounters  )
-    
-    sync_threads()
-    #we check first wheather next dilatation step should be done or not we also establish some shared memory variables to know wheather both passes should continue or just one
+     @loadDataAtTheBegOfDilatationStep()
+     sync_grid(grid_handle)   
+   #we check first wheather next dilatation step should be done or not we also establish some shared memory variables to know wheather both passes should continue or just one
     # checking weather we already finished so we need to check    
     # - is amount of results related to gold mask dilatations is equal to false positives or given percent of them
     # - is amount of results related to other  mask dilatations is equal to false negatives or given percent of them
     # - is amount of workQueue that we will want to analyze now is bigger than 0 
-    while((goldToBeDilatated[1] || segmToBeDilatated[1]) && workCounterBiggerThan0[1])
-        @mainLoop()
-    end#while we did not yet finished    
+    # while((goldToBeDilatated[1] || segmToBeDilatated[1]) && workCounterBiggerThan0[1])
+    #    @mainLoop()
+    # end#while we did not yet finished
+    #this will basically give the main result 
+    globalIterationNumb[1]=iterationNumberShmem[1]     
 end)#quote
 
 end
 
 
-# """
-# analyzing private part of work queue
-# """
-# macro privateWorkQueueAnalysis()
-#     return esc(quote
- 
-#     loadOwnedWorkQueueIntoShmem(mainWorkQueue,mainQuesCounter,toIterWorkQueueShmem,positionInMainWorkQueaue ,numberOfThreadBlocks,tailParts)
-#     #at this point if we have anything in the private part of the  work queue we will have it in toIterWorkQueueShmem, in case  we will find some 0 inside it means that queue is exhousted and we need to loo into tail
-#     @unroll for i in UInt16(1):32# most outer loop is responsible for z dimension
-#         if(toIterWorkQueueShmem[i,1]>0)
-#             #we need to check also wheather given dilatation step is already finished - for example it is possible that it do not make sense to dilatate gold mask but still we need dilate other
-#             if( (goldToBeDilatated[1]&&toIterWorkQueueShmem[i,4]==1) || (segmToBeDilatated[1]&&toIterWorkQueueShmem[i,4]==0)  )    
-#                 @innersingleDataBlockPass(toIterWorkQueueShmem[i,4]==1,toIterWorkQueueShmem[i,1],toIterWorkQueueShmem[i,2] ,toIterWorkQueueShmem[i,3] )
-#             end
-#             sync_threads()
-#         else    #at this point we got some 0 in the toIterWorkQueueShmem 
-#             @ifXY 1 1  isAnyBiggerThanZero[]=false
-#             sync_threads()
-#         end#if    
-#     end#for    
-# end)#quote
-# end    
-
-
-# """
-# analyzing tail part of work queue
-# """
-# macro analyzeTail()
-#     return esc(quote
-
-#     #below we access tail of working queue in a way that will be atomic
-#     @ifXY 1 1 toIterWorkQueueShmem[1]= mainWorkQueueArr[isOddPassShmem[]+1,currentTailPosition[1]]
-#     sync_threads()
-#     #we need to check also wheather given dilatation step is already finished - for example it is possible that it do not make sense to dilatate gold mask but still we need dilate other
-#     if( (goldToBeDilatated[1]&&toIterWorkQueueShmem[1,4]==1) || (segmToBeDilatated[1]&&toIterWorkQueueShmem[1,4]==0)  )    
-#         @innersingleDataBlockPass(toIterWorkQueueShmem[1,4]==1,toIterWorkQueueShmem[1,1],toIterWorkQueueShmem[1,2] ,toIterWorkQueueShmem[1,3] )
-#     end
-#     loadDataNeededForTailAnalysisToShmem(currentTailPosition,tailCounter )
-#     sync_threads()
-# end) #quote
-# end
 
 
 
@@ -325,8 +301,9 @@ function getSmallGPUForHousedorff()
     globalIterationNumber = CUDA.zeros(UInt32,1)
     globalCurrentFnCount= CUDA.zeros(UInt32,1)
     globalCurrentFpCount= CUDA.zeros(UInt32,1)
+    globalIterationNumb= CUDA.zeros(UInt32,1)
 
-return (globalFpResOffsetCounter,globalFnResOffsetCounter,workQueaueCounter,globalIterationNumber,globalCurrentFnCount,globalCurrentFpCount )
+return (globalFpResOffsetCounter,globalFnResOffsetCounter,workQueaueCounter,globalIterationNumber,globalCurrentFnCount,globalCurrentFpCount,globalIterationNumb )
 end    
 
 # """
@@ -342,16 +319,16 @@ end
 allocate after prepare bool kernel had finished execution
 return metaData,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,workQueaue,resList,resListIndicies,maxResListIndex
 """
-function getBigGPUForHousedorffAfterBoolKernel(metaData,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB)
+function getBigGPUForHousedorffAfterBoolKernel(metaData,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,dataBdim)
     ###we return only subset of boolean arrays that we are intrested in 
     workQueaue= WorkQueueUtils.allocateWorkQueue(fp[1],fn[1])
     resList,resListIndicies,maxResListIndex= allocateResultLists(fp[1],fn[1])
     ###we need to return subset of metadata that we are intrested in 
     return(metaData[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]   ]
-            ,reducedGoldA[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]]
-            ,reducedSegmA[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]]
-            ,reducedGoldB[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]]
-            ,reducedSegmB[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]]
+            ,reducedGoldA[minxRes[1]*dataBdim[1]:maxxRes[1]*dataBdim[1],minyRes[1]*dataBdim[2]:maxyRes[1]*dataBdim[2],minzRes[1]*dataBdim[3]:maxzRes[1]*dataBdim[3]]
+            ,reducedSegmA[minxRes[1]*dataBdim[1]:maxxRes[1]*dataBdim[1],minyRes[1]*dataBdim[2]:maxyRes[1]*dataBdim[2],minzRes[1]*dataBdim[3]:maxzRes[1]*dataBdim[3]]
+            ,reducedGoldB[minxRes[1]*dataBdim[1]:maxxRes[1]*dataBdim[1],minyRes[1]*dataBdim[2]:maxyRes[1]*dataBdim[2],minzRes[1]*dataBdim[3]:maxzRes[1]*dataBdim[3]]
+            ,reducedSegmB[minxRes[1]*dataBdim[1]:maxxRes[1]*dataBdim[1],minyRes[1]*dataBdim[2]:maxyRes[1]*dataBdim[2],minzRes[1]*dataBdim[3]:maxzRes[1]*dataBdim[3]]
             ,workQueaue
             ,resList,resListIndicies,maxResListIndex
     )
@@ -361,3 +338,47 @@ end
 
 
 end#MainLoopKernel
+
+
+
+# """
+# analyzing private part of work queue
+# """
+# macro privateWorkQueueAnalysis()
+#     return esc(quote
+ 
+#     loadOwnedWorkQueueIntoShmem(mainWorkQueue,mainQuesCounter,toIterWorkQueueShmem,positionInMainWorkQueaue ,numberOfThreadBlocks,tailParts)
+#     #at this point if we have anything in the private part of the  work queue we will have it in toIterWorkQueueShmem, in case  we will find some 0 inside it means that queue is exhousted and we need to loo into tail
+#     @unroll for i in UInt16(1):32# most outer loop is responsible for z dimension
+#         if(toIterWorkQueueShmem[i,1]>0)
+#             #we need to check also wheather given dilatation step is already finished - for example it is possible that it do not make sense to dilatate gold mask but still we need dilate other
+#             if( (goldToBeDilatated[1]&&toIterWorkQueueShmem[i,4]==1) || (segmToBeDilatated[1]&&toIterWorkQueueShmem[i,4]==0)  )    
+#                 @innersingleDataBlockPass(toIterWorkQueueShmem[i,4]==1,toIterWorkQueueShmem[i,1],toIterWorkQueueShmem[i,2] ,toIterWorkQueueShmem[i,3] )
+#             end
+#             sync_threads()
+#         else    #at this point we got some 0 in the toIterWorkQueueShmem 
+#             @ifXY 1 1  isAnyBiggerThanZero[]=false
+#             sync_threads()
+#         end#if    
+#     end#for    
+# end)#quote
+# end    
+
+
+# """
+# analyzing tail part of work queue
+# """
+# macro analyzeTail()
+#     return esc(quote
+
+#     #below we access tail of working queue in a way that will be atomic
+#     @ifXY 1 1 toIterWorkQueueShmem[1]= mainWorkQueueArr[isOddPassShmem[]+1,currentTailPosition[1]]
+#     sync_threads()
+#     #we need to check also wheather given dilatation step is already finished - for example it is possible that it do not make sense to dilatate gold mask but still we need dilate other
+#     if( (goldToBeDilatated[1]&&toIterWorkQueueShmem[1,4]==1) || (segmToBeDilatated[1]&&toIterWorkQueueShmem[1,4]==0)  )    
+#         @innersingleDataBlockPass(toIterWorkQueueShmem[1,4]==1,toIterWorkQueueShmem[1,1],toIterWorkQueueShmem[1,2] ,toIterWorkQueueShmem[1,3] )
+#     end
+#     loadDataNeededForTailAnalysisToShmem(currentTailPosition,tailCounter )
+#     sync_threads()
+# end) #quote
+# end

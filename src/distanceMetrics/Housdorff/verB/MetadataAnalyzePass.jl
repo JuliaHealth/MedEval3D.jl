@@ -98,25 +98,26 @@ macro loadCounters()
         # we need to supply linear coordinate for atomicallyAddToSpot
         @exOnWarp 15 begin 
             if(isInRange)
-            count = @accMeta(getBeginingOfFpFNcounts()+ 16)
-                if(count>0)     
-                    shmemSum[threadIdxX(),15]= atomicAdd(globalFpResOffsetCounter,  ceil(count*1.5)  )+1
-                else
-                    shmemSum[threadIdxX(),15]= 0
-                end    
+            # count = @accMeta(getBeginingOfFpFNcounts()+ 16)
+            #     if(count>0)     
+            #         shmemSum[threadIdxX(),15]= atomicAdd(globalFpResOffsetCounter,  ceil(count*1.5)  )+1
+            #     else
+            #         shmemSum[threadIdxX(),15]= 0
+            #     end    
             end
+        end
 
-        end
-        @exOnWarp 16 begin 
-            if(isInRange) 
-            count = @accMeta(getBeginingOfFpFNcounts()+ 17)
-                if(count>0)     
-                    shmemSum[threadIdxX(),16]= atomicAdd(globalFnResOffsetCounter,  ceil( count*1.5 )  )+1
-                else
-                    shmemSum[threadIdxX(),16]= 0
-                end    
-            end   
-        end
+
+        # @exOnWarp 16 begin 
+        #     if(isInRange) 
+        #     #count = @accMeta(getBeginingOfFpFNcounts()+ 17)
+        #         if(count>0)     
+        #             shmemSum[threadIdxX(),16]= atomicAdd(globalFnResOffsetCounter,  ceil( count*1.5 )  )+1
+        #         else
+        #             shmemSum[threadIdxX(),16]= 0
+        #         end    
+        #     end   
+        # end
             
         end)#quote
 end #loadCounters
@@ -140,52 +141,52 @@ end #loadCounters
              #as we need to perform basically the same work across all warps - instead on specializing threads in warp we will execute the same fynction across all warps
              # so warp will execute the same function just with varying data as it should be 
 
-            @loadCounters() 
+           @loadCounters() 
 
             sync_threads()
 
-            #  ######  we need to establish is block is active at the first pass block is active simply  when total count of fp and fn is greater than 0 
-            # #we are adding 1 to meta y z becouse those are 0 based ...           
+        #     #  ######  we need to establish is block is active at the first pass block is active simply  when total count of fp and fn is greater than 0 
+        #     # #we are adding 1 to meta y z becouse those are 0 based ...           
 
-            @ifY 1 if(shmemSum[threadIdxX(),15]>0 && isInRange) begin  
-                    appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 ) 
-                end   
-            end     
-            @ifY 2 if(shmemSum[threadIdxX(),16]>0 && isInRange) begin 
-                 appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 ) end  
-                end      
+        #     @ifY 1 if(shmemSum[threadIdxX(),15]>0 && isInRange) begin  
+        #             appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 ) 
+        #         end   
+        #     end     
+        #     @ifY 2 if(shmemSum[threadIdxX(),16]>0 && isInRange) begin 
+        #          appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 ) end  
+        #         end      
             
-            @exOnWarp 3 if((shmemSum[threadIdxX(),15]) >0 && isInRange) setBlockasCurrentlyActiveInSegm(metaData, xMeta+1,yMeta+1,zMeta+1)    end 
-            @exOnWarp 4 if((shmemSum[threadIdxX(),16]) >0 && isInRange) setBlockasCurrentlyActiveInGold(metaData, xMeta+1,yMeta+1,zMeta+1)     end 
+        #     @exOnWarp 3 if((shmemSum[threadIdxX(),15]) >0 && isInRange) setBlockasCurrentlyActiveInSegm(metaData, xMeta+1,yMeta+1,zMeta+1)    end 
+        #     @exOnWarp 4 if((shmemSum[threadIdxX(),16]) >0 && isInRange) setBlockasCurrentlyActiveInGold(metaData, xMeta+1,yMeta+1,zMeta+1)     end 
  
  
-            #####3set offsets
-             #now we will calculate and set the result queue offsets for each offset we need to synchronize warps in order to have unique offsets 
-             #we can not parallalize it more as we need to sequentially set offsets             
+        #     #####3set offsets
+        #      #now we will calculate and set the result queue offsets for each offset we need to synchronize warps in order to have unique offsets 
+        #      #we can not parallalize it more as we need to sequentially set offsets             
              
-            @exOnWarp 5 begin if((shmemSum[threadIdxX(),15]) >0 && isInRange) @unroll for i in 0:6
-                     #set fp
-                   value=floor(shmemSum[threadIdxX(),15])+1
-                   if(i>0)
-                    value+= ceil(shmemSum[threadIdxX(),((i-1)*2+1)]*1.45)
-                   end
-                   shmemSum[threadIdxX(),15]= value
-                   @setMeta(((getResOffsetsBeg()-1) +i*2+1) ,value)
-                     end#for
-                    end #if
-                end
+        #     @exOnWarp 5 begin if((shmemSum[threadIdxX(),15]) >0 && isInRange) @unroll for i in 0:6
+        #              #set fp
+        #            value=floor(shmemSum[threadIdxX(),15])+1
+        #            if(i>0)
+        #             value+= ceil(shmemSum[threadIdxX(),((i-1)*2+1)]*1.45)
+        #            end
+        #            shmemSum[threadIdxX(),15]= value
+        #            @setMeta(((getResOffsetsBeg()-1) +i*2+1) ,value)
+        #              end#for
+        #             end #if
+        #         end
  
-            @exOnWarp 6 begin if((shmemSum[threadIdxX(),16]) >0 && isInRange) @unroll for i in 0:6
-                 #set fn
-                 value=shmemSum[threadIdxX(),16]
-                 if(i>0)
-                    value+= ceil(shmemSum[threadIdxX(),((i-1)*2+2)]*1.45)+1 #multiply as we can have some entries potentially repeating
-                 end
-                 shmemSum[threadIdxX(),16]= value
-                 @setMeta(((getResOffsetsBeg()-1) +i*2+2) ,value)
-                end#for
-            end#if
-        end
+        #     @exOnWarp 6 begin if((shmemSum[threadIdxX(),16]) >0 && isInRange) @unroll for i in 0:6
+        #          #set fn
+        #          value=shmemSum[threadIdxX(),16]
+        #          if(i>0)
+        #             value+= ceil(shmemSum[threadIdxX(),((i-1)*2+2)]*1.45)+1 #multiply as we can have some entries potentially repeating
+        #          end
+        #          shmemSum[threadIdxX(),16]= value
+        #          @setMeta(((getResOffsetsBeg()-1) +i*2+2) ,value)
+        #         end#for
+        #     end#if
+        # end
  
  
          end)# outer loop expession  )
