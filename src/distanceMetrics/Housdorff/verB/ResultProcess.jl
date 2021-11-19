@@ -77,10 +77,15 @@ additionally if we want to create intresting visualization we can add informatio
   globalSum - global variable accessed atomically holding sum of iter numbs of results - so we will accumulate corrected values - to later return average 
   maxSingleThrIterNumb - maximum iteration number that should be analyzed using just a single lane; all points bigger than that will be analyzed used whole warps or maybe blocks
   """
-function applyCorrection(resList,resListIndicies,entriesPerBlock,totalLength,iterLoopResList,globalSum,maxSingleThrIterNumb,  )
+function applyCorrection(resList,resListIndicies,entriesPerBlock,totalLength,iterLoopResList,globalSum,maxSingleThrIterNumb, referenceArrs )
   locSum = UInt32(0) 
   shmemSum = @cuStaticSharedMem(UInt32, (33,1))  
   offsetIter= UInt8(1)
+  #indicates how coordinates should change relatively to the covered point from result list 
+  xChange= UInt8(0)
+  yChange= UInt8(0)
+  zChange= UInt8(0)
+
 @iterateLinearlyForResList(iterLoopResList,entriesPerBlock,totalLength,begin 
   if(resListIndicies[i]>0)# we do not want to analyze 0 entries or duplicated ones  
 
@@ -91,11 +96,40 @@ end )
 
 
 end
-"""
-using single thread 
-"""
-# function 
 
+### looking for the true entry in given array  we iteratively scan area  where the original point from which dilatation started and led to this result that we are currently analyzing
+
+"""
+using single thread we iteratively scan area  where the original point from which dilatation started and led to this result that we are currently analyzing
+referenceArrs= (reducedGoldB,reducedSegmB)
+                top 6 
+                bottom 5  
+                left 2
+                right 1 
+                anterior 3
+                posterior 4
+"""
+macro singleThreadScan(resList, i, referenceArrs )
+
+  return  esc(quote
+
+  offsetIter=resList[i,6] #storing iteration number
+  while offsetIter>0
+  #first we need to  modify x,y or z depending on the direction given in dir variable of result list 
+    @unroll for side in [-1,1]
+      referenceArrs[2-resList[i,4]][]
+    end#for side
+  
+  offsetIter-=1 
+  xChange= UInt8(0)
+  yChange= UInt8(0)
+  zChange= UInt8(0)
+      
+  end#while
+end)#quote
+end #singleThreadScan
+
+# function 
 
 
 
