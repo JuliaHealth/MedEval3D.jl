@@ -9,6 +9,28 @@ export getTpfpfnData
 using CUDA, Main.CUDAGpuUtils, Logging,StaticArrays
 using Main.MainOverlap, Main.RandIndex, Main.ProbabilisticMetrics, Main.VolumeMetric, Main.InformationTheorhetic
 
+"""
+as x,y,z positions are not important we can just treat the array as it would be linear
+loop will be divided into two parts in order to reduce number of if statements
+each thread block iterates over just one slice in order to enable also slice wise results    
+iterLoop - how many times block needs to loop through slice to cover all
+pixPerSlice - pixels per slice 
+"""
+macro iterateLinearlyForTPTF(iterLoop,pixPerSlice, ex)
+    return  esc(quote
+    i = UInt32(0)
+    @unroll for j in 0:($iterLoop-1)
+      i= threadIdxX()+(threadIdxY()-1)*blockDimX()+ j* blockDimX()*blockDimY()+ ((blockIdxX()-1) *$pixPerSlice)
+      $ex
+    end 
+      i= threadIdxX()+(threadIdxY()-1)*blockDimX()+ $iterLoop* blockDimX()*blockDimY()+ ((blockIdxX()-1) *$pixPerSlice)
+        if(i<=$pixPerSlice) 
+            $ex
+      end 
+  end)
+  
+  end
+  
 
 """
 prepares all needed data structures and run occupancy API to enable running occupancy API to get the optimal number of blocks and threads per block
@@ -19,18 +41,18 @@ conf - configuration struct telling which metrics exactly we want
 function prepareForconfusionTableMetrics(goldGPU    , segmGPU    ,numberToLooFor  ,conf)
     tp,tn,fp,fn= CUDA.zeros(UInt32,1),CUDA.zeros(UInt32,1),CUDA.zeros(UInt32,1),CUDA.zeros(UInt32,1)
     mainArrDims= size(goldGPU)
-    sliceMetricsTupl= CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3])
-                            ,CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3])
-                            ,CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3])
+    sliceMetricsTupl= (CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]) ,CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]) )
     metricsTuplGlobal=  (CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1)
 ,CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1)
 ,CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1) )#eleven entries
     totalNumbOfVoxels= (mainArrDims[1]*mainArrDims[2]*mainArrDims[3])
+    pixPerSlice = mainArrDims[1]*mainArrDims[2]
+
     args = (goldGPU#goldBoolGPU
         , segmGPU#segmBoolGPU
         ,sliceMetricsTupl
         ,tp,tn,fp,fn#tp,tn,fp,fn
-        ,arrDims,totalNumbOfVoxels,loopXdim,loopYdim,loopZdim,totalNumbOfVoxels
+        ,arrDims,totalNumbOfVoxels,iterLoop,pixPerSlice,totalNumbOfVoxels
         ,numberToLooFor#numberToLooFor
         ,metricsTuplGlobal
         ,conf)
@@ -39,9 +61,8 @@ function prepareForconfusionTableMetrics(goldGPU    , segmGPU    ,numberToLooFor
   
   threads,blocks = getThreadsAndBlocksNumbForKernel(get_shmem,kernel_InterClassCorr_means,argsMeans)
     #corrections for loop x,y,z variables
-    args[3] = UInt32(fld(mainArrDims[1], threads[1]))
-    args[4] = UInt32(fld(mainArrDims[2], threads[2])) 
-    args[5] = UInt32(fld(mainArrDims[3],blocks )) 
+    args[10] = UInt32(fld(pixPerSlice, threads[1]*threads[2]))
+ 
     return(args,threads,blocks )
 end
 
@@ -72,13 +93,13 @@ for i in  4:7
 end   
 
 for i in 1:11    
-    CUDA.fill!(0,args[15][i])
+    CUDA.fill!(0,args[14][i])
 end   
 
 #getMaxBlocksPerMultiproc(args, getBlockTpFpFn) -- evaluates to 3
 
 #get tp,fp,fna and slicewise results if required
-@cuda threads=threads blocks=blocks getBlockTpFpFn(args...) 
+@cuda threads=threads blocks=args[8][3] getBlockTpFpFn(args...) #args[8][3]  is number of slices ...
 
 return args
 end#getTpfpfnData
@@ -97,33 +118,30 @@ function getBlockTpFpFn(goldGPU#goldBoolGPU
         , segmGPU#segmBoolGPU
         ,sliceMetricsTupl
         ,tp,tn,fp,fn#tp,tn,fp,fn
-        ,arrDims,totalNumbOfVoxels,loopXdim,loopYdim,loopZdim,totalNumbOfVoxels
+        ,arrDims,totalNumbOfVoxels,iterLoop,pixPerSlice
         ,numberToLooFor#numberToLooFor
         ,metricsTuplGlobal
         ,conf)
     
-    grid_handle = this_grid()
     shmemSum = @cuStaticSharedMem(UInt32, (33,3))  
     locArr= zeros(MVector{3,UInt16})
-      @iter3dAdditionalzActs(arrDims,loopXdim,loopYdim,loopZdim,
+    iterateLinearlyForTPTF(iterLoop,pixPerSlice,
     #inner expression
     begin
         #updating variables needed to calculate means
-           boolGold = goldGPU[ind]==numberToLooFor  
-           boolSegm = segmGPU[ind]==numberToLooFor     
-             @inbounds locArr[ (boolGold & boolSegm + boolSegm +1) ]+=(boolGold | boolSegm)
-    end,
-    #after z expression - we get slice wise true counts from it 
-    begin         end ) 
+           boolGold = goldGPU[i]==numberToLooFor  
+           boolSegm = segmGPU[i]==numberToLooFor     
+           @inbounds locArr[ (boolGold & boolSegm + boolSegm +1) ]+=(boolGold | boolSegm)
+    end) 
 
     #tell what variables are to be reduced and by what operation
     @redWitAct(offsetIter,shmemSum,  locArr[1],+,     locArr[2],+,     locArr[3],+   )
     sync_threads()
     @sendAtomicHelperAndAdd(shmemSum, fn, fp,tp)
-    sync_grid(grid_handle)
-    if(blockIdxX==1)
-        getMetrics(tp[1],fp[1], fn[1],(totalNumbOfVoxels-(tp[1] +fn[1]+ fp[1] )) ,metricsTuplGlobal,conf,1 )
-    end
+    # sync_grid(grid_handle)
+    # if(blockIdxX==1)
+    #     getMetrics(tp[1],fp[1], fn[1],(totalNumbOfVoxels-(tp[1] +fn[1]+ fp[1] )) ,metricsTuplGlobal,conf,1 )
+    # end
     #   @ifXY 1 1  @inbounds @atomic tp[]+= shmemSum[1,3]
 #   @ifXY 1 2  @inbounds @atomic fp[]+= shmemSum[1,2]
 #   @ifXY 1 3  @inbounds @atomic fn[]+= shmemSum[1,1]
@@ -192,17 +210,17 @@ function getBlockTpFpFn(goldGPU#goldBoolGPU
    return  
    end
 
-# """
-# this will be invoked in order to get global metrics besed on tp,fp,fn calculated in previous kernel 
-# tp,tn,fp - true positive, true negative, false positive
-# totalNumbOfVoxels - number of voxels in all image
-# metricsTuplGlobal - tuple with array of length one for storing global metrics
-# conf - ConfigurtationStruct - marking in what metrics we are intrested in 
-# """
-# function getGlobalMetricsKernel(tp,fp, fn,totalNumbOfVoxels::Int64,metricsTuplGlobal,conf)
-#   getMetrics(tp[1],fp[1], fn[1],(totalNumbOfVoxels-(tp[1] +fn[1]+ fp[1] )) ,metricsTuplGlobal,conf,1 )
-#   return
-# end
+"""
+this will be invoked in order to get global metrics besed on tp,fp,fn calculated in previous kernel 
+tp,tn,fp - true positive, true negative, false positive
+totalNumbOfVoxels - number of voxels in all image
+metricsTuplGlobal - tuple with array of length one for storing global metrics
+conf - ConfigurtationStruct - marking in what metrics we are intrested in 
+"""
+function getGlobalMetricsKernel(tp,fp, fn,totalNumbOfVoxels::Int64,metricsTuplGlobal,conf)
+  getMetrics(tp[1],fp[1], fn[1],(totalNumbOfVoxels-(tp[1] +fn[1]+ fp[1] )) ,metricsTuplGlobal,conf,1 )
+  return
+end
 
 
 

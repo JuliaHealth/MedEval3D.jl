@@ -8,9 +8,29 @@ module ResultProcess
 """
 it will scan through result list - ignorea all that are zeroces in res indicies, add only the iteration numbers and in the end we will just dividy it by (fp+fn)
 """
-function getAverage()
+function getAverage(resList,resListIndicies  )
   
 end  
+"""
+iterate linearly result list 
+entriesPerBlock - amount of entries per block of threads 
+totalLength - total length of result list
+"""
+macro iterateLinearlyForTPTF(iterLoop,entriesPerBlock,totalLength, ex)
+  return  esc(quote
+  i = UInt32(0)
+  @unroll for j in 0:($iterLoop)
+    offset = ((blockIdxX()-1) *$entriesPerBlock)
+    i= threadIdxX()+(threadIdxY()-1)*blockDimX()+ j* blockDimX()*blockDimY()
+    if((i+offset)<=$totalLength && i<entriesPerBlock)
+      $ex
+    end
+  end 
+   end)
+
+end
+
+
 
 """
 We will iterate over result list take all entries that are non zeo in res  indicies list now in a while loop we will lok for the source voxel that was responsible for the  result
