@@ -7,28 +7,47 @@ module ResultProcess
 
 """
 it will scan through result list - ignorea all that are zeroces in res indicies, add only the iteration numbers and in the end we will just dividy it by (fp+fn)
+entriesPerBlock - amount of entries per block of threads 
+totalLength - total length of result list
+iterLoopResList - how many times given block need to iterate to aalyze all entries given to it 
+globalSum - global variable accessed atomically holding sum of iter numbs of results 
 """
-function getAverage(resList,resListIndicies  )
-  
-end  
+function getAverage(resList,resListIndicies,entriesPerBlock,totalLength,iterLoopResList ,globalSum )
+ locSum = UInt32(0) 
+ shmemSum = @cuStaticSharedMem(UInt32, (33,1))  
+ offsetIter= UInt8(1)
+
+  @iterateLinearlyForResList(iterLoopResList,entriesPerBlock,totalLength,begin 
+      if(resListIndicies[i]>0)# we do not want 0 entries or duplicated ones  
+        locSum+=resList[i,6]#adding iteration number
+      end  
+  end )
+    
+  #time for reduction 
+  @redWitAct(offsetIter,shmemSum, locSum,+   )
+  sync_threads()
+  @sendAtomicHelperAndAdd(shmemSum, globalSum)
+end #getAverage
+
+
 """
 iterate linearly result list 
 entriesPerBlock - amount of entries per block of threads 
 totalLength - total length of result list
 """
-macro iterateLinearlyForTPTF(iterLoop,entriesPerBlock,totalLength, ex)
+macro iterateLinearlyForResList(iterLoop,entriesPerBlock,totalLength, ex)
   return  esc(quote
   i = UInt32(0)
   @unroll for j in 0:($iterLoop)
     offset = ((blockIdxX()-1) *$entriesPerBlock)
     i= threadIdxX()+(threadIdxY()-1)*blockDimX()+ j* blockDimX()*blockDimY()
-    if((i+offset)<=$totalLength && i<entriesPerBlock)
+    if((i+offset)<=$totalLength && i<$entriesPerBlock)
+      i+=offset
       $ex
     end
   end 
    end)
-
-end
+  end
 
 
 
@@ -51,11 +70,31 @@ We can xperiment with getting corrections one by single line at the begining wit
 and then scan one more time whole warps  for scanning those points that were not yet resolved 
 
 additionally if we want to create intresting visualization we can add information about corrected distance to all points between source and target voxel..
-"""
-function applyCorrection()
+
+  entriesPerBlock - amount of entries per block of threads 
+  totalLength - total length of result list
+  iterLoopResList - how many times given block need to iterate to aalyze all entries given to it 
+  globalSum - global variable accessed atomically holding sum of iter numbs of results - so we will accumulate corrected values - to later return average 
+  maxSingleThrIterNumb - maximum iteration number that should be analyzed using just a single lane; all points bigger than that will be analyzed used whole warps or maybe blocks
+  """
+function applyCorrection(resList,resListIndicies,entriesPerBlock,totalLength,iterLoopResList,globalSum,maxSingleThrIterNumb,  )
+  locSum = UInt32(0) 
+  shmemSum = @cuStaticSharedMem(UInt32, (33,1))  
+  offsetIter= UInt8(1)
+@iterateLinearlyForResList(iterLoopResList,entriesPerBlock,totalLength,begin 
+  if(resListIndicies[i]>0)# we do not want to analyze 0 entries or duplicated ones  
+
+
+  end  
+end )
   
-  
+
+
 end
+"""
+using single thread 
+"""
+# function 
 
 
 
