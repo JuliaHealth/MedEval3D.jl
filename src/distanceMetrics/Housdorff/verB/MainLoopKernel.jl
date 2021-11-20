@@ -14,11 +14,11 @@ macro clearBeforeNextDilatation( clearIterResShmemLoop,clearIterSourceShmemLoop,
     return esc(quote
     isMaskFull=true
     # @ifXY 1 1  CUDA.@cuprint "rrrr $(resShmem[10,10,10]) \n" #lll $(length(resShmem)) \n"
-    #  for i in 1:resShmemTotalLength #resShmemTotalLength-1
+    #  for i in 1:length(resShmem) #resShmemTotalLength-1
     #     resShmem[i]=false
     #  end    
-    @iterateLinearly clearIterResShmemLoop resShmemTotalLength  resShmem[i]=false
-    @iterateLinearly clearIterSourceShmemLoop sourceShmemTotalLength  sourceShmem[i]=false
+    # @iterateLinearly clearIterResShmemLoop resShmemTotalLength  resShmem[i]=false
+    # @iterateLinearly clearIterSourceShmemLoop sourceShmemTotalLength  sourceShmem[i]=false
     # @iterateLinearly clearIterResShmemLoop 34*20*34  resShmem[i]=false
     # @iterateLinearly clearIterSourceShmemLoop 34*20*34  sourceShmem[i]=false
 
@@ -228,7 +228,7 @@ macro mainLoopKernel()
     
     @loadDataAtTheBegOfDilatationStep()
 
-    sync_grid(grid_handle)   
+    # sync_grid(grid_handle)   
    #we check first wheather next dilatation step should be done or not we also establish some shared memory variables to know wheather both passes should continue or just one
     # checking weather we already finished so we need to check    
     # - is amount of results related to gold mask dilatations is equal to false positives or given percent of them
@@ -238,7 +238,7 @@ macro mainLoopKernel()
     #    @mainLoop()
     # end#while we did not yet finished
     #this will basically give the main result 
-    #globalIterationNumb[1]=iterationNumberShmem[1]     
+    globalIterationNumb[1]=iterationNumberShmem[1]     
 end)#quote
 
 end
@@ -317,7 +317,7 @@ return metaData,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,workQueaue,r
 """
 function getBigGPUForHousedorffAfterBoolKernel(metaData,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,dataBdim)
     ###we return only subset of boolean arrays that we are intrested in 
-    println( "zzz fp[1] $(fp[1])  fn[1] $(fn[1]) \n")
+    # println( "zzz fp[1] $(fp[1])  fn[1] $(fn[1]) \n")
     workQueaue= WorkQueueUtils.allocateWorkQueue(fp[1],fn[1])
     resList,resListIndicies,maxResListIndex= allocateResultLists(fp[1],fn[1])
     ###we need to return subset of metadata that we are intrested in 

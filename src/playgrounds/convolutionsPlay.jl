@@ -48,11 +48,15 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl"
 using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
 using Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils,Main.ResultListUtils, Main.Housdorff
 
-
+using CUDA
 dataBdim= (32,24,32)
-function testKernelA(dataBdim)
-    MainLoopKernel.@mainLoopKernelAllocations(dataBdim)
-
+fp = CUDA.zeros(UInt16,1)
+sumInBits = (dataBdim[1]+2)+(dataBdim[2]+2)+(dataBdim[3]+2)+dataBdim[1]+dataBdim[2]+dataBdim[3]
+shmemSum = cld(sumInBits,8)#in bytes
+function testKernelA(dataBdim,fp)
+    resShmem =  @cuDynamicSharedMem(Bool,((dataBdim[1]+2),(dataBdim[2]+2),(dataBdim[3]+2))) 
+       sourceShmem =  @cuDynamicSharedMem(Bool,(dataBdim[1],dataBdim[2],dataBdim[3]))
+    #   
     for i in 1:(dataBdim[1]+2),j in 1:(dataBdim[2]+2), n in 1:(dataBdim[3]+2)
         resShmem[i,j,n]=false
     end
@@ -60,7 +64,34 @@ function testKernelA(dataBdim)
     for i in 1:(dataBdim[1]),j in 1:(dataBdim[2]), n in 1:(dataBdim[3])
         sourceShmem[i,j,n]=false
     end
-
+    fp[1]=1
 return
 end
-@cuda threads=(32,24) blocks=(2)  testKernelA(dataBdim)
+@cuda threads=(32,5) blocks=(2) shmem=shmemSum  testKernelA(dataBdim,fp)
+fp[1]
+
+
+
+
+
+using CUDA
+dataBdim= (32,24,32)
+fp = CUDA.zeros(UInt16,1)
+sumInBits = (dataBdim[1]+2)*(dataBdim[2]+2)*(dataBdim[3]+2)+dataBdim[1]*dataBdim[2]*dataBdim[3]
+shmemSum = cld(sumInBits,8)#in bytes
+function testKernelA(dataBdim,fp)
+    resShmem =  @cuStaticSharedMem(Bool,(34,26,34)) 
+    #sourceShmem =  @cuStaticSharedMem(Bool,(32,24,32))
+    #   
+    for i in 1:(dataBdim[1]+2),j in 1:(dataBdim[2]+2), n in 1:(dataBdim[3]+2)
+        resShmem[i,j,n]=false
+    end
+ 
+    # for i in 1:(dataBdim[1]),j in 1:(dataBdim[2]), n in 1:(dataBdim[3])
+    #     sourceShmem[i,j,n]=false
+    # end
+    fp[1]=1
+return
+end
+@cuda threads=(32,5) blocks=(2) shmem=shmemSum  testKernelA(dataBdim,fp)
+fp[1]

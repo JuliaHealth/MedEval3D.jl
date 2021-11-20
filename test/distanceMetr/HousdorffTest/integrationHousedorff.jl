@@ -28,5 +28,6 @@
     segmGPU= CuArray(mainArrCPU);
 
     CUDA.memory_status() 
-    Housdorff.getHousedorffDistance(goldGPU,segmGPU,boolKernelArgs,mainKernelArgs,threadsBoolKern,blocksBoolKern ,threadsMainKern,blocksMainKern,shmemSizeBool,shmemSizeMain)
-
+    globalIterationNumb= Housdorff.getHousedorffDistance(goldGPU,segmGPU,boolKernelArgs,mainKernelArgs,threadsBoolKern,blocksBoolKern ,threadsMainKern,blocksMainKern,shmemSizeBool,shmemSizeMain)
+    globalIterationNumb[1]
+    goldGPU;
