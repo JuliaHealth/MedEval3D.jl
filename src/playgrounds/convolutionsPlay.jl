@@ -38,4 +38,29 @@ function kernelFunct(goldBoolGPU::CuDeviceArray{Bool, 3, 1}, segmBoolGPU::CuDevi
 
 @cuda threads=(2, 2,2) blocks=(2,2,2)  kernelFunct(goldBoolGPU,segmBoolGPU,fn)
 
-fn
+
+
+
+
+using Revise, Parameters, Logging, Test
+using CUDA
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
+using Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils,Main.ResultListUtils, Main.Housdorff
+
+
+dataBdim= (32,24,32)
+function testKernelA(dataBdim)
+    MainLoopKernel.@mainLoopKernelAllocations(dataBdim)
+
+    for i in 1:(dataBdim[1]+2),j in 1:(dataBdim[2]+2), n in 1:(dataBdim[3]+2)
+        resShmem[i,j,n]=false
+    end
+ 
+    for i in 1:(dataBdim[1]),j in 1:(dataBdim[2]), n in 1:(dataBdim[3])
+        sourceShmem[i,j,n]=false
+    end
+
+return
+end
+@cuda threads=(32,24) blocks=(2)  testKernelA(dataBdim)

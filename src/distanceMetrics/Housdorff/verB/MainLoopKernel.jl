@@ -10,26 +10,22 @@ clearIterResShmemLoop - given we trat res shmem as one dimensional array with 32
 clearIterSourceShmemLoop - the same as above but for source shmem
 resShmemTotalLength, sourceShmemTotalLength - total (treating as 1 dimensional array) length of the  sourse or result shared memory
 """
-macro clearBeforeNextDilatation( clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength, sourceShmemTotalLength)
+macro clearBeforeNextDilatation( clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength, sourceShmemTotalLength,dataBdim)
     return esc(quote
     isMaskFull=true
     # @ifXY 1 1  CUDA.@cuprint "rrrr $(resShmem[10,10,10]) \n" #lll $(length(resShmem)) \n"
     #  for i in 1:resShmemTotalLength #resShmemTotalLength-1
     #     resShmem[i]=false
     #  end    
- #   @iterateLinearly clearIterResShmemLoop resShmemTotalLength  resShmem[i]=false
-  #  @iterateLinearly clearIterSourceShmemLoop sourceShmemTotalLength  sourceShmem[i]=false
+    @iterateLinearly clearIterResShmemLoop resShmemTotalLength  resShmem[i]=false
+    @iterateLinearly clearIterSourceShmemLoop sourceShmemTotalLength  sourceShmem[i]=false
     # @iterateLinearly clearIterResShmemLoop 34*20*34  resShmem[i]=false
     # @iterateLinearly clearIterSourceShmemLoop 34*20*34  sourceShmem[i]=false
-for i in 1:34,j in 1:20, n in 1:34
-    resShmem[i,j,n]=false
-end
-for i in 1:32,j in 1:20, n in 1:32
-    resShmem[i,j,n]=false
-end
+
     @ifY 1 if(threadIdxX()<15) areToBeValidated[threadIdxX()]=false end 
     @ifY 2 if(threadIdxX()<7) isAnythingInPadding[threadIdxX()]=false end 
    
+
 end)#quote
 end#clearBeforeNextDilatation
 
@@ -43,14 +39,12 @@ dataBdim - are dimensions of data block - each data block has just one row in th
 """
 macro mainLoopKernelAllocations(dataBdim)
     return esc(quote
-    #needed to manage cooperative groups functions
- grid_handle = this_grid()
- #storing intermidiate results +2 in order to get the one padding 
-#  $resShmemExp
- #  resShmem =  @cuDynamicSharedMem(Bool,($dataBdim[1]+2,$dataBdim[2]+2,$dataBdim[3]+2)) # we need this additional 33th an 34th spots
- #resShmem =  @cuDynamicSharedMem(Bool,(($dataBdim[1]),($dataBdim[2]),($dataBdim[3]))) # we need this additional 33th an 34th spots
+#needed to manage cooperative groups functions
+grid_handle = this_grid()
+#storing intermidiate results +2 in order to get the one padding 
+resShmem =  @cuDynamicSharedMem(Bool,(($dataBdim[1]+2),($dataBdim[2]+2),($dataBdim[3]+2))) # we need this additional 33th an 34th spots
  #storing values loaded from analyzed array ...
-# sourceShmem =  @cuDynamicSharedMem(Bool,($dataBdim[1],$dataBdim[2],$dataBdim[3]))
+sourceShmem =  @cuDynamicSharedMem(Bool,($dataBdim[1],$dataBdim[2],$dataBdim[3]))
  #for storing sums for reductions
  shmemSum =  @cuStaticSharedMem(UInt32,(36,14)) # we need this additional spots
 #used to load from metadata information are ques to be validated 
@@ -87,8 +81,6 @@ alreadyCoveredInQueues =@cuStaticSharedMem(UInt32,(14))
  @ifXY 9 1 workCounterBiggerThan0[1]= 0
  sync_threads()
 
- @clearBeforeNextDilatation(clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength, sourceShmemTotalLength)
- sync_threads()
 end)#quote
 end    
 
@@ -226,13 +218,17 @@ main kernel managing
 """
 macro mainLoopKernel()
   return esc(quote
-  resShmem =  @cuStaticSharedMem(Bool,(34,20,34))
-  sourceShmem =  @cuStaticSharedMem(Bool,(32,20,32))
+
 
     @mainLoopKernelAllocations(dataBdim)
+
+    @clearBeforeNextDilatation(clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength, sourceShmemTotalLength,dataBdim)    
+    
     MetadataAnalyzePass.@analyzeMetadataFirstPass()
-     @loadDataAtTheBegOfDilatationStep()
-     sync_grid(grid_handle)   
+    
+    @loadDataAtTheBegOfDilatationStep()
+
+    sync_grid(grid_handle)   
    #we check first wheather next dilatation step should be done or not we also establish some shared memory variables to know wheather both passes should continue or just one
     # checking weather we already finished so we need to check    
     # - is amount of results related to gold mask dilatations is equal to false positives or given percent of them
@@ -242,7 +238,7 @@ macro mainLoopKernel()
     #    @mainLoop()
     # end#while we did not yet finished
     #this will basically give the main result 
-    globalIterationNumb[1]=iterationNumberShmem[1]     
+    #globalIterationNumb[1]=iterationNumberShmem[1]     
 end)#quote
 
 end
@@ -259,7 +255,7 @@ macro prepareForNextDilation()
     #we update metadata and prepare work queue
     setMEtaDataOtherPasses()
     #we clear  and add negation to !isOddPassShmem becouse we want to set the previously updated counter to 0 
-    @clearBeforeNextDilatation( clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength, sourceShmemTotalLength)
+    @clearBeforeNextDilatation( clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength, sourceShmemTotalLength,dataBdim)
 
     @loadDataAtTheBegOfDilatationStep()
 end)#quote
@@ -321,6 +317,7 @@ return metaData,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,workQueaue,r
 """
 function getBigGPUForHousedorffAfterBoolKernel(metaData,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,dataBdim)
     ###we return only subset of boolean arrays that we are intrested in 
+    println( "zzz fp[1] $(fp[1])  fn[1] $(fn[1]) \n")
     workQueaue= WorkQueueUtils.allocateWorkQueue(fp[1],fn[1])
     resList,resListIndicies,maxResListIndex= allocateResultLists(fp[1],fn[1])
     ###we need to return subset of metadata that we are intrested in 

@@ -10,7 +10,7 @@ allocate memory for  work queues
         4)isGold
 """
 function allocateWorkQueue(fpTotal,fnTotal)
-    return CUDA.zeros(UInt8,4,Int64(ceil((fpTotal+fnTotal )*1.51)))
+    return CUDA.zeros(UInt8,4,Int64(ceil((fpTotal+fnTotal +1)*1.51)))
 end
 
 """
