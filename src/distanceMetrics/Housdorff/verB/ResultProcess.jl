@@ -80,11 +80,12 @@ additionally if we want to create intresting visualization we can add informatio
 function applyCorrection(resList,resListIndicies,entriesPerBlock,totalLength,iterLoopResList,globalSum,maxSingleThrIterNumb, referenceArrs )
   locSum = UInt32(0) 
   shmemSum = @cuStaticSharedMem(UInt32, (33,1))  
-  offsetIter= UInt8(1)
+  offsetIter= Int16(1)
+  locIterNumb=Int16(0)
   #indicates how coordinates should change relatively to the covered point from result list 
-  xChange= UInt8(0)
-  yChange= UInt8(0)
-  zChange= UInt8(0)
+  xChange= Int16(0)
+  yChange= Int16(0)
+  zChange= Int16(0)
 
 @iterateLinearlyForResList(iterLoopResList,entriesPerBlock,totalLength,begin 
   if(resListIndicies[i]>0)# we do not want to analyze 0 entries or duplicated ones  
@@ -113,24 +114,70 @@ macro singleThreadScan(resList, i, referenceArrs )
 
   return  esc(quote
 
-  offsetIter=resList[i,6] #storing iteration number
+  offsetIter=$resList[$i,6] #storing iteration number
+  locIterNumb=0 #will get incemented every time we move centrally in main axis 
   while offsetIter>0
-  #first we need to  modify x,y or z depending on the direction given in dir variable of result list 
-    @unroll for side in [-1,1]
-      referenceArrs[2-resList[i,4]][]
-    end#for side
-  
-  offsetIter-=1 
-  xChange= UInt8(0)
-  yChange= UInt8(0)
-  zChange= UInt8(0)
+    #first we need to  modify x,y or z depending on the direction given in dir variable of result list 
+    dir = $resList[$i,5]
+    xChange-= (dir==2)*offsetIter
+    xChange+= (dir==1)*offsetIter
+
+    yChange-= (dir==4)*offsetIter
+    yChange+= (dir==3)*offsetIter
+
+    zChange-= (dir==6)*offsetIter
+    zChange+= (dir==5)*offsetIter
+
+    #now we have established position over main axis - what is left is to scan by modifying orthogonal axes
+    
+    @unroll for orthoAxAmove in -locIterNumb:locIterNumb#so we need to iterate over one of the 
+      @unroll for orthoAxBmove in [-locIterNumb+ CUDA.abs(orthoAxAmove),locIterNumb-CUDA.abs(orthoAxAmove)]
+        #isXMain,isYMain - true if x or in second case y is main axis - we define main axis on the basis of dir variable
+        isXMain = (dir==2 || dir==1)
+        isYMain = (dir==3 || dir==4)
+
+        #(dir!=2 && dir!=1) so x axis is not main axis
+        xChange+= (!isXMain)*orthoAxAmove
+        #(dir==2 || dir==1)*orthoAxBmove - so if x is main axis - it means that y is not  and it will be axis A
+        yChange+=(!isXMain && !isYMain)*orthoAxBmove+ (isXMain)*orthoAxAmove
+        #zChange can never affect axis A  will affect axis B if it is not main axis - so when either x or y is main axis
+        zChange+=(!isXMain && !isYMain)*orthoAxBmove
+        
+        #here if we will find that there is true in this position we will assume  that those coordinates are coordinates of
+        if(referenceArrs[2-$resList[$i,4]][ $resList[$i,1]+xChange,$resList[$i,2]+yChange,$resList[$i,3]+zChange])
+            #now on the basis of new coordinates we need to calculate correction for non isometric voxels
+            corrected =getCorrectedDistance(yDimSize,zDimSize, $resList[$i,1]+xChange,$resList[$i,2]+yChange,$resList[$i,3]+zChange)
+            locSum+=corrected
+            $resList[$i,6]=corrected
+        end
+    
+        #resetting values
+    xChange= Int16(0)
+    yChange= Int16(0)
+    zChange= Int16(0)                                
+      end# 
+    end#orthoAxAmove
+    offsetIter-=1 
+    locIterNumb+=1
+
       
   end#while
 end)#quote
 end #singleThreadScan
 
-# function 
 
-
+"""
+function invoked in case image has non isometric voxels - this ussually is related to the 
+  fact that voxel is smaller in z dimension than in other dimensions 
+  IMPORTANT !!! the correction is not perfect as in dilatation step the lack of isometry is not taken into account source voxel may be diffrent than one we would find below, yet in most cases approximation should be good
+  
+  x dimension is generally set as a reference dimension and set to be 1 ; y dimension ussually is the same but in theory do not have to be
+  z dimension will be given to this function as units where 1 unit is x dimension of voxel in mm 
+    yDimSize,zDimSize - given in scale where 1 is x dimension of the voxel and presumed to be uniform in whole image
+    xDisp,yDisp,zDisp - displacement in x,y,z axis from the covered voxel to source voxel
+"""
+function getCorrectedDistance(yDimSize,zDimSize, xDisp,yDisp,zDisp)
+  return xDisp+ yDimSize*yDisp+ zDimSize*zDisp
+end
 
 end#ResultProcess
