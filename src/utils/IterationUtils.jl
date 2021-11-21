@@ -12,7 +12,7 @@ we need also to supply functions of iterating the 3 dimensional data but with ch
 module IterationUtils
 using CUDA,Logging
 export generalizedItermultiDim
-export @iterateLinearlyWithStart, @iterateLinearly,@exOnWarp,@exOnWarpIfBool, @iter3d, @iter3dAdditionalxyzActsAndZcheck, @iter3dAdditionalxyzActs, @iter3dAdditionalzActs,@iter3dWithVal
+export @iterateLinearlyMultipleBlocks,@iterateLinearlyWithStart, @iterateLinearly,@exOnWarp,@exOnWarpIfBool, @iter3d, @iter3dAdditionalxyzActsAndZcheck, @iter3dAdditionalxyzActs, @iter3dAdditionalzActs,@iter3dWithVal
 
 """
 arrDims- dimensions of main arrya
@@ -351,6 +351,36 @@ macro iterateLinearly(iterLoop,lengthh, ex)
 end)
 
 end
+
+
+
+"""
+as x,y,z positions are not important we can just treat the array as it would be linear
+loop will be divided into two parts in order to reduce number of if statements
+each thread block iterates over just one slice in order to enable also slice wise results    
+iterLoop - how many times block needs to loop through slice to cover all
+pixPerSlice - pixels per slice 
+"""
+macro iterateLinearlyMultipleBlocks(iterLoop,pixPerSlice,totalNumbOfVoxels, ex)
+    return  esc(quote
+    i = UInt32(0)
+    @unroll for j in 0:($iterLoop-1)
+        i= threadIdxX()+(threadIdxY()-1)*blockDimX()+ j* blockDimX()*blockDimY()+ ((blockIdxX()-1) *$pixPerSlice)
+            if(i<=$totalNumbOfVoxels)
+                $ex
+            end
+    end 
+      i= threadIdxX()+(threadIdxY()-1)*blockDimX()+ $iterLoop* blockDimX()*blockDimY()
+      if(i<=$pixPerSlice ) 
+        i= i+ ((blockIdxX()-1) *$pixPerSlice)
+        if(i<=$totalNumbOfVoxels)
+            $ex
+        end
+      end
+  end)
+  
+  end
+  
 
 """
 iterate over array that is treated as one dimensional with given length lengthh as argument

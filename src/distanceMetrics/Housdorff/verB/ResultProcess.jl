@@ -26,7 +26,7 @@ function getAverage(resList,resListIndicies,entriesPerBlock,totalLength,iterLoop
   #time for reduction 
   @redWitAct(offsetIter,shmemSum, locSum,+   )
   sync_threads()
-  @sendAtomicHelperAndAdd(shmemSum, globalSum)
+  @addAtomic(shmemSum, globalSum)
 end #getAverage
 
 

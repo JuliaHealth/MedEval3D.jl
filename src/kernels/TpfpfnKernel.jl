@@ -4,33 +4,11 @@ true negatives, false positives and negatives par image and per slice
 using synergism described by Taha et al. this will enable later fast calculations of many other metrics
 """
 module TpfpfnKernel
-export getTpfpfnData
+export getTpfpfnData,prepareForconfusionTableMetrics,@iterateLinearlyForTPTF
 
-using CUDA, Main.CUDAGpuUtils, Logging,StaticArrays
+using CUDA,Main.ReductionUtils, Main.CUDAGpuUtils ,Main.IterationUtils , Main.MemoryUtils,Main.CUDAAtomicUtils, StaticArrays
 using Main.MainOverlap, Main.RandIndex, Main.ProbabilisticMetrics, Main.VolumeMetric, Main.InformationTheorhetic
 
-"""
-as x,y,z positions are not important we can just treat the array as it would be linear
-loop will be divided into two parts in order to reduce number of if statements
-each thread block iterates over just one slice in order to enable also slice wise results    
-iterLoop - how many times block needs to loop through slice to cover all
-pixPerSlice - pixels per slice 
-"""
-macro iterateLinearlyForTPTF(iterLoop,pixPerSlice, ex)
-    return  esc(quote
-    i = UInt32(0)
-    @unroll for j in 0:($iterLoop-1)
-      i= threadIdxX()+(threadIdxY()-1)*blockDimX()+ j* blockDimX()*blockDimY()+ ((blockIdxX()-1) *$pixPerSlice)
-      $ex
-    end 
-      i= threadIdxX()+(threadIdxY()-1)*blockDimX()+ $iterLoop* blockDimX()*blockDimY()+ ((blockIdxX()-1) *$pixPerSlice)
-        if(i<=$pixPerSlice) 
-            $ex
-      end 
-  end)
-  
-  end
-  
 
 """
 prepares all needed data structures and run occupancy API to enable running occupancy API to get the optimal number of blocks and threads per block
@@ -38,32 +16,36 @@ goldGPU , segmGPU - example of arrays of gold standard and algorithm output they
 numberToLooFor - number we will look for in the arrays
 conf - configuration struct telling which metrics exactly we want
 """
-function prepareForconfusionTableMetrics(goldGPU    , segmGPU    ,numberToLooFor  ,conf)
+function prepareForconfusionTableMetrics(goldGPU, segmGPU    ,numberToLooFor  ,conf)
     tp,tn,fp,fn= CUDA.zeros(UInt32,1),CUDA.zeros(UInt32,1),CUDA.zeros(UInt32,1),CUDA.zeros(UInt32,1)
     mainArrDims= size(goldGPU)
-    sliceMetricsTupl= (CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]) ,CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]) )
-    metricsTuplGlobal=  (CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1)
-,CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1)
-,CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1) )#eleven entries
+    # sliceMetricsTupl= (CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]) ,CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]) )
+ metricsTuplGlobal= zeros(Float64,11) #  (CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1)
+# ,CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1)
+# ,CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1) )#eleven entries
     totalNumbOfVoxels= (mainArrDims[1]*mainArrDims[2]*mainArrDims[3])
     pixPerSlice = mainArrDims[1]*mainArrDims[2]
-
-    args = (goldGPU#goldBoolGPU
-        , segmGPU#segmBoolGPU
-        ,sliceMetricsTupl
-        ,tp,tn,fp,fn#tp,tn,fp,fn
-        ,arrDims,totalNumbOfVoxels,iterLoop,pixPerSlice,totalNumbOfVoxels
-        ,numberToLooFor#numberToLooFor
-        ,metricsTuplGlobal
-        ,conf)
+    iterLoop=5
+    args = (#sliceMetricsTupl,
+    tp,tn,fp,fn#tp,tn,fp,fn
+    ,mainArrDims,totalNumbOfVoxels,iterLoop,pixPerSlice
+    ,numberToLooFor#numberToLooFor
+   # ,metricsTuplGlobal
+    ,conf)
     
-      get_shmem() = 4*33  #the same for both kernels
+      get_shmem(threads) = 4*33  #the same for both kernels
   
-  threads,blocks = getThreadsAndBlocksNumbForKernel(get_shmem,kernel_InterClassCorr_means,argsMeans)
+  threads,blocks = getThreadsAndBlocksNumbForKernel(get_shmem,getBlockTpFpFn,(goldGPU, segmGPU,args...))
     #corrections for loop x,y,z variables
-    args[10] = UInt32(fld(pixPerSlice, threads[1]*threads[2]))
- 
-    return(args,threads,blocks )
+    pixPerSlice= cld(totalNumbOfVoxels,blocks)
+    iterLoop = UInt32(fld(pixPerSlice, threads[1]*threads[2]))
+    args = (#sliceMetricsTupl,
+    tp,tn,fp,fn#tp,tn,fp,fn
+    ,mainArrDims,totalNumbOfVoxels,iterLoop,pixPerSlice
+    ,numberToLooFor#numberToLooFor
+    # ,metricsTuplGlobal
+    ,conf)
+    return(args,threads,blocks,metricsTuplGlobal )
 end
 
 """
@@ -81,26 +63,27 @@ conf- adapted ConfigurtationStruct - used to pass information what metrics shoul
 """
 function getTpfpfnData!(goldGPU
     , segmGPU
-    ,args,threads,blocks) where T
-args[1]= goldGPU
-args[2]= segmGPU  
+    ,args,threads,blocks,metricsTuplGlobal) where T
+
 #resetting to 0     
-for i in 1:11    
-    CUDA.fill!(0,args[3][i])
-end   
-for i in  4:7   
-    CUDA.fill!(0,args[i])
+# for i in 1:11    
+#     CUDA.fill!(args[1][i],0)
+# end   
+for i in  1:4   
+    CUDA.fill!(args[i],0)
 end   
 
-for i in 1:11    
-    CUDA.fill!(0,args[14][i])
+for i in 1:length(metricsTuplGlobal)    
+    metricsTuplGlobal[i]=0
+    #CUDA.fill!(args[11][i],0)
 end   
 
 #getMaxBlocksPerMultiproc(args, getBlockTpFpFn) -- evaluates to 3
 
 #get tp,fp,fna and slicewise results if required
-@cuda threads=threads blocks=args[8][3] getBlockTpFpFn(args...) #args[8][3]  is number of slices ...
-
+# @cuda threads=threads blocks=args[6][3] getBlockTpFpFn(goldGPU, segmGPU,args...) #args[8][3]  is number of slices ...
+@cuda threads=threads blocks=blocks getBlockTpFpFn(goldGPU, segmGPU,args...) #args[8][3]  is number of slices ...
+getMetricsCPU(args[1][1],args[3][1], args[4][1],(args[6]-(args[1][1] +args[3][1]+ args[4][1] )) ,metricsTuplGlobal,args[10],1 )
 return args
 end#getTpfpfnData
 
@@ -116,18 +99,19 @@ conf- adapted ConfigurtationStruct - used to pass information what metrics shoul
 """
 function getBlockTpFpFn(goldGPU#goldBoolGPU
         , segmGPU#segmBoolGPU
-        ,sliceMetricsTupl
+        #,sliceMetricsTupl
         ,tp,tn,fp,fn#tp,tn,fp,fn
         ,arrDims,totalNumbOfVoxels,iterLoop,pixPerSlice
         ,numberToLooFor#numberToLooFor
-        ,metricsTuplGlobal
+        #,metricsTuplGlobal
         ,conf)
     
     shmemSum = @cuStaticSharedMem(UInt32, (33,3))  
     locArr= zeros(MVector{3,UInt16})
-    iterateLinearlyForTPTF(iterLoop,pixPerSlice,
+    @iterateLinearlyMultipleBlocks(iterLoop,pixPerSlice,totalNumbOfVoxels,
     #inner expression
     begin
+        # CUDA.@cuprint "i $(i)  val $(goldGPU[i])"
         #updating variables needed to calculate means
            boolGold = goldGPU[i]==numberToLooFor  
            boolSegm = segmGPU[i]==numberToLooFor     
@@ -137,7 +121,7 @@ function getBlockTpFpFn(goldGPU#goldBoolGPU
     #tell what variables are to be reduced and by what operation
     @redWitAct(offsetIter,shmemSum,  locArr[1],+,     locArr[2],+,     locArr[3],+   )
     sync_threads()
-    @sendAtomicHelperAndAdd(shmemSum, fn, fp,tp)
+    @addAtomic(shmemSum, fn, fp,tp)
     # sync_grid(grid_handle)
     # if(blockIdxX==1)
     #     getMetrics(tp[1],fp[1], fn[1],(totalNumbOfVoxels-(tp[1] +fn[1]+ fp[1] )) ,metricsTuplGlobal,conf,1 )
@@ -253,7 +237,17 @@ function getMetrics(tp,fp, fn,tn,sliceMetricsTupl,conf,positionToUpdate   )
 
 end
 
-
+function getMetricsCPU(tp,fp, fn,tn,sliceMetricsTupl,conf,positionToUpdate   )
+    if (conf.dice ) @inbounds sliceMetricsTupl[4]=   MainOverlap.dice(tp,fp, fn) end 
+   if (conf.jaccard ) @inbounds sliceMetricsTupl[5]= MainOverlap.jaccard(tp,fp, fn) end 
+    if (conf.gce ) @inbounds sliceMetricsTupl[6]= MainOverlap.gce(tn,tp,fp, fn) end 
+     if (conf.randInd ) @inbounds sliceMetricsTupl[7]=  RandIndex.calculateAdjustedRandIndex(tn,tp,fp, fn) end 
+     if (conf.kc ) @inbounds sliceMetricsTupl[8]=  ProbabilisticMetrics.calculateCohenCappa(tn,tp,fp, fn  ) end 
+    if (conf.vol ) @inbounds sliceMetricsTupl[9]= VolumeMetric.getVolumMetric(tp,fp, fn ) end 
+   if (conf.mi ) @inbounds sliceMetricsTupl[10]=   InformationTheorhetic.mutualInformationMetr(tn,tp,fp, fn) end 
+    if (conf.vi ) @inbounds sliceMetricsTupl[11]=  InformationTheorhetic.variationOfInformation(tn,tp,fp, fn) end 
+    
+    end
 
 
 
