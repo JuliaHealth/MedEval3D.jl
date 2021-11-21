@@ -80,20 +80,25 @@ function calculateInterclassCorr(flatGold
 
 pixelNumberPerSlice= mainArrayDims[1]*mainArrayDims[2]
 loopNumb= cld(pixelNumberPerSlice,1024)
+blocks = 20 
+threads = (32,20)
+totalNumbOfVoxels= mainArrayDims[1]*mainArrayDims[2]*mainArrayDims[3]
 
+pixPerSlice= cld(totalNumbOfVoxels,blocks)
+iterLoop = UInt32(fld(pixPerSlice, threads[1]*threads[2]))
 #first we need to calculate means
-@cuda threads=(32,32) blocks=mainArrayDims[3]  kernel_InterClassCorr_means(flatGold,flatSegm
+@cuda threads=threads blocks=blocks  kernel_InterClassCorr_means(flatGold,flatSegm
   ,loopNumb  ,sumOfGold,sumOfSegm ,meanOfGoldPerSlice
-  ,meanOfSegmPerSlice ,pixelNumberPerSlice,numberToLooFor )
+  ,meanOfSegmPerSlice ,pixelNumberPerSlice,numberToLooFor,iterLoop,pixPerSlice,totalNumbOfVoxels )
 
   numberOfVoxels = mainArrayDims[1]*mainArrayDims[2]*mainArrayDims[3]
   grandMean= ( (sumOfGold[1]/numberOfVoxels) + (sumOfSegm[1]/numberOfVoxels ))/2
 
 
-@cuda threads=(32,32) blocks=mainArrayDims[3]  kernel_InterClassCorr(flatGold  ,flatSegm
+@cuda threads=threads blocks=blocks  kernel_InterClassCorr(flatGold  ,flatSegm
      ,loopNumb,pixelNumberPerSlice
      ,meanOfGoldPerSlice  ,meanOfSegmPerSlice
-     ,sswTotal ,ssbTotal  ,iccPerSlice     ,grandMean,numberToLooFor  )
+     ,sswTotal ,ssbTotal  ,iccPerSlice     ,grandMean,numberToLooFor ,iterLoop,pixPerSlice,totalNumbOfVoxels )
 
      ssw = sswTotal[1]/numberOfVoxels;
      ssb = ssbTotal[1]/(numberOfVoxels-1) * 2;
@@ -122,7 +127,7 @@ function kernel_InterClassCorr_means(flatGold
                                 ,meanOfGoldPerSlice
                                 ,meanOfSegmPerSlice
                                 ,pixelNumberPerSlice
-                                ,numberToLooFor )
+                                ,numberToLooFor,iterLoop,pixPerSlice,totalNumbOfVoxels )
     #offset for lloking for values in source arrays 
     offset = (pixelNumberPerSlice*(blockIdx().x-1))
    #for storing results from warp reductions
@@ -136,13 +141,10 @@ function kernel_InterClassCorr_means(flatGold
         sync_threads()
 
         #first we add 1 for each spot we have true - so we will get sum  - and from sum we can get mean
-        @unroll for k in 0:loopNumb
-            if(threadIdxX()+(threadIdxY()-1)*32+k*1024 <=pixelNumberPerSlice)
-            ind =offset+ threadIdxX()+(threadIdxY()-1)*32+k*1024
-            locValA += flatGold[ind]==numberToLooFor  
-            locValB += flatSegm[ind]==numberToLooFor
-            end#if 
-        end#for
+        @iterateLinearlyMultipleBlocks(iterLoop,pixPerSlice,totalNumbOfVoxels,begin
+            locValA += flatGold[i]==numberToLooFor  
+            locValB += flatSegm[i]==numberToLooFor
+        end)#for
         
 
             #now we will have sum of all entries in given slice that comply to our predicate
@@ -192,7 +194,7 @@ function kernel_InterClassCorr(flatGold
      ,ssbTotal
      ,iccPerSlice
      ,grandMean
-     ,numberToLooFor)
+     ,numberToLooFor,iterLoop,pixPerSlice,totalNumbOfVoxels)
   
     #offset for lloking for values in source arrays 
     offset = (pixelNumberPerSlice*(blockIdx().x-1))
@@ -203,14 +205,11 @@ function kernel_InterClassCorr(flatGold
     ssw::Float32 = Float32(0.0)
     ssb::Float32 = Float32(0.0)
 
-    @unroll for k in UInt16(0):loopNumb
-        if(threadIdxX()+(threadIdxY()-1)*32+k*1024 <=pixelNumberPerSlice)
-        ind =offset+ threadIdxX()+(threadIdxY()-1)*32+k*1024   
-        m =  ((flatGold[ind]==numberToLooFor) +(flatSegm[ind]==numberToLooFor))/2  
-        ssw += (((flatGold[ind]==numberToLooFor)- m)^2) +(((flatSegm[ind]==numberToLooFor)- m )^2) 
+    @iterateLinearlyMultipleBlocks(iterLoop,pixPerSlice,totalNumbOfVoxels,begin
+        m =  ((flatGold[i]==numberToLooFor) +(flatSegm[i]==numberToLooFor))/2  
+        ssw += (((flatGold[i]==numberToLooFor)- m)^2) +(((flatSegm[i]==numberToLooFor)- m )^2) 
         ssb += ((m - grandMean[1])^2)
-        end#if 
-    end#for
+    end)#for
     #now we accumulated ssw and ssb - we need to reduce it
     offsetIter = UInt8(1)
     while(offsetIter <32) 
