@@ -79,29 +79,31 @@ function calculateInterclassCorr(flatGold
                                 ,numberToLooFor)::Float64
 
 pixelNumberPerSlice= mainArrayDims[1]*mainArrayDims[2]
-loopNumb= cld(pixelNumberPerSlice,1024)
 blocks = 20 
 threads = (32,20)
 totalNumbOfVoxels= mainArrayDims[1]*mainArrayDims[2]*mainArrayDims[3]
-
+grandMean=1.1
 pixPerSlice= cld(totalNumbOfVoxels,blocks)
+pixelNumberPerSlice= cld(totalNumbOfVoxels,blocks)
 iterLoop = UInt32(fld(pixPerSlice, threads[1]*threads[2]))
 #first we need to calculate means
 @cuda threads=threads blocks=blocks  kernel_InterClassCorr_means(flatGold,flatSegm
-  ,loopNumb  ,sumOfGold,sumOfSegm ,meanOfGoldPerSlice
-  ,meanOfSegmPerSlice ,pixelNumberPerSlice,numberToLooFor,iterLoop,pixPerSlice,totalNumbOfVoxels )
+  ,sumOfGold,sumOfSegm
+  ,sswTotal
+  ,ssbTotal
+  ,iterLoop,pixPerSlice,totalNumbOfVoxels
+  ,numberToLooFor,grandMean )
 
-  numberOfVoxels = mainArrayDims[1]*mainArrayDims[2]*mainArrayDims[3]
-  grandMean= ( (sumOfGold[1]/numberOfVoxels) + (sumOfSegm[1]/numberOfVoxels ))/2
+  grandMean= ( (sumOfGold[1]/totalNumbOfVoxels) + (sumOfSegm[1]/totalNumbOfVoxels ))/2
 
 
-@cuda threads=threads blocks=blocks  kernel_InterClassCorr(flatGold  ,flatSegm
-     ,loopNumb,pixelNumberPerSlice
-     ,meanOfGoldPerSlice  ,meanOfSegmPerSlice
-     ,sswTotal ,ssbTotal  ,iccPerSlice     ,grandMean,numberToLooFor ,iterLoop,pixPerSlice,totalNumbOfVoxels )
-
-     ssw = sswTotal[1]/numberOfVoxels;
-     ssb = ssbTotal[1]/(numberOfVoxels-1) * 2;
+@cuda threads=threads blocks=blocks  kernel_InterClassCorr(flatGold  ,flatSegm,sumOfGold,sumOfSegm
+,sswTotal
+,ssbTotal
+,iterLoop,pixPerSlice,totalNumbOfVoxels
+,numberToLooFor,grandMean )
+     ssw = sswTotal[1]/totalNumbOfVoxels;
+     ssb = ssbTotal[1]/(totalNumbOfVoxels-1) * 2;
     
   return (ssb - ssw)/(ssb + ssw);
   
@@ -119,18 +121,13 @@ sliceEdgeLength - length of edge of the slice we need to square this number to g
 amountOfWarps - how many warps we can stick in the block
 """
 
-function kernel_InterClassCorr_means(flatGold
-                               ,flatSegm
-                                ,loopNumb::Int64
-                                ,sumOfGold
-                                ,sumOfSegm
-                                ,meanOfGoldPerSlice
-                                ,meanOfSegmPerSlice
-                                ,pixelNumberPerSlice
-                                ,numberToLooFor,iterLoop,pixPerSlice,totalNumbOfVoxels )
+function kernel_InterClassCorr_means(flatGold  ,flatSegm,sumOfGold,sumOfSegm
+       ,sswTotal
+       ,ssbTotal
+       ,iterLoop,pixPerSlice,totalNumbOfVoxels
+       ,numberToLooFor ,grandMean)
    grid_handle = this_grid()
-    #offset for lloking for values in source arrays 
-    offset = (pixelNumberPerSlice*(blockIdx().x-1))
+
    #for storing results from warp reductions
    shmemSum = @cuStaticSharedMem(Float32, (33,2))   #thread local values that are meant to store some results - like means ... 
    offsetIter = UInt8(1)
@@ -154,25 +151,20 @@ end
 
 
 function kernel_InterClassCorr(flatGold
-    ,flatSegm
-     ,loopNumb::Int64
-     ,pixelNumberPerSlice::Int64
-     ,meanOfGoldPerSlice
-     ,meanOfSegmPerSlice
-     ,sswTotal
-     ,ssbTotal
-     ,iccPerSlice
-     ,grandMean
-     ,numberToLooFor,iterLoop,pixPerSlice,totalNumbOfVoxels)
+    ,flatSegm,
+    sumOfGold,sumOfSegm
+       ,sswTotal
+       ,ssbTotal
+       ,iterLoop,pixPerSlice,totalNumbOfVoxels
+       ,numberToLooFor,grandMean )
   
-    #offset for lloking for values in source arrays 
-    offset = (pixelNumberPerSlice*(blockIdx().x-1))
     #for storing results from warp reductions
     shmemSum = @cuStaticSharedMem(Float32, (33,2))   #thread local values that are meant to store some results - like means ... 
-    @ifY 1 shmemSum[threadIdxX(),1]=0 ;   @ifY 2 shmemSum[threadIdxX(),2]=0 ;@ifY 3 shmemSum[threadIdxX(),2]=0
+    @ifY 1 shmemSum[threadIdxX(),1]=0 ;   
+    @ifY 2 shmemSum[threadIdxX(),2]=0 ;
     sync_threads()
-    locValA::Float32 = Float32(0.0)
-    locValB::Float32 = Float32(0.0)
+    locValA = Float32(0.0)
+    locValB = Float32(0.0)
 
     @iterateLinearlyMultipleBlocks(iterLoop,pixPerSlice,totalNumbOfVoxels,begin
         m =  ((flatGold[i]==numberToLooFor) +(flatSegm[i]==numberToLooFor))/2  
@@ -181,7 +173,7 @@ function kernel_InterClassCorr(flatGold
     end)#for
     #now we accumulated ssw and locValB - we need to reduce it
     offsetIter = UInt8(1)
-         @redWitAct(offsetIter,shmemSum,  locValA,+,     locValB,+  )
+    @redWitAct(offsetIter,shmemSum,  locValA,+,     locValB,+  )
    sync_threads()
     @addAtomic(shmemSum, sswTotal,ssbTotal)
     return nothing
