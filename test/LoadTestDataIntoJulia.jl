@@ -132,16 +132,7 @@ numberToLooFor= UInt8(1)
 # arrAlgoB =  vec(CUDA.ones(UInt8,sizz));
 maxNumberOfBlocks = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT)*1
 mainArrayDims= size(arrGold)
-globalICC= InterClassCorrKernel.calculateInterclassCorr(arrGold,arrAlgo
-                                                    ,mainArrayDims
-                                                    ,sumOfGold
-                                                    ,sumOfSegm
-                                                    ,meanOfGoldPerSlice
-                                                    ,meanOfSegmPerSlice
-                                                    ,sswTotal
-                                                    ,ssbTotal
-                                                    ,iccPerSlice
-                                                    ,numberToLooFor)
+globalICC= InterClassCorrKernel.calculateInterclassCorr(arrGold,arrAlgo,numberToLooFor)
 @test isapprox(globalICC,0.6381813122385622; atol = 0.1)
 
 argsMain, threadsMain,  blocksMain,threadsMean,blocksMean,argsMean, totalNumbOfVoxels=InterClassCorrKernel.prepareInterClassCorrKernel(arrGold ,arrAlgo,numberToLooFor)

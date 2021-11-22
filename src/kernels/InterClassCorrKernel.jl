@@ -68,15 +68,14 @@ calculates slicewise and global interclass correlation metric
 """
 function calculateInterclassCorr(flatGold
                                 ,flatSegm
-                                ,mainArrayDims
-                                ,sumOfGold
-                                ,sumOfSegm
-                                ,meanOfGoldPerSlice
-                                ,meanOfSegmPerSlice
-                                ,sswTotal
-                                ,ssbTotal
-                                ,iccPerSlice
                                 ,numberToLooFor)::Float64
+
+  mainArrayDims= size(flatGold)
+  sumOfGold= CUDA.zeros(1);
+  sumOfSegm= CUDA.zeros(1);
+  sswTotal= CUDA.zeros(1);
+  ssbTotal= CUDA.zeros(1);
+
 
 pixelNumberPerSlice= mainArrayDims[1]*mainArrayDims[2]
 blocks = 20 
@@ -86,22 +85,34 @@ grandMean=1.1
 pixPerSlice= cld(totalNumbOfVoxels,blocks)
 pixelNumberPerSlice= cld(totalNumbOfVoxels,blocks)
 iterLoop = UInt32(fld(pixPerSlice, threads[1]*threads[2]))
+
 #first we need to calculate means
-@cuda threads=threads blocks=blocks  kernel_InterClassCorr_means(flatGold,flatSegm
-  ,sumOfGold,sumOfSegm
+args = (sumOfGold,sumOfSegm
+,sswTotal
+,ssbTotal
+,iterLoop,pixPerSlice,totalNumbOfVoxels
+,numberToLooFor,grandMean )
+
+get_shmem(threads) = 4*33  #the same for both kernels
+threads,blocks =getThreadsAndBlocksNumbForKernel(get_shmem,kernel_InterClassCorr,(flatGold,flatSegm,args...))
+
+pixelNumberPerSlice= cld(totalNumbOfVoxels,blocks)
+iterLoop = UInt32(fld(pixPerSlice, threads[1]*threads[2]))
+
+
+
+
+
+@cuda threads=threads blocks=blocks  kernel_InterClassCorr_means(flatGold,flatSegm,args...)
+
+  grandMean= ( (sumOfGold[1]/totalNumbOfVoxels) + (sumOfSegm[1]/totalNumbOfVoxels ))/2
+  args = (sumOfGold,sumOfSegm
   ,sswTotal
   ,ssbTotal
   ,iterLoop,pixPerSlice,totalNumbOfVoxels
   ,numberToLooFor,grandMean )
 
-  grandMean= ( (sumOfGold[1]/totalNumbOfVoxels) + (sumOfSegm[1]/totalNumbOfVoxels ))/2
-
-
-@cuda threads=threads blocks=blocks  kernel_InterClassCorr(flatGold  ,flatSegm,sumOfGold,sumOfSegm
-,sswTotal
-,ssbTotal
-,iterLoop,pixPerSlice,totalNumbOfVoxels
-,numberToLooFor,grandMean )
+@cuda threads=threads blocks=blocks  kernel_InterClassCorr(flatGold  ,flatSegm,args... )
      ssw = sswTotal[1]/totalNumbOfVoxels;
      ssb = ssbTotal[1]/(totalNumbOfVoxels-1) * 2;
     
