@@ -166,6 +166,81 @@ end)#quote
 end #singleThreadScan
 
 
+
+
+"""
+using single warp we iteratively scan area  where the original point from which dilatation started and led to this result that we are currently analyzing
+referenceArrs= (reducedGoldB,reducedSegmB)
+                top 6 
+                bottom 5  
+                left 2
+                right 1 
+                anterior 3
+                posterior 4
+"""
+macro singleWarpScan(resList, i, referenceArrs , is)
+
+  return  esc(quote
+  #this will enable simple way of parallelization as steps will be just executing only those that modulus is compatible with thread id ...
+  
+  operationIndex = UInt16(0)
+
+  offsetIter=$resList[$i,6] #storing iteration number
+  locIterNumb=0 #will get incemented every time we move centrally in main axis 
+  while offsetIter>0
+    #first we need to  modify x,y or z depending on the direction given in dir variable of result list 
+    dir = $resList[$i,5]
+    xChange-= (dir==2)*offsetIter
+    xChange+= (dir==1)*offsetIter
+
+    yChange-= (dir==4)*offsetIter
+    yChange+= (dir==3)*offsetIter
+
+    zChange-= (dir==6)*offsetIter
+    zChange+= (dir==5)*offsetIter
+
+    #now we have established position over main axis - what is left is to scan by modifying orthogonal axes
+    
+    @unroll for orthoAxAmove in -locIterNumb:locIterNumb#so we need to iterate over one of the 
+      @unroll for orthoAxBmove in [-locIterNumb+ CUDA.abs(orthoAxAmove),locIterNumb-CUDA.abs(orthoAxAmove)]
+        #isXMain,isYMain - true if x or in second case y is main axis - we define main axis on the basis of dir variable
+        isXMain = (dir==2 || dir==1)
+        isYMain = (dir==3 || dir==4)
+
+        #(dir!=2 && dir!=1) so x axis is not main axis
+        xChange+= (!isXMain)*orthoAxAmove
+        #(dir==2 || dir==1)*orthoAxBmove - so if x is main axis - it means that y is not  and it will be axis A
+        yChange+=(!isXMain && !isYMain)*orthoAxBmove+ (isXMain)*orthoAxAmove
+        #zChange can never affect axis A  will affect axis B if it is not main axis - so when either x or y is main axis
+        zChange+=(!isXMain && !isYMain)*orthoAxBmove
+        
+        #here if we will find that there is true in this position we will assume  that those coordinates are coordinates of
+        if(referenceArrs[2-$resList[$i,4]][ $resList[$i,1]+xChange,$resList[$i,2]+yChange,$resList[$i,3]+zChange])
+            #now on the basis of new coordinates we need to calculate correction for non isometric voxels
+            corrected =getCorrectedDistance(yDimSize,zDimSize, $resList[$i,1]+xChange,$resList[$i,2]+yChange,$resList[$i,3]+zChange)
+            locSum+=corrected
+            $resList[$i,6]=corrected
+        end
+    
+        #resetting values
+    xChange= Int16(0)
+    yChange= Int16(0)
+    zChange= Int16(0)                                
+      end# 
+    end#orthoAxAmove
+    offsetIter-=1 
+    locIterNumb+=1
+
+      
+  end#while
+end)#quote
+end #singleThreadScan
+
+
+
+
+
+
 """
 function invoked in case image has non isometric voxels - this ussually is related to the 
   fact that voxel is smaller in z dimension than in other dimensions 
