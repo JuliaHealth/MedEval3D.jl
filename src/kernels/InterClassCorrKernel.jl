@@ -81,7 +81,7 @@ pixelNumberPerSlice= mainArrayDims[1]*mainArrayDims[2]
 blocks = 20 
 threads = (32,20)
 totalNumbOfVoxels= mainArrayDims[1]*mainArrayDims[2]*mainArrayDims[3]
-grandMean=1.1
+grandMean=CUDA.ones(1)
 pixPerSlice= cld(totalNumbOfVoxels,blocks)
 pixelNumberPerSlice= cld(totalNumbOfVoxels,blocks)
 iterLoop = UInt32(fld(pixPerSlice, threads[1]*threads[2]))
@@ -105,7 +105,7 @@ iterLoop = UInt32(fld(pixPerSlice, threads[1]*threads[2]))
 
 @cuda threads=threads blocks=blocks  kernel_InterClassCorr_means(flatGold,flatSegm,args...)
 
-  grandMean= ( (sumOfGold[1]/totalNumbOfVoxels) + (sumOfSegm[1]/totalNumbOfVoxels ))/2
+  grandMean[1]= ( (sumOfGold[1]/totalNumbOfVoxels) + (sumOfSegm[1]/totalNumbOfVoxels ))/2
   args = (sumOfGold,sumOfSegm
   ,sswTotal
   ,ssbTotal
