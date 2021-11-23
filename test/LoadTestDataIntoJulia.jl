@@ -6,7 +6,7 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl"
 using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils, Main.BasicStructs
 using Shuffle,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
 using Main.MainOverlap, Main.RandIndex , Main.ProbabilisticMetrics , Main.VolumeMetric ,Main.InformationTheorhetic
-using Main.CUDAAtomicUtils, Main.TpfpfnKernel, Main.InterClassCorrKernel
+using Main.CUDAAtomicUtils, Main.TpfpfnKernel, Main.InterClassCorrKernel,Main.MeansMahalinobis
 
 
 using Conda
@@ -117,31 +117,16 @@ metricsTuplGlobal
 
 
 ################# icc
-sumOfGold= CuArray([0]);
-sumOfSegm= CuArray([0]);
-
-sswTotal= CUDA.zeros(1);
-ssbTotal= CUDA.zeros(1);
-
-meanOfGoldPerSlice= CUDA.zeros(1);
-meanOfSegmPerSlice= CUDA.zeros(1);
-
-iccPerSlice = CuArray(zeros(Float32,sizz[3]));
-numberToLooFor= UInt8(1)
-# arrGoldB = vec(CUDA.ones(UInt8,sizz));
-# arrAlgoB =  vec(CUDA.ones(UInt8,sizz));
-maxNumberOfBlocks = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT)*1
-mainArrayDims= size(arrGold)
-# globalICC= InterClassCorrKernel.calculateInterclassCorr(arrGold,arrAlgo,numberToLooFor)
-# @test isapprox(globalICC,0.6381813122385622; atol = 0.1)
-
 argsMain, threads,blocks, totalNumbOfVoxels=InterClassCorrKernel.prepareInterClassCorrKernel(arrGold ,arrAlgo,numberToLooFor)
 globalICC= InterClassCorrKernel.calculateInterclassCorr(arrGold,arrAlgo,threads,blocks,argsMain)
 @test isapprox(globalICC,0.6381813122385622; atol = 0.1)
 
 
 # ################ Mahalinobis 
-
+using Main.MeansMahalinobis
+args,threads ,blocks= MeansMahalinobis.prepareMahalinobisKernel(arrGold,arrAlgo,numberToLooFor)
+mahalanobisResGlob=  MeansMahalinobis.calculateMalahlinobisDistance(arrGold,arrAlgo,args,threads ,blocks)
+@test isapprox(mahalanobisResGlob,0.08;atol = 0.1 )
 # goldS3d= CuArray(goldS);
 # segmS3d= CuArray(segmAlgo);
 # #we will fill it after we work with launch configuration

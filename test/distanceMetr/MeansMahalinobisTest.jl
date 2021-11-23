@@ -70,11 +70,13 @@ args = (goldBoolGPU,segmBoolGPU,numberToLooFor
 ,(maxX, maxY,maxZ)
 ,totalXGold,totalYGold,totalZGold,totalCountGold
 ,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,countPerZGold
-, countPerZSegm,covariancesSliceWiseGold, covariancesSliceWiseSegm,
+, countPerZSegm,
+# ,covariancesSliceWiseGold, covariancesSliceWiseSegm,
 varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
     ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
-    ,mahalanobisResGlobal, mahalanobisResSliceWise)
-
+    ,mahalanobisResGlobal
+    # , mahalanobisResSliceWise
+    )
 
     # calculate the amount of dynamic shared memory for a 2D block size
     get_shmem(threads) = (sizeof(UInt32)*3*4)
@@ -122,10 +124,13 @@ args = (goldBoolGPU,segmBoolGPU,numberToLooFor
 ,(maxX, maxY,maxZ)
 ,totalXGold,totalYGold,totalZGold,totalCountGold
 ,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,countPerZGold
-, countPerZSegm,covariancesSliceWiseGold, covariancesSliceWiseSegm,
+, countPerZSegm,
+# ,covariancesSliceWiseGold, covariancesSliceWiseSegm,
 varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
     ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
-    ,mahalanobisResGlobal, mahalanobisResSliceWise)
+    ,mahalanobisResGlobal
+    # , mahalanobisResSliceWise
+    )
 
     
     @cuda cooperative=true threads=threads blocks=blocks MeansMahalinobis.meansMahalinobisKernel(args...)

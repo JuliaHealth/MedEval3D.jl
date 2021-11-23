@@ -17,7 +17,7 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\Probabilistic\\ProbabilisticM
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\InformationTheorhetic\\InformationTheorhetic.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\volume\\VolumeMetric.jl")
 
-#includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\verB\\HFUtils.jl")
 
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
