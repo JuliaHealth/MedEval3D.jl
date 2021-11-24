@@ -17,7 +17,9 @@ macro localAllocations()
     shmemSum = @cuStaticSharedMem(Float32,(32,2))
     locFps= UInt32(0)
     locFns= UInt32(0)
-    offsetIter= UInt16(0)
+    offsetIter= UInt8(0)
+    #storing data about block in a forrmat where each Int32 number is representing a part of data block with constant x and y and varia ble z position
+    shmemblockData = @cuStaticSharedMem(Float32,(32,2))
 
 
     ######## needed for establishing min and max values of blocks that are intresting us 
@@ -127,6 +129,7 @@ invoked after all of the data was scanned so after we will do atomics between bl
 """
 macro  finalGlobalSet()
     esc(quote
+        offsetIter=1
         @redWitAct(offsetIter,shmemSum,  locFns,+,     locFps,+   )
         @addAtomic(shmemSum,fn,fp)
         # if(maxxRes[1]>1)
@@ -209,21 +212,25 @@ macro getBoolCubeKernel()
                                         if((boolGold  ⊻ boolSegm))
                                             @uploadLocalfpFNCounters()
                                             # CUDA.@cuprint "xMeta $(xMeta+1)  yMeta $(yMeta+1) zMeta $(zMeta+1) linIdexMeta $(linIdexMeta) \n"
-
+                                            #offsetIter is used here as local storage of 
+                                            @setBitTo1(offsetIter,z)
                                             locFps+=boolSegm
                                             locFns+=boolGold
                                             anyPositive= true #- we just mark that there was some fp or fn in this block 
                                         end# if (boolGold  ⊻ boolSegm)
-                                    #passing data to new arrays needed for running final algorithm
-                                    reducedGoldA[x,y,z]=boolGold    
-                                    reducedSegmA[x,y,z]=boolSegm    
-                                    reducedGoldB[x,y,z]=boolGold    
-                                    reducedSegmB[x,y,z]=boolSegm 
+                                    #now 
+                        
+
+#                                     reducedGoldB[x,y,z]=boolGold    
+#                                     reducedSegmB[x,y,z]=boolSegm 
                                 end#if boolGold  || boolSegm
                             end)#ex                
                 # #now we are just after we iterated over a single data block  we need to we save data about border data blocks 
                 anyPositive = sync_threads_or(anyPositive)
- 
+    
+                #passing data to new arrays needed for running final algorithm
+               reducedGoldA[x,y,zMeta]=boolGold    
+               reducedSegmA[x,y,zMeta]=boolSegm    
                 # if(anyPositive)
                 #     CUDA.@cuprint "xMeta+1 $(xMeta+1) anyPositive $(anyPositive) \n"
                 # end
