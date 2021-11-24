@@ -92,8 +92,9 @@ function get_shmemMainKernel(dataBdim)
 return resShmem+sourceShmem+shmemSum+areToBeValidated+isAnythingInPadding+alreadyCoveredInQueues+someBools
 end
 
-function get_shmemBoolKernel(threads)
+function get_shmemBoolKernel(dataBdim)
     shmemSum= cld(32*32*2,8)
+    shmemblockData= sizeof(Int32)*dataBdim[1]*dataBdim[2]
     minMaxes = 6
     localQuesValues = cld(32*14,8)
 return shmemSum+minMaxes+localQuesValues
@@ -137,16 +138,21 @@ function preparehousedorfKernel(goldGPU,segmGPU,robustnessPercent,numberToLooFor
     shmemSumLengthMaxDiv4= fld((36*14),4)*4 # subject to futre changes
     mainKernelArgs= (dilatationArrs,referenceArrs, mainArrDims,dataBdim,metaDataDims,metaData,iterThrougWarNumb,robustnessPercent,shmemSumLengthMaxDiv4,globalFpResOffsetCounter,globalFnResOffsetCounter,workQueaueCounter,globalIterationNumber,globalCurrentFnCount,globalCurrentFpCount,globalIterationNumb,workQueaue,resList,resListIndicies,maxResListIndex,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength, fn,fp)
     
-    ## now we need to make use of occupancy API to get optimal number of threads and blocks fo each kernel
-    threadsBoolKern,blocksBoolKern = getThreadsAndBlocksNumbForKernel(get_shmemBoolKernel,boolKernelLoad,(goldGPU,segmGPU,boolKernelArgs...))
-    
+   
     function get_shmemMainKernelLoc(threads)
         dataBdim = (threads[1],threads[2],32)
         get_shmemMainKernel(dataBdim)
     end
+    
 
     threadsMainKern,blocksMainKern = getThreadsAndBlocksNumbForKernel(get_shmemMainKernel,mainKernelLoad,mainKernelArgs)
-
+    function get_shmemBoolKernelLoc(threads)
+        dataBdim = (threadsMainKern[1],threadsMainKern[2],32)
+        get_shmemBoolKernel(dataBdim)
+    end
+     ## now we need to make use of occupancy API to get optimal number of threads and blocks fo each kernel
+    threadsBoolKern,blocksBoolKern = getThreadsAndBlocksNumbForKernel(get_shmemBoolKernelLoc,boolKernelLoad,(goldGPU,segmGPU,boolKernelArgs...))
+    
 #now we get defoult values of data b dim  set on the basis of the threadsMainHKernel; and generally recalculating loops constants 
     dataBdim = (threadsMainKern[1],threadsMainKern[2],32)
     metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
