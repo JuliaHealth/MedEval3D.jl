@@ -315,17 +315,18 @@ end
 allocate after prepare bool kernel had finished execution
 return metaData,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,workQueaue,resList,resListIndicies,maxResListIndex
 """
-function getBigGPUForHousedorffAfterBoolKernel(metaData,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,dataBdim)
+function getBigGPUForHousedorffAfterBoolKernel(metaData,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp,reducedGoldA,reducedSegmA,dataBdim)
     ###we return only subset of boolean arrays that we are intrested in 
     # println( "zzz fp[1] $(fp[1])  fn[1] $(fn[1]) \n")
     workQueaue= WorkQueueUtils.allocateWorkQueue(fp[1],fn[1])
     resList,resListIndicies,maxResListIndex= allocateResultLists(fp[1],fn[1])
     ###we need to return subset of metadata that we are intrested in 
+    goldArr= reducedGoldA[minxRes[1]*dataBdim[1]:maxxRes[1]*dataBdim[1],minyRes[1]*dataBdim[2]:maxyRes[1]*dataBdim[2],minzRes[1]:maxzRes[1]]
+    segmArr = reducedSegmA[minxRes[1]*dataBdim[1]:maxxRes[1]*dataBdim[1],minyRes[1]*dataBdim[2]:maxyRes[1]*dataBdim[2],minzRes[1]:maxzRes[1]]
+
     return(metaData[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]   ]
-            ,reducedGoldA[minxRes[1]*dataBdim[1]:maxxRes[1]*dataBdim[1],minyRes[1]*dataBdim[2]:maxyRes[1]*dataBdim[2],minzRes[1]*dataBdim[3]:maxzRes[1]*dataBdim[3]]
-            ,reducedSegmA[minxRes[1]*dataBdim[1]:maxxRes[1]*dataBdim[1],minyRes[1]*dataBdim[2]:maxyRes[1]*dataBdim[2],minzRes[1]*dataBdim[3]:maxzRes[1]*dataBdim[3]]
-            ,reducedGoldB[minxRes[1]*dataBdim[1]:maxxRes[1]*dataBdim[1],minyRes[1]*dataBdim[2]:maxyRes[1]*dataBdim[2],minzRes[1]*dataBdim[3]:maxzRes[1]*dataBdim[3]]
-            ,reducedSegmB[minxRes[1]*dataBdim[1]:maxxRes[1]*dataBdim[1],minyRes[1]*dataBdim[2]:maxyRes[1]*dataBdim[2],minzRes[1]*dataBdim[3]:maxzRes[1]*dataBdim[3]]
+            ,goldArr  ,segmArr
+            ,copy(goldArr) ,copy(segmArr)
             ,workQueaue
             ,resList,resListIndicies,maxResListIndex
     )
