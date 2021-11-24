@@ -22,7 +22,12 @@ macro setBitTo(numb,pos,val)
     end)
   
 end#setBitTo1
-setBitTo
 
+"""
 
+"""
+function isBit1AtPos(numb,pos)::Bool
+
+end#isBit1AtPos
+    
 end#BitWiseUtils
