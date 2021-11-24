@@ -92,7 +92,7 @@ end
 
 function get_shmemBoolKernel(dataBdim)
     shmemSum= cld(32*32*2,8)
-    shmemblockData= sizeof(Int32)*dataBdim[1]*dataBdim[2]
+    shmemblockData= sizeof(Int32)*dataBdim[1]*dataBdim[2]*2
     minMaxes = 6
     localQuesValues = cld(32*14,8)
 return shmemSum+minMaxes+localQuesValues
