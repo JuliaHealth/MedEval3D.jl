@@ -19,7 +19,7 @@ macro localAllocations()
     locFns= UInt32(0)
     offsetIter= UInt8(0)
     #storing data about block in a forrmat where each Int32 number is representing a part of data block with constant x and y and varia ble z position
-    shmemblockData = @cuStaticSharedMem(Float32,(32,2))
+    shmemblockData = @cuDynamicSharedMem(Int32,(dataBdim[1], dataBdim[2],2))
 
 
     ######## needed for establishing min and max values of blocks that are intresting us 
@@ -213,7 +213,7 @@ macro getBoolCubeKernel()
                                             @uploadLocalfpFNCounters()
                                             # CUDA.@cuprint "xMeta $(xMeta+1)  yMeta $(yMeta+1) zMeta $(zMeta+1) linIdexMeta $(linIdexMeta) \n"
                                             #offsetIter is used here as local storage of 
-                                            @setBitTo1(offsetIter,z)
+                                            @setBitTo1(shmemblockData[xpos,ypos],zpos)
                                             locFps+=boolSegm
                                             locFns+=boolGold
                                             anyPositive= true #- we just mark that there was some fp or fn in this block 
@@ -227,7 +227,9 @@ macro getBoolCubeKernel()
                             end)#ex                
                 # #now we are just after we iterated over a single data block  we need to we save data about border data blocks 
                 anyPositive = sync_threads_or(anyPositive)
-    
+                
+                # now we need to iterate over shmemblockData which is 2 dimensional
+                
                 #passing data to new arrays needed for running final algorithm
                reducedGoldA[x,y,zMeta]=boolGold    
                reducedSegmA[x,y,zMeta]=boolSegm    
@@ -295,10 +297,26 @@ function getLargeForBoolKernel(mainArrDims,dataBdim)
     zDim = cld(mainArrDims[3],dataBdim[3])*dataBdim[3]
     newDims = (xDim,yDim,zDim)
 return (
-    CuArray(falses(newDims)),CuArray(falses(newDims)),CuArray(falses(newDims)),CuArray(falses(newDims))
+    CuArray(falses(newDims)),CuArray(falses(newDims))
     )
 
 end
+
+"""
+iterating over shmemblockData
+"""
+macro planeIter(loopXinPlane,loopYinPlane,maxXdim, maxYdim,ex)
+    mainExp = generalizedItermultiDim(
+    arrDims=:()
+    ,loopXdim=loopX
+    ,loopYdim=loopY
+    ,yCheck = :(y <=$maxYdim)
+    ,xCheck = :(x <=$maxXdim )
+    ,is3d = false
+    , ex = ex)
+      return esc(:( $mainExp))
+end
+
 
 end#module
 
