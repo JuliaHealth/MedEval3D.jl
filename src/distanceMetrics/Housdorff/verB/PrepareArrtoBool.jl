@@ -19,9 +19,10 @@ macro localAllocations()
     locFns= UInt32(0)
     offsetIter= UInt8(0)
     #storing data about block in a forrmat where each Int32 number is representing a part of data block with constant x and y and varia ble z position
-    shmemblockData = @cuDynamicSharedMem(Int32,(dataBdim[1], dataBdim[2],2))
+    shmemblockDataGold = @cuDynamicSharedMem(Int32,(dataBdim[1], dataBdim[2],2))
+    shmemblockDataSegm = @cuDynamicSharedMem(Int32,(dataBdim[1], dataBdim[2],2))
 
-
+   
     ######## needed for establishing min and max values of blocks that are intresting us 
      minX =@cuStaticSharedMem(Float32, 1)
      maxX= @cuStaticSharedMem(Float32, 1)
@@ -203,17 +204,17 @@ macro getBoolCubeKernel()
                          ,begin 
                                 boolGold=goldGPU[x,y,z]==numberToLooFor
                                 boolSegm=segmGPU[x,y,z]==numberToLooFor    
-     
+                                #we set all bits so we do not need to reset 
+                                @setBitTo(shmemblockDataGold[xpos,ypos],zpos,boolGold)
+                                @setBitTo(shmemblockDataSegm[xpos,ypos],zpos,boolSegm)       
                                 #we need to also collect data about how many fp and fn we have in main part and borders
                                 #important in case of corners we will first analyze z and y dims and z dim on last resort only !
 
                                 #in case some is positive we can go futher with looking for max,min in dims and add to the new reduced boolean arrays waht we are intrested in  
-                                if(boolGold  || boolSegm)
+                                if(boolGold  || boolSegm)  
                                         if((boolGold  ⊻ boolSegm))
                                             @uploadLocalfpFNCounters()
-                                            # CUDA.@cuprint "xMeta $(xMeta+1)  yMeta $(yMeta+1) zMeta $(zMeta+1) linIdexMeta $(linIdexMeta) \n"
-                                            #offsetIter is used here as local storage of 
-                                            @setBitTo1(shmemblockData[xpos,ypos],zpos)
+                                            # CUDA.@cuprint "xMeta $(xMeta+1)  yMeta $(yMeta+1) zMeta $(zMeta+1) linIdexMeta $(linIdexMeta) \n"                            
                                             locFps+=boolSegm
                                             locFns+=boolGold
                                             anyPositive= true #- we just mark that there was some fp or fn in this block 
@@ -229,9 +230,12 @@ macro getBoolCubeKernel()
                 anyPositive = sync_threads_or(anyPositive)
                 
                 # now we need to iterate over shmemblockData which is 2 dimensional
-                
+                @planeIter(loopXinPlane,loopYinPlane,dataBdim[1], dataBdim[2],begin 
+                    reducedGoldA[xMeta* $dataBlockDims[1]+x ,yMeta* $dataBlockDims[1]+y,zMeta]=shmemblockDataGold[x,y]
+                    reducedGoldA[xMeta* $dataBlockDims[1]+x ,yMeta* $dataBlockDims[1]+y,zMeta]=shmemblockDataSegm[x,y]
+                end)
                 #passing data to new arrays needed for running final algorithm
-               reducedGoldA[x,y,zMeta]=boolGold    
+               reducedGoldA[x*,y,zMeta]=boolGold    
                reducedSegmA[x,y,zMeta]=boolSegm    
                 # if(anyPositive)
                 #     CUDA.@cuprint "xMeta+1 $(xMeta+1) anyPositive $(anyPositive) \n"
