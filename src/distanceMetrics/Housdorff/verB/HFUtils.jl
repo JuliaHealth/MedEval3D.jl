@@ -7,7 +7,7 @@ using Main.CUDAGpuUtils, Logging,StaticArrays
  using CUDA, Main.BasicStructs, Logging
  using Main.CUDAGpuUtils ,Main.IterationUtils
 export    clearLocArr,clearMainShmem,clearPadding,getIndexOfQueue
-export @iter3dOuter,@iterDataBlock , calculateLoopsIter
+export @iter3dOuter,@iterDataBlock , calculateLoopsIter, @iterDataBlockZdeepest
 
 
 
@@ -34,13 +34,15 @@ function calculateLoopsIter(dataBdim,threadsXdim,threadsYdim,metaDataDims,blocks
     loopdataDimMainZ =dataBdim[2]
     inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(dataBdim[1] ,threadsXdim),fld(dataBdim[2] ,threadsYdim),dataBdim[3]    );
     metaDataLength= metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
+    
     loopMeta= fld(metaDataLength,blocks )
+    println("loopMeta $(loopMeta)  ")
     loopWarpMeta= cld(metaDataLength,(blocks*threadsXdim ))
     resShmemTotalLength=(dataBdim[1]+2)*(dataBdim[2]+2)*(dataBdim[3]+2)
     sourceShmemTotalLength= dataBdim[1]*dataBdim[2]*dataBdim[3]
     clearIterResShmemLoop= fld(resShmemTotalLength,threadsXdim*threadsYdim)
     clearIterSourceShmemLoop= fld(sourceShmemTotalLength,threadsXdim*threadsYdim)
-return (loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength)
+return (loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength)
 end    
 
 """
@@ -130,6 +132,37 @@ macro iterDataBlock(mainArrDims,dataBlockDims,loopXdim ,loopYdim,loopZdim,xMeta,
     , isFullBoundaryCheckY=true
     , isFullBoundaryCheckZ=true
     ,additionalActionBeforeX=  :(xpos= xdim * blockDimX()+threadIdxX() ;ypos= (ydim * blockDimY())+threadIdxY() ;zpos=(zdim+1))
+    , ex = ex)  
+    return esc(:( $mainExp))
+end
+
+
+
+"""
+will enable iterating over the data of data block
+"""
+macro iterDataBlockZdeepest(mainArrDims,dataBlockDims,loopXdim ,loopYdim,loopZdim,xMeta,yMeta,zMeta, ex,additionalActionAfterX)
+    mainExp = generalizedItermultiDimZdeepest(;arrDims=mainArrDims
+    ,loopXdim
+    ,loopYdim
+    ,loopZdim
+    # ,xCheck = :((xMeta* $dataBlockDims[1]+x)<=$mainArrDims[1] )
+    # ,yCheck = :((yMeta* $dataBlockDims[2]+y)<=$mainArrDims[2])
+    # ,zCheck = :( (zMeta* $dataBlockDims[3]+z)<=$mainArrDims[3])
+    ,xCheck = :(((xdim * blockDimX())+threadIdxX()) <= $dataBlockDims[1] && x<=$mainArrDims[1])
+    ,yCheck = :(((ydim * blockDimY())+threadIdxY()) <= $dataBlockDims[2] && y<=$mainArrDims[2])
+    ,zCheck = :((zdim+1) <= $dataBlockDims[3]  &&   z <= $mainArrDims[3])
+    ,zOffset= :($zMeta* ( ($dataBlockDims[3])))
+    ,zAdd =:(zdim+1)
+   ,yOffset = :(ydim* blockDimY()+$yMeta* $dataBlockDims[2])
+   ,yAdd= :(threadIdxY())
+   ,xOffset= :( (xdim * blockDimX()) +$xMeta* $dataBlockDims[1])
+    ,xAdd= :(threadIdxX())
+    ,isFullBoundaryCheckX =true
+    , isFullBoundaryCheckY=true
+    , isFullBoundaryCheckZ=true
+    ,additionalActionBeforeZ=  :(xpos= xdim * blockDimX()+threadIdxX() ;ypos= (ydim * blockDimY())+threadIdxY() ;zpos=(zdim+1))
+    ,additionalActionAfterX=additionalActionAfterX
     , ex = ex)  
     return esc(:( $mainExp))
 end

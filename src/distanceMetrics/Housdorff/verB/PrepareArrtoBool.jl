@@ -2,8 +2,8 @@
 this kernel will prepare da
 """
 module PrepareArrtoBool
-using CUDA, Logging,Main.CUDAGpuUtils, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils,Main.HFUtils
-export getLargeForBoolKernel,getSmallForBoolKernel,@getBoolCubeKernel,@localAllocations,@uploadLocalfpFNCounters,@uploadMinMaxesToShmem,@uploadDataToMetaData,@finalGlobalSet
+using CUDA, Logging,Main.CUDAGpuUtils, Logging,StaticArrays, Main.IterationUtils,Main.BitWiseUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils,Main.HFUtils
+export @planeIter,getLargeForBoolKernel,getSmallForBoolKernel,@getBoolCubeKernel,@localAllocations,@uploadLocalfpFNCounters,@uploadMinMaxesToShmem,@uploadDataToMetaData,@finalGlobalSet
 
 
 """
@@ -14,13 +14,13 @@ macro localAllocations()
     return esc(quote
     anyPositive = false # true If any bit will bge positive in this array - we are not afraid of data race as we can set it multiple time to true
     #creates shared memory and initializes it to 0
-    shmemSum = @cuStaticSharedMem(Float32,(32,2))
+    # shmemSum = @cuStaticSharedMem(Float32,(32,2))
     locFps= UInt32(0)
     locFns= UInt32(0)
-    offsetIter= UInt8(0)
+    offsetIter= UInt32(0)
     #storing data about block in a forrmat where each Int32 number is representing a part of data block with constant x and y and varia ble z position
-    shmemblockDataGold = @cuDynamicSharedMem(Int32,(dataBdim[1], dataBdim[2],2))
-    shmemblockDataSegm = @cuDynamicSharedMem(Int32,(dataBdim[1], dataBdim[2],2))
+    # shmemblockData = @cuDynamicSharedMem(Float32,dataBdim[1], dataBdim[2])
+    shmemblockData = @cuDynamicSharedMem(UInt32,(dataBdim[1], dataBdim[2]))
 
    
     ######## needed for establishing min and max values of blocks that are intresting us 
@@ -75,8 +75,7 @@ invoked on each lane and on the basis of its position will update the number of 
 """
 macro uploadLocalfpFNCounters()
    return esc(quote
-   coord=getIndexOfQueue(xpos,ypos,zpos,dataBdim,boolSegm)
-   atomicallyAddToSpot(localQuesValues,coord,1)
+   atomicallyAddToSpot(localQuesValues,getIndexOfQueue(xpos,ypos,zpos,dataBdim,boolSegm),1)
     end)
 end   
 
@@ -86,9 +85,13 @@ invoked after we gone through data block and now we save data into shared memory
 macro uploadMinMaxesToShmem()
     return  esc(quote
     
-    # if((xMeta+1)>1 && anyPositive)
-    #     CUDA.@cuprint "xMeta+1 $(xMeta+1) anyPositive $(anyPositive) \n"
+    # if( anyPositive)
+    #     @ifXY 1 1  CUDA.@cuprint "xMeta+1 $(xMeta+1) yMeta+1 $(yMeta+1) zMeta+1 $(zMeta+1) anyPositive $(anyPositive) \n"
+    #     @ifXY 1 1  CUDA.@cuprint "xMeta+1 $(xMeta+1) yMeta+1 $(yMeta+1) zMeta+1 $(zMeta+1) anyPositive $(anyPositive) \n"
     # end
+    # @ifXY 1 1 if(anyPositive) CUDA.@cuprint "aaaaaa minX[1] $(minX[1]) xMeta+1 $(xMeta+1)  " end
+
+
         @ifXY 1 1 if(anyPositive) minX[1]= min(minX[1],xMeta+1) end
         @ifXY 1 2 if(anyPositive) maxX[1]= max(maxX[1],xMeta+1) end
         @ifXY 2 1 if(anyPositive) minY[1]= min(minY[1],yMeta+1) end
@@ -106,9 +109,7 @@ macro uploadDataToMetaData()
     esc(quote
     #now we should also add the total value by adding all fp or fn values required   
     @ifY 1 if(threadIdxX()<15 && anyPositive)
-        # if(anyPositive) metaData[xMeta+1,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+ threadIdxX()]=localQuesValues[threadIdxX()]
         @setMeta(getBeginingOfFpFNcounts()+ threadIdxX(),localQuesValues[threadIdxX()])
-       # localQuesValues[threadIdxX()]=0
         
     end
     @ifXY 15 1 if(anyPositive)
@@ -131,11 +132,11 @@ invoked after all of the data was scanned so after we will do atomics between bl
 macro  finalGlobalSet()
     esc(quote
         offsetIter=1
-        @redWitAct(offsetIter,shmemSum,  locFns,+,     locFps,+   )
-        @addAtomic(shmemSum,fn,fp)
-        # if(maxxRes[1]>1)
-        #     CUDA.@cuprint " maxxRes[1] $(maxxRes[1]) \n"
-        # end
+        @redWitAct(offsetIter,shmemblockData,  locFns,+,     locFps,+   )
+        @addAtomic(shmemblockData,fn,fp)
+        if(minX[1]<100)
+            # CUDA.@cuprint "aaaaaaaa  minxRes[1] $(minxRes[1])  minX $(minX[1])\n"
+        end
         @ifXY 1 1 atomicMinSet(minxRes,minX[1])
         @ifXY 1 2 atomicMaxSet(maxxRes,maxX[1])
 
@@ -197,46 +198,77 @@ macro getBoolCubeKernel()
     #first loop over the metadata 
 
 
-    @iter3dOuter(metaDataDims,loopMeta,metaDataLength,
+    HFUtils.@iter3dOuter(metaDataDims,loopMeta,metaDataLength,
          begin
-         #inner loop is over the data indicated by metadata
-         @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,xMeta,yMeta,zMeta
+        # inner loop is over the data indicated by metadata
+        @iterDataBlockZdeepest(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,xMeta,yMeta,zMeta
                          ,begin 
                                 boolGold=goldGPU[x,y,z]==numberToLooFor
                                 boolSegm=segmGPU[x,y,z]==numberToLooFor    
                                 #we set all bits so we do not need to reset 
-                                @setBitTo(shmemblockDataGold[xpos,ypos],zpos,boolGold)
-                                @setBitTo(shmemblockDataSegm[xpos,ypos],zpos,boolSegm)       
+                                # CUDA.@cuprint "ypos $(ypos)   "
+
+                                @setBitTo(offsetIter,zpos,boolGold)
+
+                                # @setBitTo((shmemblockData[xpos,ypos]),zpos,boolGold)
                                 #we need to also collect data about how many fp and fn we have in main part and borders
                                 #important in case of corners we will first analyze z and y dims and z dim on last resort only !
-
+  
                                 #in case some is positive we can go futher with looking for max,min in dims and add to the new reduced boolean arrays waht we are intrested in  
                                 if(boolGold  || boolSegm)  
+                                    #if(boolGold) @setBitTo1(offsetIter,zpos) end   
+                        # # if(offsetIter>0)
+                        #     CUDA.@cuprint "x $(x) y $(y) (z) $(z) offsetIter $(Int64(offsetIter))\n"
+                        # # end    
+                                        anyPositive=true
                                         if((boolGold  ⊻ boolSegm))
                                             @uploadLocalfpFNCounters()
-                                            # CUDA.@cuprint "xMeta $(xMeta+1)  yMeta $(yMeta+1) zMeta $(zMeta+1) linIdexMeta $(linIdexMeta) \n"                            
                                             locFps+=boolSegm
                                             locFns+=boolGold
-                                            anyPositive= true #- we just mark that there was some fp or fn in this block 
                                         end# if (boolGold  ⊻ boolSegm)
-                                    #now 
-                        
+                                    #now                        
 
-#                                     reducedGoldB[x,y,z]=boolGold    
-#                                     reducedSegmB[x,y,z]=boolSegm 
                                 end#if boolGold  || boolSegm
-                            end)#ex                
-                # #now we are just after we iterated over a single data block  we need to we save data about border data blocks 
-                anyPositive = sync_threads_or(anyPositive)
-                
-                # now we need to iterate over shmemblockData which is 2 dimensional
-                @planeIter(loopXinPlane,loopYinPlane,dataBdim[1], dataBdim[2],begin 
-                    reducedGoldA[xMeta* $dataBlockDims[1]+x ,yMeta* $dataBlockDims[1]+y,zMeta]=shmemblockDataGold[x,y]
-                    reducedGoldA[xMeta* $dataBlockDims[1]+x ,yMeta* $dataBlockDims[1]+y,zMeta]=shmemblockDataSegm[x,y]
-                end)
-                #passing data to new arrays needed for running final algorithm
-               reducedGoldA[x*,y,zMeta]=boolGold    
-               reducedSegmA[x,y,zMeta]=boolSegm    
+                            end#ex
+                          #additional after X
+                            ,begin 
+                        #here we iterated over all z dimension so offsetIter is ready to be uploaded to global memory
+                        # if(offsetIter>0)
+                        #     CUDA.@cuprint "x $(x) y $(y) (zMeta+1) $((zMeta+1)) \n"
+                        # end  
+                        if(offsetIter>0)  
+                            @inbounds reducedGoldA[x,y,(zMeta+1)]=offsetIter
+                        end
+                        end)                
+                  # #now we are just after we iterated over a single data block  we need to we save data about border data blocks 
+                  anyPositive = sync_threads_or(anyPositive) 
+
+                #   if(anyPositive)
+                #     @ifXY 1 1  CUDA.@cuprint "aaaaaa  xMeta+1 $(xMeta+1) yMeta+1 $(yMeta+1) zMeta+1 $(zMeta+1) anyPositive $(anyPositive) \n"
+
+                # end  
+                 @uploadMinMaxesToShmem()   
+
+
+
+                 #in order to reduce used shared memory we are setting values of output array separately
+                 @iterDataBlockZdeepest(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,xMeta,yMeta,zMeta
+                 ,begin 
+                    if((segmGPU[x,y,z]==numberToLooFor)) @setBitTo1(offsetIter,zpos) end   
+                                @setBitTo(offsetIter,zpos,(segmGPU[x,y,z]==numberToLooFor))
+
+                       #we set all bits so we do not need to reset 
+                    # @setBitTo(shmemblockData[xpos,ypos],zpos,(segmGPU[x,y,z]==numberToLooFor))
+                end,begin 
+                #here we iterated over all z dimension so offsetIter is ready to be uploaded to global memory
+                if(offsetIter>0)  
+                    @inbounds reducedSegmA[x,y,(zMeta+1)]=offsetIter
+                end
+                end)     
+                sync_threads()            
+
+         
+
                 # if(anyPositive)
                 #     CUDA.@cuprint "xMeta+1 $(xMeta+1) anyPositive $(anyPositive) \n"
                 # end
@@ -248,8 +280,6 @@ macro getBoolCubeKernel()
                     #     @ifXY 4 1  CUDA.@cuprint "xMeta $(xMeta+1)  ,yMeta $(yMeta+1),zMeta $(zMeta+1) \n"
                     # end    
                     #invoked after we gone through data block and now we save data into shared memory
-                    #doing all on second warp
-                    @uploadMinMaxesToShmem()            
 
                     sync_threads()
                     #resetting
@@ -264,8 +294,11 @@ macro getBoolCubeKernel()
     #             #consider ceating tuple structure where we will have  number of outer tuples the same as z dim then inner tuples the same as y dim and most inner tuples will have only the entries that are fp or fn - this would make us forced to put results always in correct spots 
                 
         # outer loop expession  )
-    #in order to have global data 
-    sync_threads()
+    #clear 
+    # @ifY 1 shmemblockData[threadIdxX(),1]=0
+    # @ifY 1 shmemblockData[threadIdxX(),2]=0
+    
+    # sync_threads()
 
     @finalGlobalSet()
 
@@ -301,7 +334,7 @@ function getLargeForBoolKernel(mainArrDims,dataBdim)
     zDim = cld(mainArrDims[3],dataBdim[3])*dataBdim[3]
     newDims = (xDim,yDim,zDim)
 return (
-    CuArray(falses(newDims)),CuArray(falses(newDims))
+    CUDA.zeros(UInt32,(newDims)),CUDA.zeros(UInt32,(newDims))
     )
 
 end
@@ -312,8 +345,8 @@ iterating over shmemblockData
 macro planeIter(loopXinPlane,loopYinPlane,maxXdim, maxYdim,ex)
     mainExp = generalizedItermultiDim(
     arrDims=:()
-    ,loopXdim=loopX
-    ,loopYdim=loopY
+    ,loopXdim=loopXinPlane
+    ,loopYdim=loopYinPlane
     ,yCheck = :(y <=$maxYdim)
     ,xCheck = :(x <=$maxXdim )
     ,is3d = false

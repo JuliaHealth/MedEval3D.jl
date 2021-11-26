@@ -3,7 +3,6 @@ authors = ["JAkub Mitura"]
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
-Cthulhu = "f68482b8-f384-11e8-15f7-abe071a5a75f"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
