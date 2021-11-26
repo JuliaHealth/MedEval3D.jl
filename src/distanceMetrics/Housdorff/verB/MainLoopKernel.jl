@@ -42,11 +42,16 @@ macro mainLoopKernelAllocations(dataBdim)
 #needed to manage cooperative groups functions
 grid_handle = this_grid()
 #storing intermidiate results +2 in order to get the one padding 
-resShmem =  @cuDynamicSharedMem(Bool,(($dataBdim[1]+2),($dataBdim[2]+2),($dataBdim[3]+2))) # we need this additional 33th an 34th spots
- #storing values loaded from analyzed array ...
-sourceShmem =  @cuDynamicSharedMem(Bool,($dataBdim[1],$dataBdim[2],$dataBdim[3]))
- #for storing sums for reductions
- shmemSum =  @cuStaticSharedMem(UInt32,(36,14)) # we need this additional spots
+# resShmem =  @cuDynamicSharedMem(Bool,(($dataBdim[1]+2),($dataBdim[2]+2),($dataBdim[3]+2))) # we need this additional 33th an 34th spots
+#  #storing values loaded from analyzed array ...
+# sourceShmem =  @cuDynamicSharedMem(Bool,($dataBdim[1],$dataBdim[2],$dataBdim[3]))
+
+#shared memory - reused in multiple settings ...
+shmemblockData = @cuStaticSharedMem(UInt32,(37, 32))
+
+
+#for storing sums for reductions
+shmemSum =  @cuStaticSharedMem(UInt32,(36,14)) # we need this additional spots
 #used to load from metadata information are ques to be validated 
 areToBeValidated =  @cuStaticSharedMem(Bool, (14)) 
 # used to mark wheather there is any true in paddings

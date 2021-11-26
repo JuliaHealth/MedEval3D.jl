@@ -267,11 +267,6 @@ macro getBoolCubeKernel()
                 end)     
                 sync_threads()            
 
-         
-
-                # if(anyPositive)
-                #     CUDA.@cuprint "xMeta+1 $(xMeta+1) anyPositive $(anyPositive) \n"
-                # end
                     #we want to invoke this only once per data block
                     #save the data about number of fp and fn of this block and accumulate also this sum for global sum 
                     #doing all on first warp
@@ -339,20 +334,20 @@ return (
 
 end
 
-"""
-iterating over shmemblockData
-"""
-macro planeIter(loopXinPlane,loopYinPlane,maxXdim, maxYdim,ex)
-    mainExp = generalizedItermultiDim(
-    arrDims=:()
-    ,loopXdim=loopXinPlane
-    ,loopYdim=loopYinPlane
-    ,yCheck = :(y <=$maxYdim)
-    ,xCheck = :(x <=$maxXdim )
-    ,is3d = false
-    , ex = ex)
-      return esc(:( $mainExp))
-end
+# """
+# iterating over shmemblockData
+# """
+# macro planeIter(loopXinPlane,loopYinPlane,maxXdim, maxYdim,ex)
+#     mainExp = generalizedItermultiDim(
+#     arrDims=:()
+#     ,loopXdim=loopXinPlane
+#     ,loopYdim=loopYinPlane
+#     ,yCheck = :(y <=$maxYdim)
+#     ,xCheck = :(x <=$maxXdim )
+#     ,is3d = false
+#     , ex = ex)
+#       return esc(:( $mainExp))
+# end
 
 
 end#module

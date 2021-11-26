@@ -36,13 +36,16 @@ function calculateLoopsIter(dataBdim,threadsXdim,threadsYdim,metaDataDims,blocks
     metaDataLength= metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
     
     loopMeta= fld(metaDataLength,blocks )
-    println("loopMeta $(loopMeta)  ")
     loopWarpMeta= cld(metaDataLength,(blocks*threadsXdim ))
     resShmemTotalLength=(dataBdim[1]+2)*(dataBdim[2]+2)*(dataBdim[3]+2)
     sourceShmemTotalLength= dataBdim[1]*dataBdim[2]*dataBdim[3]
     clearIterResShmemLoop= fld(resShmemTotalLength,threadsXdim*threadsYdim)
     clearIterSourceShmemLoop= fld(sourceShmemTotalLength,threadsXdim*threadsYdim)
-return (loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength)
+
+    shmemblockDataLenght = 37*32
+    shmemblockDataLoop = fld(shmemblockDataLenght,threadsXdim*threadsYdim)
+
+    return (shmemblockDataLoop,shmemblockDataLenght,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength)
 end    
 
 """

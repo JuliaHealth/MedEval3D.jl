@@ -199,13 +199,13 @@ establish is the  block  is active full or be activated, and we are saving this 
 """
 macro checkIsActiveOrFullOr()
     return esc(quote
-        @exOnWarp 30 if(isInRange) sourceShmem[(threadIdxX())] = @accMeta(getFullInGoldNumb() ) end#  isBlockFulliInGold(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 31 if(isInRange)   sourceShmem[(threadIdxX())+33] = @accMeta(getIsToBeActivatedInGoldNumb() ) end # isBlockToBeActivatediInGold(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 32 if(isInRange)  sourceShmem[(threadIdxX())+33*2] = @accMeta(getActiveGoldNumb() ) end # isBlockCurrentlyActiveiInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 30 if(isInRange) shmemblockData[(threadIdxX())] = UInt32(@accMeta(getFullInGoldNumb() )) end#  isBlockFulliInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 31 if(isInRange)   shmemblockData[(threadIdxX())+33] = UInt32(@accMeta(getIsToBeActivatedInGoldNumb() )) end # isBlockToBeActivatediInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 32 if(isInRange)  shmemblockData[(threadIdxX())+33*2] =UInt32( @accMeta(getActiveGoldNumb() )) end # isBlockCurrentlyActiveiInGold(metaData, xMeta,yMeta+1,zMeta+1)
        
-        @exOnWarp 33 if(isInRange) sourceShmem[(threadIdxX())+33*3] = @accMeta(getFullInSegmNumb()) end # isBlockFullInSegm(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 34 if(isInRange) sourceShmem[(threadIdxX())+33*4] = @accMeta(getIsToBeActivatedInSegmNumb() ) end # isBlockToBeActivatedInSegm(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 35 if(isInRange) sourceShmem[(threadIdxX())+33*5] = @accMeta(getActiveSegmNumb()) end # isBlockCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 33 if(isInRange) shmemblockData[(threadIdxX())+33*3] =UInt32( @accMeta(getFullInSegmNumb())) end # isBlockFullInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 34 if(isInRange) shmemblockData[(threadIdxX())+33*4] =UInt32( @accMeta(getIsToBeActivatedInSegmNumb() )) end # isBlockToBeActivatedInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 35 if(isInRange) shmemblockData[(threadIdxX())+33*5] = UInt32(@accMeta(getActiveSegmNumb())) end # isBlockCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)
 end)#quote
 end#checkIsActiveOrFullOr
 
@@ -215,11 +215,11 @@ given data in sourceShmem loaded by checkIsActiveOrFullOr() we will  mark the bl
 """
 macro setIsToBeActive()
     return esc(quote
-        @exOnWarp 1 if(!sourceShmem[(threadIdxX())]  && (sourceShmem[(threadIdxX())+33]  ||  sourceShmem[(threadIdxX())+33*2]) &&isInRange  )  
+        @exOnWarp 1 if(!(shmemblockData[(threadIdxX())] ==1) && ((shmemblockData[(threadIdxX())+33] ==1) ||  (shmemblockData[(threadIdxX())+33*2])==1) &&isInRange  )  
                         @setMeta(getActiveGoldNumb(),1)
                         appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 )
                     end
-        @exOnWarp 2 if(!sourceShmem[(threadIdxX())+33*3]  && (sourceShmem[(threadIdxX())+33*4]  ||  sourceShmem[(threadIdxX())+33*5]) &&isInRange ) 
+        @exOnWarp 2 if(!(shmemblockData[(threadIdxX())+33*3]==1)  && ((shmemblockData[(threadIdxX())+33*4]==1)  ||  (shmemblockData[(threadIdxX())+33*5])==1) &&isInRange ) 
                         @setMeta(getActiveSegmNumb(),1)
                         appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 )             
             end
@@ -289,18 +289,12 @@ end
                 @exOnWarp (i+37) @setMeta((getOldCountersBeg() +i),@accMeta(getNewCountersBeg() +i))
             end  
             end)   
-
-
-            #clear used shmem - we used linear indicies so we can clear only those used
-            for i in 0:30
-                @exOnWarp i resShmem[(threadIdxX())+(i)*33]= false
-             end
-             for i in 0:8#was 6
-                @exOnWarp (i+15) sourceShmem[(threadIdxX())+(i)*33]= false
-             end   
+             ########clear   
              for i in 1:14
                 @exOnWarp (i+23) shmemSum[threadIdxX(),i]= 0
              end
+             @iterateLinearly shmemblockDataLoop shmemblockDataLenght shmemblockData[i]=0
+
 
             $locArr=0
             $offsetIter=0

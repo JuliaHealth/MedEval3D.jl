@@ -111,23 +111,20 @@ end#for quueueNumb
 maxResListIndex= length(resListIndicies)
 
 globalCurrentFnCount,globalCurrentFpCount= CUDA.zeros(UInt32,1),CUDA.zeros(UInt32,1)
-loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
+shmemblockDataLoop,shmemblockDataLenght,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
-function loadAndSanForDuplKernel(loopWarpMeta,metaDataLength,globalCurrentFnCount,globalCurrentFpCount,maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,dataBdim)
+function loadAndSanForDuplKernel(shmemblockDataLoop,shmemblockDataLenght,loopWarpMeta,metaDataLength,globalCurrentFnCount,globalCurrentFpCount,maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,dataBdim)
    locArr= UInt32(0)
    localOffset= UInt32(0)
    offsetIter= UInt16(0)
    shmemSum =  @cuStaticSharedMem(UInt32,(36,14)) # we need this additional spots
-   resShmem =  @cuDynamicSharedMem(Bool,(dataBdim[1]+2,dataBdim[2]+2,dataBdim[3]+2)) # we need this additional 33th an 34th spots
-   sourceShmem =  @cuDynamicSharedMem(Bool,(dataBdim[1],dataBdim[2],dataBdim[3]))
    alreadyCoveredInQueues =@cuStaticSharedMem(UInt32,(15))
+   shmemblockData = @cuStaticSharedMem(UInt32,(37, 32))
 
-   for i in 1:30
-     resShmem[(threadIdxX())+(i)*33]= false
-   end
-   for i in 1:15
-      sourceShmem[(threadIdxX())+(i)*33]= false
-   end
+   sync_threads()
+
+   @iterateLinearly shmemblockDataLoop shmemblockDataLenght shmemblockData[i]=0
+
    for i in 1:14
       shmemSum[(threadIdxX()),i]= 0
    end
@@ -139,12 +136,7 @@ function loadAndSanForDuplKernel(loopWarpMeta,metaDataLength,globalCurrentFnCoun
 
         @loadAndScanForDuplicates(iterThrougWarNumb,locArr,offsetIter,localOffset)  
 sync_threads()
-for i in 1:30
-   resShmem[(threadIdxX())+(i)*33]= false
- end
- for i in 1:15
-    sourceShmem[(threadIdxX())+(i)*33]= false
- end
+
  for i in 1:14
     shmemSum[(threadIdxX()),i]= 0
     shmemSum[33,i]= 0
@@ -217,7 +209,7 @@ numbOfFn+=7*2
 
 numbOfFp+=5
 
-@cuda threads=threads blocks=blocks loadAndSanForDuplKernel(loopWarpMeta,metaDataLength,globalCurrentFnCount,globalCurrentFpCount,maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,dataBdim)
+@cuda threads=threads blocks=blocks loadAndSanForDuplKernel(shmemblockDataLoop,shmemblockDataLenght,loopWarpMeta,metaDataLength,globalCurrentFnCount,globalCurrentFpCount,maxResListIndex,resListIndicies,metaData,iterThrougWarNumb,mainArrDims ,metaDataDims,loopXMeta,loopYZMeta,resList,dataBdim)
 
 Int64(globalCurrentFnCount[1]+globalCurrentFpCount[1])== 660+5
 offset = -49
@@ -229,6 +221,8 @@ offset = -49
          tempList= Array(resListIndicies[offset:offset+350])
          @test length(filter(el->el>0,tempList))==quueueNumb*5#+1 becouse of 0's entry
   end#for
+
+
 @testset "scanning and checking is to be validated" begin
     quueueNumb =12
    offset = -49

@@ -202,7 +202,7 @@ for j in 1:2
   metaData[j,j,j, getBeginingOfFpFNcounts()+16]=15+j
   metaData[j,j,j, getBeginingOfFpFNcounts()+17]=16+j
 end  
-loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
+shmemblockDataLoop,shmemblockDataLenght,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength=calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
 function analyzeMetadataFirstPassKernel(loopWarpMeta,metaDataLength,workQueaue,workQueaueCounter,metaData,metaDataDims,loopXMeta,loopYZMeta,globalFpResOffsetCounter, globalFnResOffsetCounter)
   shmemSum =  @cuStaticSharedMem(Float32,(35,16)) # we need this additional 33th an 34th spots
@@ -316,14 +316,14 @@ metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb() ]=1
 metaData[xMeta,yMeta+1,zMeta+1,getFullInSegmNumb() ]=1
 
 
-loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
+shmemblockDataLoop,shmemblockDataLenght,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
 #as we have counters we check in shmem are they correct
 
-function checkIsToBeActive(loopWarpMeta,metaDataLength,dataBdim,workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
+function checkIsToBeActive(shmemblockDataLoop, shmemblockDataLenght,loopWarpMeta,metaDataLength,dataBdim,workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
  
-  shmemSum =  @cuStaticSharedMem(Float32,(35,16)) # we need this additional 33th an 34th spots
-  sourceShmem =  @cuDynamicSharedMem(Bool,(dataBdim[1]+2,dataBdim[2]+2,dataBdim[3]+2)) # we need this additional 33th an 34th spots
+  shmemSum =  @cuStaticSharedMem(Float32,(36,16)) # we need this additional 33th an 34th spots
+  shmemblockData = @cuStaticSharedMem(UInt32,(37, 32))
   tobeEx= true
   locArr= UInt32(0)
   MetadataAnalyzePass.@metaDataWarpIter( metaDataDims,loopWarpMeta,metaDataLength,
@@ -333,17 +333,19 @@ function checkIsToBeActive(loopWarpMeta,metaDataLength,dataBdim,workQueaueCounte
       MetadataAnalyzePass.@setIsToBeActive()
       sync_threads()
       #resetting
-      @exOnWarp 30 sourceShmem[(threadIdxX()+1)] = false
-      @exOnWarp 31 sourceShmem[(threadIdxX()+1)+33]= false
-      @exOnWarp 32 sourceShmem[(threadIdxX()+1)+33*2] = false     
-      @exOnWarp 33 sourceShmem[(threadIdxX()+1)+33*3] = false
-      @exOnWarp 34 sourceShmem[(threadIdxX()+1)+33*4] = false
-      @exOnWarp 35 sourceShmem[(threadIdxX()+1)+33*5] = false
+      @iterateLinearly shmemblockDataLoop shmemblockDataLenght shmemblockData[i]=0
+
+      # @exOnWarp 30 sourceShmem[(threadIdxX()+1)] = false
+      # @exOnWarp 31 sourceShmem[(threadIdxX()+1)+33]= false
+      # @exOnWarp 32 sourceShmem[(threadIdxX()+1)+33*2] = false     
+      # @exOnWarp 33 sourceShmem[(threadIdxX()+1)+33*3] = false
+      # @exOnWarp 34 sourceShmem[(threadIdxX()+1)+33*4] = false
+      # @exOnWarp 35 sourceShmem[(threadIdxX()+1)+33*5] = false
     end)
     
     return
 end
-@cuda threads=threads blocks=blocks checkIsToBeActive(loopWarpMeta,metaDataLength,dataBdim,workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
+@cuda threads=threads blocks=blocks checkIsToBeActive(shmemblockDataLoop, shmemblockDataLenght,loopWarpMeta,metaDataLength,dataBdim,workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
 workQueaue[1,:]
 Int64(sum(workQueaue))
 Int64(workQueaueCounter[1])
@@ -388,7 +390,7 @@ workQueaue
 
 
 
-@test metaData[xMeta,yMeta+1,zMeta+1,getFullInGoldNumb() ]==1
+# @test metaData[xMeta+1,yMeta+1,zMeta+1,getFullInGoldNumb() ]==1
 
 
 # @test Int64(globalFpResOffsetCounter[1]) ==Int64(ceil((16*1.5)+(17*1.5)))

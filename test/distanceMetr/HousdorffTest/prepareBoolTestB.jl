@@ -32,7 +32,7 @@
         robustnessPercent = 0.9
 
         boolKernelArgs, mainKernelArgs,threadsBoolKern,blocksBoolKern ,threadsMainKern,blocksMainKern ,shmemSizeBool,shmemSizeMain=    preparehousedorfKernel(gold3d,segm3d,robustnessPercent,numberToLooFor)
-        mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,loopXinPlane,loopYinPlane,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,numberToLooFor,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength=boolKernelArgs
+        mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,loopXinPlane,loopYinPlane,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,numberToLooFor,shmemblockDataLoop,shmemblockDataLenght,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength=boolKernelArgs
    
 
         arrGold[dataBdim[1]*3+1,dataBdim[2]*4+1,dataBdim[3]*5+1]= 2
@@ -58,7 +58,7 @@
         loopMeta
         dataBdim
         Int64(blocksBoolKern)
-        function locForKernel(goldGPU,segmGPU,mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,loopXinPlane,loopYinPlane,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,numberToLooFor,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength)
+        function locForKernel(goldGPU,segmGPU,mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,loopXinPlane,loopYinPlane,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,numberToLooFor,shmemblockDataLoop,shmemblockDataLenght,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength)
 
           @getBoolCubeKernel()
 
@@ -67,7 +67,7 @@
     minxRes[1]
 
 
-        @cuda shmem=shmemSizeBool threads=threadsBoolKern blocks=blocksBoolKern locForKernel(golddd,segmmm,mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,loopXinPlane,loopYinPlane,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,numberToLooFor,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength)
+        @cuda shmem=shmemSizeBool threads=threadsBoolKern blocks=blocksBoolKern locForKernel(golddd,segmmm,mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,loopXinPlane,loopYinPlane,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,numberToLooFor,shmemblockDataLoop,shmemblockDataLenght,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength)
           Int64( maxzRes[1])
 
         @test Int64(fn[])==3
@@ -118,63 +118,4 @@ Int64(reducedGoldA[3,18,1])
 
         @test  isBit1AtPos(reducedSegmA[dataBdim[1]*3+1,dataBdim[2]*4+1,6],1)==true
 
-        arrGold[dataBdim[1]*3+1,dataBdim[2]*4+1,dataBdim[3]*5+1]= 2
-
-        @test   reducedGoldA[3,6,4]==true
-        @test   reducedGoldA[3,3,4]==true
-        @test   reducedGoldA[4,4,4]==true
-        @test   reducedGoldA[5,5,5]==false
-        @test   reducedGoldA[5,2,5]==false
-        @test   reducedGoldA[5,2,90]==false
-
-
-        @test  reducedSegmA[3,18,4]==true
-        @test   reducedSegmA[5,2,11]==true
-        @test   reducedSegmA[4,4,4]==true
-        @test   reducedSegmA[5,5,5]==false
-        @test   reducedSegmA[5,2,5]==false
-        @test   reducedSegmA[5,2,90]==false
-
-        @test  reducedSegmB[3,18,4]==true
-        @test   reducedSegmB[5,2,11]==true
-        @test   reducedSegmB[4,4,4]==true
-        @test   reducedSegmB[5,5,5]==false
-        @test   reducedSegmB[5,2,5]==false
-        @test   reducedSegmB[5,2,90]==false
-
-
-
-
-
-
-
-
-
-        @test   reducedGoldA[3,6,4]==true
-        @test   reducedGoldA[3,3,4]==true
-        @test   reducedGoldA[4,4,4]==true
-        @test   reducedGoldA[5,5,5]==false
-        @test   reducedGoldA[5,2,5]==false
-        @test   reducedGoldA[5,2,90]==false
-
-        @test  reducedGoldB[9,2,5]==true
-        @test   reducedGoldB[3,6,4]==true
-        @test   reducedGoldB[3,3,4]==true
-        @test   reducedGoldB[4,4,4]==true
-        @test   reducedGoldB[5,5,5]==false
-        @test   reducedGoldB[5,2,5]==false
-        @test   reducedGoldB[5,2,90]==false
-
-        @test  reducedSegmA[3,18,4]==true
-        @test   reducedSegmA[5,2,11]==true
-        @test   reducedSegmA[4,4,4]==true
-        @test   reducedSegmA[5,5,5]==false
-        @test   reducedSegmA[5,2,5]==false
-        @test   reducedSegmA[5,2,90]==false
-
-        @test  reducedSegmB[3,18,4]==true
-        @test   reducedSegmB[5,2,11]==true
-        @test   reducedSegmB[4,4,4]==true
-        @test   reducedSegmB[5,5,5]==false
-        @test   reducedSegmB[5,2,5]==false
-        @test   reducedSegmB[5,2,90]==false
+       
