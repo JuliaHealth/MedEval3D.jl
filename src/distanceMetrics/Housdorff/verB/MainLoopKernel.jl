@@ -47,7 +47,11 @@ grid_handle = this_grid()
 # sourceShmem =  @cuDynamicSharedMem(Bool,($dataBdim[1],$dataBdim[2],$dataBdim[3]))
 
 #shared memory - reused in multiple settings ...
-shmemblockData = @cuStaticSharedMem(UInt32,(37, 32))
+shmemblockData = @cuDynamicSharedMem(UInt32,(dataBdim[1], dataBdim[2] ))
+# holding values of results
+resShmemblockData = @cuDynamicSharedMem(UInt32,(dataBdim[1], dataBdim[2] ))
+# holding data about result anterior, posterior , right and left paddings
+resShmemblockData = @cuDynamicSharedMem(Bool,(  max(dataBdim[1], dataBdim[2]), max(dataBdim[1], dataBdim[2])   ,4 ))
 
 
 #for storing sums for reductions
