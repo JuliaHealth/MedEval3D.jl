@@ -33,20 +33,44 @@ end
 atomically append the block linear index and information is it gold or other pass 
 also we need to be sure that we appended to the correct work queue based on the properties of the xMeta,yMeta,zMeta - so are they even, odd ...
 """
-function appendToWorkQueue(workQueaue,workQueauecounter, metaX,metaY,metaZ,isGold ) 
-   old =  atomicallyAddOne(workQueauecounter)+1
-  # CUDA.@cuprint "in appendToWorkQueue metaX $(metaX) metaY $(metaY) metaZ $(metaZ) isGold $(isGold) old $(old) \n"
+macro appendToWorkQueue(workQueaue,workQueauecounter, metaX,metaY,metaZ,isGold ) 
+    return esc(quote 
 
-   workQueaue[1,old]= UInt16(metaX)
-   workQueaue[2,old]= UInt16(metaY)
-   workQueaue[3,old]= UInt16(metaZ)
-   workQueaue[4,old]= UInt16(isGold)
+        if(iseven($metaX) && iseven($metaY) && iseven($metaZ) )
+            appendToWorkQueueBasic(workQueueEEE,workQueueEEEcounter, $metaX,$metaY,$metaZ,$isGold )
+        elseif(iseven($metaX) && isodd($metaY) && iseven($metaZ))    
+            appendToWorkQueueBasic(workQueueEOE,workQueueEOEcounter, $metaX,$metaY,$metaZ,$isGold )
+        elseif(iseven($metaX) && iseven($metaY) && isodd($metaZ))    
+            appendToWorkQueueBasic(workQueueEEO,workQueueEEOcounter, $metaX,$metaY,$metaZ,$isGold )
+        elseif(isodd($metaX) && iseven($metaY) && iseven($metaZ))    
+            appendToWorkQueueBasic(workQueueOEE,workQueueOEEcounter, $metaX,$metaY,$metaZ,$isGold )
+        elseif(isodd($metaX) && isodd($metaY) && iseven($metaZ))    
+            appendToWorkQueueBasic(workQueueOOE,workQueueOOEcounter, $metaX,$metaY,$metaZ,$isGold )
+        elseif(iseven($metaX) && isodd($metaY) && isodd($metaZ))    
+            appendToWorkQueueBasic(workQueueEOO,workQueueEOOcounter, $metaX,$metaY,$metaZ,$isGold )
+        elseif(isodd($metaX) && iseven($metaY) && isodd($metaZ))    
+            appendToWorkQueueBasic(workQueueOEO,workQueueOEOcounter, $metaX,$metaY,$metaZ,$isGold )  
+        elseif(isodd($metaX) && isodd($metaY) && isodd($metaZ))    
+            appendToWorkQueueBasic(workQueueOOO,workQueueOOOcounter, $metaX,$metaY,$metaZ,$isGold )
+        end
 
+    end)#qote 
+end#appendToWorkQueue
+
+
+macro appendToWorkQueueBasic(workQueaue,workQueauecounter, metaX,metaY,metaZ,isGold ) 
+    return esc(quote 
+    old =  atomicallyAddOne($workQueauecounter)+1
+    # CUDA.@cuprint "in appendToWorkQueue metaX $(metaX) metaY $(metaY) metaZ $(metaZ) isGold $(isGold) old $(old) \n"
+
+    $workQueaue[1,old]= UInt16($metaX)
+    $workQueaue[2,old]= UInt16($metaY)
+    $workQueaue[3,old]= UInt16($metaZ)
+    $workQueaue[4,old]= UInt16($isGold)
+    end)#qote 
 end#appendToWorkQueue
 
 end#WorkQueueUtils
-
-
 
 # basicList = [-1,0,1]
 # function isAdjacent(liist)::Bool
