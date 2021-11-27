@@ -86,16 +86,17 @@ end
 
 
 function get_shmemMainKernel(dataBdim)
-    # resShmem = cld((dataBdim[1]+2)*(dataBdim[2]+2)*(dataBdim[2]+2),8) #dividing by 8 as we want bytes
-    # sourceShmem = cld((dataBdim[1])*(dataBdim[2])*(dataBdim[2]),8) #dividing by 8 as we want bytes
-    shmemblockData= sizeof(UInt32)*37*32
+    
+    shmemblockData= sizeof(UInt32)*dataBdim[1]* dataBdim[2]
+    resShmemblockData= sizeof(UInt32)*dataBdim[1]* dataBdim[2]
+    shmemPaddings= sizeof(Bool)*(  max(dataBdim[1], dataBdim[2])*(  max(dataBdim[1], dataBdim[2])
     shmemSum= sizeof(UInt32)*36*14
     areToBeValidated= sizeof(Bool)*14
     isAnythingInPadding= cld(6,8)
     alreadyCoveredInQueues= sizeof(UInt32)*14
     someBools = sizeof(Bool)*4
     someInt16 = sizeof(UInt16)*3
-return shmemSum+areToBeValidated+isAnythingInPadding+alreadyCoveredInQueues+someBools+shmemblockData+someInt16
+return shmemSum+areToBeValidated+isAnythingInPadding+alreadyCoveredInQueues+someBools+shmemblockData+someInt16+resShmemblockData
 end
 
 function get_shmemBoolKernel(dataBdim)
