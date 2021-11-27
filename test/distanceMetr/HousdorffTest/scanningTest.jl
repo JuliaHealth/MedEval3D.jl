@@ -61,7 +61,7 @@ offset = -49
             #    println("list $([innerJ+1,innerJ+2,innerJ+3,1,1,1]) ind $(offset+j+innerJ*quueueNumb)   ")
             # end  
         #the bigger the number the more repetitions and more non repeated elements 
-           resList[offset+(j+1),:]= [mod(j,quueueNumb*5)+1,mod(j,quueueNumb*5)+2,mod(j,quueueNumb*5)+3,1,1,1]
+           resList[offset+(j+1),:]= [mod(j,quueueNumb*5)+1,mod(j,quueueNumb*5)+2,mod(j,quueueNumb*5)+3,1,1,1,1]
 
            metaData[1,1,1,getNewCountersBeg()+quueueNumb]+=1 
            metaData[1,1,1,getBeginingOfFpFNcounts()+quueueNumb]+=2 # so all will remain active
@@ -70,12 +70,12 @@ end#for
 
 
 #should be first queue in block 3,3,3
-resList[127701+1,:] = [1,1,1,1,1,1]
-resList[127701+2,:] = [1,1,1,0,1,1]
-resList[127701+3,:] = [1,1,1,1,1,1]#repeat
-resList[127701+4,:] = [1,2,1,1,1,1]
-resList[127701+5,:] = [1,1,2,1,1,1]
-resList[127701+6,:] = [2,1,1,1,1,1]
+resList[127701+1,:] = [1,1,1,1,1,1,1]
+resList[127701+2,:] = [1,1,1,0,1,1,1]
+resList[127701+3,:] = [1,1,1,1,1,1,1]#repeat
+resList[127701+4,:] = [1,2,1,1,1,1,1]
+resList[127701+5,:] = [1,1,2,1,1,1,1]
+resList[127701+6,:] = [2,1,1,1,1,1,1]
 
 metaData[3,3,3,getNewCountersBeg()+1]+=6 
 ####### check is test written well (testing the test)

@@ -256,7 +256,7 @@ end
             # any duplicate in case there will be we need to decrement counter and set the corresponding duplicated entry to 0 
             #here we load data about wheather there is anything to be validated here - we save data so it can be read from the perspective of this block
             # #and the blocks aroud that will want to analyze paddings
-            @loadAndScanForDuplicates(iterThrougWarNumb,$locArr,$offsetIter,localOffset)
+            @loadAndScanForDuplicates(iterThrougWarNumb,$locArr,$offsetIter)
 
 
 

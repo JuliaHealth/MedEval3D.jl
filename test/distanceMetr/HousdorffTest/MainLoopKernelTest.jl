@@ -24,7 +24,7 @@ oldBlockCounter= CUDA.zeros(1)
 function clearKernel(oldBlockCounter,resShmem,sourceShmem, clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength, sourceShmemTotalLength)
     locArr=0
     offsetIter=0
-    localOffset=0
+    # localOffset=0
 
     MainLoopKernel.@clearBeforeNextDilatation( clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength, sourceShmemTotalLength)
  return

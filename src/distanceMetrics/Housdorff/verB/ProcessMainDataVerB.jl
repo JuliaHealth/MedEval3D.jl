@@ -102,7 +102,7 @@ end#processMaskData
 macro loadMainValues(mainArrGPU,xMeta,yMeta,zMeta)
     return esc(quote
     @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,$xMeta,$yMeta,$zMeta, begin
-
+    
      maskBool=$mainArrGPU[x,y,z]
     #  if(maskBool)
     #     CUDA.@cuprint "\n x $(x) y $(y) z $(z) xpos $(xpos) ypos $(ypos) zpos $(zpos) \n "

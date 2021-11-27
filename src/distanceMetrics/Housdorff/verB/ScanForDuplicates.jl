@@ -14,7 +14,8 @@ macro scanForDuplicatesB(oldCount, countDiff,localOffset)#innerWarpNumb,shmemblo
     return esc(quote
     #<13 becouse we are intrested only in border queues as only in those we can have overlap
     if(innerWarpNumb<13)
-        @exOnWarp innerWarpNumb begin
+        sync_threads()
+        @exOnWarp innerWarpNumb begin 
            #we loaded data into threades registers so now we need to iteratively go through this and add this register info to shared memory to be available to all threads 
            @unroll for threadNumber in 1:32 # we need to analyze all thread id x 
                     if( threadIdxX()==threadNumber ) #now we need some  values that are in the registers  of the associated thread 
@@ -25,10 +26,10 @@ macro scanForDuplicatesB(oldCount, countDiff,localOffset)#innerWarpNumb,shmemblo
                         #will be used in order to keep track of proper new size of counter - will stay 0 if we have no duplicates
                         shmemSum[36,innerWarpNumb]= 0
                     end# if ( threadIdxX()==warpNumb )
-                sync_warp()# now we should have the required number for scanning of new values for duplicates important that we are analyzing now given queue with just single warp                  
-                    scanForDuplicatesMainPart(shmemSum,innerWarpNumb,resListIndicies,metaData,xMeta,yMeta,zMeta,shmemblockData,metaDataDims,threadNumber,maxResListIndex,outerWarpLoop,alreadyCoveredInQueues, isInRange)
-                sync_warp()
-            end # for warp number  
+                sync_warp()# now we should have the required number for scanning of new values for duplicates important that we are analyzing now given queue with just single warp - so we also get separate blocks as each block is represented by given idX              
+                    scanForDuplicatesMainPart(shmemSum,innerWarpNumb,resListIndicies,metaData,xMeta,yMeta,zMeta,shmemblockData,metaDataDims,threadNumber,maxResListIndex,outerWarpLoop,alreadyCoveredInQueues, isInRange,resList,dataBdim)
+                sync_threads()
+            end # for threadNumber 
         end #exOnWarp
     end
 end)#qote       
@@ -38,16 +39,28 @@ end
 main part of scanninf we are already on a correct warp; we already have old counter value and new counter value available in shared memory
 now we need to access the result queue starting from old counter 
 """
-function  scanForDuplicatesMainPart(shmemSum,innerWarpNumb,resListIndicies,metaData,xMeta,yMeta,zMeta,shmemblockData,metaDataDims,threadNumber,maxResListIndex,outerWarpLoop,alreadyCoveredInQueues, isInRange)
+function  scanForDuplicatesMainPart(shmemSum,innerWarpNumb,resListIndicies,metaData,xMeta,yMeta,zMeta,shmemblockData,metaDataDims,threadNumber,maxResListIndex,outerWarpLoop,alreadyCoveredInQueues, isInRange,resList,dataBdim)
     #this hold information wheather we have any new entries in a result queue
     if(shmemSum[34,innerWarpNumb]>0 )
         #as we can analyze 32 numbers at once if the amount of new results is bigger we need to do it in multiple passes 
         @unroll for scanIter in 0:fld(shmemSum[34,innerWarpNumb],32)
                 # here we are loading data about linearized indicies of result in main  array depending on a queue we are analyzing it will tell about gold or other pas
-                # if(((scanIter*32) + threadIdxX())< shmemSum[34,innerWarpNumb]  )
-                    shmemSum[threadIdxX(),innerWarpNumb] = resListIndicies[(shmemSum[33,innerWarpNumb]  +shmemSum[35,innerWarpNumb] + (scanIter*32) + threadIdxX())]
+                    entryIndex = (shmemSum[33,innerWarpNumb]  +shmemSum[35,innerWarpNumb] + (scanIter*32) + threadIdxX())
+                    shmemSum[threadIdxX(),innerWarpNumb] = resListIndicies[entryIndex]
+                    #now becouse the entries from  paddings had not been saved into the dilatation arrays we need to do it now 
+                    if(resList[7]==1) #checking wheather result entry originated from padding 
+                        #becouse we are inside threadNumber loop we are sure that this datablock will not by modified by any other warp - the only thing we need to be sure is that two threads from the same warp will not try to modify the same integer ...
+                        #situation is diffrent for diffrent queues 
+                            #in case of top and down we do not need to be afreaid of overwriting
+                            if(innerWarpNumb>8 && innerWarpNumb<13)
+                                
+                            end    
+                            #for anterior posterior we need to be sure that xses are diffrent
+                            #for left and right we need to be sure that y are diffrent
 
-                # end
+                        krowa
+
+                    end    
             sync_warp() # now we have 32 linear indicies loaded into the shared memory
             #so we need to load some value into single value into thread and than go over all value in shared memory  
             scanWhenDataInShmem(shmemSum,innerWarpNumb, scanIter,resListIndicies,metaData,xMeta,yMeta,zMeta,metaDataDims,threadNumber,maxResListIndex,outerWarpLoop ,alreadyCoveredInQueues )           
@@ -78,15 +91,8 @@ function  scanForDuplicatesMainPart(shmemSum,innerWarpNumb,resListIndicies,metaD
                     if(isInRange && updated!= @accMeta((getBeginingOfFpFNcounts()+innerWarpNumb)) )
                         #so in res shmem we have information weather we should  validate this queue ...
                         shmemblockData[(threadIdxX())+(innerWarpNumb+21)*33]= 1
-                    #     sourceShmem[(threadIdxX())+(33*(6+(isodd(innerWarpNumb)*2)) )]= true
-                    # if(threadIdxX()==3 && yMeta==2 && zMeta==2)
-                    #     CUDA.@cuprint "set true in  $((threadIdxX())+33*(6+(isodd(innerWarpNumb) *2) )) innerWarpNumb $(innerWarpNumb)  diff $((shmemSum[34,innerWarpNumb]-shmemSum[36,innerWarpNumb])) idX $(threadIdxX())  \n"
-                    # end    
                     end
-                    # here we are marking information is there any fp or fn in this block needed covering
-                    #now we will use the fact that all odd numbered queues are fp related and all even FN related 
-                    #so at 6*33+ idX we have fn related and at 7*33 +idX fp related
-                     
+                    
                  end    
             end   
              sync_warp()
@@ -143,71 +149,71 @@ end #scanWhenDataInShmem
     locArr,offsetIter,localOffset - variables used for storing some important constants
     
     """
-    macro loadAndScanForDuplicates(iterThrougWarNumb,locArr,offsetIter,localOffset)
+    macro loadAndScanForDuplicates(iterThrougWarNumb,locArr,offsetIter)
 
         return esc(quote
 
-        @unroll for outerWarpLoop in 0:$iterThrougWarNumb     
-                #represents the number of queue if we have enought warps at disposal it equals warp number so idY
-                innerWarpNumb = (threadIdxY()+ outerWarpLoop*blockDimY())
-                #now we will load the diffrence between old and current counter if we are in range of metadata
-                if(( innerWarpNumb)<15)
-                    @exOnWarp innerWarpNumb begin
-                        if(isInRange)
-                            #store result in registers
-                            #old count
-                            $locArr = @accMeta((getOldCountersBeg()) +innerWarpNumb) 
-                            # #diffrence new - old 
-                            $offsetIter=   @accMeta(((getNewCountersBeg()) +innerWarpNumb) )- $locArr
-                            # #offset to find where are the results associated with given queue
-                            $localOffset =  @accMeta((getResOffsetsBeg()+innerWarpNumb))+$locArr
-                            # # enable access to information is it bigger than 0 to all threads in block
-                            shmemblockData[(threadIdxX())+(innerWarpNumb+6)*33] = UInt32($offsetIter >0)
-                            #for all border queues this information will be written down after scanning for duplicates here we are just getting info from main part ...
-                        else# if not in range
-                            $locArr = 0
-                            $offsetIter=0
-                            $localOffset=0
-                        end#if in range
-                    end #@exOnWarp
-                end#if
+        # @unroll for outerWarpLoop in 0:$iterThrougWarNumb     
+        #         #represents the number of queue if we have enought warps at disposal it equals warp number so idY
+        #         innerWarpNumb = (threadIdxY()+ outerWarpLoop*blockDimY())
+        #         #now we will load the diffrence between old and current counter if we are in range of metadata
+        #         if(( innerWarpNumb)<15)
+        #             @exOnWarp innerWarpNumb begin
+        #                 if(isInRange)
+        #                     #store result in registers
+        #                     #old count
+        #                     $locArr = @accMeta((getOldCountersBeg()) +innerWarpNumb) 
+        #                     # #diffrence new - old 
+        #                     $offsetIter=   @accMeta(((getNewCountersBeg()) +innerWarpNumb) )- $locArr
+        #                     # #offset to find where are the results associated with given queue
+        #                     $localOffset =  @accMeta((getResOffsetsBeg()+innerWarpNumb))+$locArr
+        #                     # # enable access to information is it bigger than 0 to all threads in block
+        #                     shmemblockData[(threadIdxX())+(innerWarpNumb+6)*33] = UInt32($offsetIter >0)
+        #                     #for all border queues this information will be written down after scanning for duplicates here we are just getting info from main part ...
+        #                 else# if not in range
+        #                     $locArr = 0
+        #                     $offsetIter=0
+        #                     $localOffset=0
+        #                 end#if in range
+        #             end #@exOnWarp
+        #         end#if
 
-                sync_threads()
-                # so queaue 13 or 14
-                    @exOnWarp innerWarpNumb begin
-                        if(innerWarpNumb==13 || innerWarpNumb==14)# so queaue 13 or 14
-                            if($offsetIter>0) 
-                                    # krr if($offsetIter!= metaData[xMeta+1,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+innerWarpNumb ])
-                                if($offsetIter!=  @accMeta((getBeginingOfFpFNcounts()+innerWarpNumb)) )
-                                    shmemblockData[(threadIdxX())+(innerWarpNumb+21)*33]= 1
-                                    #sourceShmem[(threadIdxX())+33*(6+(isodd(innerWarpNumb) *2) )]= true
-                                end
-                            end
-                            locOffset= UInt16(1)
-                            #setting what we need to locArr and reducing value in a warp
-                            $locArr+=$offsetIter
-                            #TODO (try to do warp reduction below instead of atomic... )
-                            if(($offsetIter)>0)
-                                @atomic alreadyCoveredInQueues[innerWarpNumb]+=($offsetIter)
-                            end                       
-                            #@redOnlyStepOne(locOffset, shmemSum, $locArr, +)
-                            #now we have warp reduced value on first thread
-                            # @ifX 1 alreadyCoveredInQueues[innerWarpNumb]+=$locArr
-                        end#if    
-                    end#ex on warp    
-                    sync_threads()
+        #         sync_threads()
+        #         # so queaue 13 or 14
+        #             @exOnWarp innerWarpNumb begin
+        #                 if(innerWarpNumb==13 || innerWarpNumb==14)# so queaue 13 or 14
+        #                     if($offsetIter>0) 
+        #                             # krr if($offsetIter!= metaData[xMeta+1,yMeta+1,zMeta+1,getBeginingOfFpFNcounts()+innerWarpNumb ])
+        #                         if($offsetIter!=  @accMeta((getBeginingOfFpFNcounts()+innerWarpNumb)) )
+        #                             shmemblockData[(threadIdxX())+(innerWarpNumb+21)*33]= 1
+        #                             #sourceShmem[(threadIdxX())+33*(6+(isodd(innerWarpNumb) *2) )]= true
+        #                         end
+        #                     end
+        #                     locOffset= UInt16(1)
+        #                     #setting what we need to locArr and reducing value in a warp
+        #                     $locArr+=$offsetIter
+        #                     #TODO (try to do warp reduction below instead of atomic... )
+        #                     if(($offsetIter)>0)
+        #                         @atomic alreadyCoveredInQueues[innerWarpNumb]+=($offsetIter)
+        #                     end                       
+        #                     #@redOnlyStepOne(locOffset, shmemSum, $locArr, +)
+        #                     #now we have warp reduced value on first thread
+        #                     # @ifX 1 alreadyCoveredInQueues[innerWarpNumb]+=$locArr
+        #                 end#if    
+        #             end#ex on warp    
+        #             sync_threads()
 
-                #main function for scanning
+        #         #main function for scanning
               
-               @scanForDuplicatesB($locArr, $offsetIter,$localOffset)#$locArr, $offsetIter,innerWarpNumb,shmemblockData,shmemSum,resListIndicies,metaData,xMeta,yMeta,zMeta,metaDataDims,$localOffset,maxResListIndex,outerWarpLoop,alreadyCoveredInQueues,sourceShmem)
+        #        @scanForDuplicatesB($locArr, $offsetIter,$localOffset)#$locArr, $offsetIter,innerWarpNumb,shmemblockData,shmemSum,resListIndicies,metaData,xMeta,yMeta,zMeta,metaDataDims,$localOffset,maxResListIndex,outerWarpLoop,alreadyCoveredInQueues,sourceShmem)
              
-               if(innerWarpNumb<15)
-                    shmemSum[threadIdxX(),innerWarpNumb]=0
-                end
+        #        if(innerWarpNumb<15)
+        #             shmemSum[threadIdxX(),innerWarpNumb]=0
+        #         end
 
 
-            end#for
-            sync_threads()
+        #     end#for
+        #     sync_threads()
 
             @unroll for outerWarpLoop in 0:$iterThrougWarNumb     
                 #represents the number of queue if we have enought warps at disposal it equals warp number so idY
@@ -224,13 +230,10 @@ end #scanWhenDataInShmem
                 end         
             end#for    
             @exOnWarp 15 if(isInRange) 
-                #metaData[xMeta+1,yMeta+1,zMeta+1,getIsToBeAnalyzedNumb()+15]= (@getIsToVal(1) || @getIsToVal(3)|| @getIsToVal(5)|| @getIsToVal(7)|| @getIsToVal(11)|| @getIsToVal(13)) #sourceShmem[(threadIdxX())+33*8]
 
             @setMeta((getIsToBeAnalyzedNumb()+15), (@getIsToVal(1) || @getIsToVal(3)|| @getIsToVal(5)|| @getIsToVal(7)|| @getIsToVal(11)|| @getIsToVal(13)) )#sourceShmem[(threadIdxX())+33*8]
-               #shmemblockData[(threadIdxX())+(1+15)*33] || shmemblockData[(threadIdxX())+(3+15)*33] 
             end
             @exOnWarp 16 if(isInRange)
-                #metaData[xMeta+1,yMeta+1,zMeta+1,getIsToBeAnalyzedNumb()+16 ]=(@getIsToVal(2) || @getIsToVal(4)|| @getIsToVal(6)|| @getIsToVal(8)|| @getIsToVal(10)|| @getIsToVal(12)) #sourceShmem[(threadIdxX())+33*6] 
 
                 @setMeta((getIsToBeAnalyzedNumb()+16 ),(@getIsToVal(2) || @getIsToVal(4)|| @getIsToVal(6)|| @getIsToVal(8)|| @getIsToVal(10)|| @getIsToVal(12)) )#sourceShmem[(threadIdxX())+33*6] 
             end

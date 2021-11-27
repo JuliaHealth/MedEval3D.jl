@@ -65,7 +65,7 @@ alreadyCoveredInQueues =@cuStaticSharedMem(UInt32,(14))
  #here we will store in registers data uploaded from mask for later verification wheather we should send it or not
  locArr= Int32(0)
  offsetIter = UInt16(0)
- localOffset= UInt32(0)
+#  localOffset= UInt32(0)
  #boolean usefull in the iterating over private part of work queue 
  isAnyBiggerThanZero =  @cuStaticSharedMem(Bool,1)
  #loading data to shared memory from global about is it even or odd pass
@@ -318,22 +318,30 @@ end
 
 """
 allocate after prepare bool kernel had finished execution
-return metaData,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,workQueaue,resList,resListIndicies,maxResListIndex
+return metaData,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,resList,workQueueEEE
+,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter
+,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter
+,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter
+,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter
 """
 function getBigGPUForHousedorffAfterBoolKernel(metaData,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp,reducedGoldA,reducedSegmA,dataBdim)
     ###we return only subset of boolean arrays that we are intrested in 
     # println( "zzz fp[1] $(fp[1])  fn[1] $(fn[1]) \n")
-    workQueaue= WorkQueueUtils.allocateWorkQueue(fp[1],fn[1])
-    resList,resListIndicies,maxResListIndex= allocateResultLists(fp[1],fn[1])
+    resList = allocateResultLists(fp[1],fn[1])
     ###we need to return subset of metadata that we are intrested in 
     goldArr= reducedGoldA[minxRes[1]*dataBdim[1]:maxxRes[1]*dataBdim[1],minyRes[1]*dataBdim[2]:maxyRes[1]*dataBdim[2],minzRes[1]:maxzRes[1]]
     segmArr = reducedSegmA[minxRes[1]*dataBdim[1]:maxxRes[1]*dataBdim[1],minyRes[1]*dataBdim[2]:maxyRes[1]*dataBdim[2],minzRes[1]:maxzRes[1]]
+    newMeta = metaData[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]   ]
+    workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter= WorkQueueUtils.allocateWorkQueue(length(newMeta))
 
-    return(metaData[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]   ]
+    return(newMeta
             ,goldArr  ,segmArr
             ,copy(goldArr) ,copy(segmArr)
-            ,workQueaue
-            ,resList,resListIndicies,maxResListIndex
+            ,resList,workQueueEEE
+            ,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter
+            ,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter
+            ,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter
+            ,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter
     )
 end 
 
