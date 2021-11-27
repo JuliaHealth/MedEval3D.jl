@@ -65,33 +65,33 @@ macro validateData(mainArrDims, inBlockLoopX,inBlockLoopY,inBlockLoopZ,mainArr,r
 
 
 
-"""
-uploaded data from shared memory in amask of intrest gets processed in this function so we need to  
-    - save it to registers (to locArr)
-    - save to the 6 surrounding voxels in shared memory intermediate results 
-            - as we also have padding we generally start from spot 2,2 as up and to the left we have 1 padding
-            - also we need to make sure that in corner cases we are getting to correct spot
-"""
-macro processMaskData( maskBool) #::CUDA.CuRefValue{Int32}
-    # save it to registers - we will need it later
-    #locArr[zIter]=maskBool
-    #now we are saving results evrywhere we are intrested in so around without diagonals (we use supremum norm instead of euclidean)
-    #locArr.x|= maskBool << zIter
-    return esc(quote
-        if($maskBool)
-            sourceShmem[xpos,ypos, zpos]= true          
+# """
+# uploaded data from shared memory in amask of intrest gets processed in this function so we need to  
+#     - save it to registers (to locArr)
+#     - save to the 6 surrounding voxels in shared memory intermediate results 
+#             - as we also have padding we generally start from spot 2,2 as up and to the left we have 1 padding
+#             - also we need to make sure that in corner cases we are getting to correct spot
+# """
+# macro processMaskData( maskBool) #::CUDA.CuRefValue{Int32}
+#     # save it to registers - we will need it later
+#     #locArr[zIter]=maskBool
+#     #now we are saving results evrywhere we are intrested in so around without diagonals (we use supremum norm instead of euclidean)
+#     #locArr.x|= maskBool << zIter
+#     return esc(quote
+#         if($maskBool)
+#             sourceShmem[xpos,ypos, zpos]= true          
 
-            @inbounds resShmem[xpos+1,ypos+1,zpos]=true #up
-            @inbounds resShmem[xpos+1,ypos+1,zpos+2]=true #down
+#             @inbounds resShmem[xpos+1,ypos+1,zpos]=true #up
+#             @inbounds resShmem[xpos+1,ypos+1,zpos+2]=true #down
         
-            @inbounds  resShmem[xpos,ypos+1,zpos+1]=true #left
-            @inbounds  resShmem[xpos+2,ypos+1,zpos+1]=true #right
+#             @inbounds  resShmem[xpos,ypos+1,zpos+1]=true #left
+#             @inbounds  resShmem[xpos+2,ypos+1,zpos+1]=true #right
 
-            @inbounds  resShmem[xpos+1,ypos+2,zpos+1]=true #front
-            @inbounds  resShmem[xpos+1,ypos,zpos+1]=true #back
-        end#if    
-    end)
-end#processMaskData
+#             @inbounds  resShmem[xpos+1,ypos+2,zpos+1]=true #front
+#             @inbounds  resShmem[xpos+1,ypos,zpos+1]=true #back
+#         end#if    
+#     end)
+# end#processMaskData
 
 
 """
@@ -101,47 +101,52 @@ end#processMaskData
                 
 macro loadMainValues(mainArrGPU,xMeta,yMeta,zMeta)
     return esc(quote
-    @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,$xMeta,$yMeta,$zMeta, begin
+  #by construction one thread will neeed to load just one integer into its registers and to resShmemblockData
+  locArr = mainArrGPU[$xMeta*dataBdim[1]+ threadIdX(),$yMeta*dataBdim[2]+ threadIdY(),$zMeta]
+  shmemblockData[threadIdX(),threadIdY()] = locArr
+  #now immidiately we can go with dilatationsand top and down padding analysis 
+  
+#     @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,$xMeta,$yMeta,$zMeta, begin
     
-     maskBool=$mainArrGPU[x,y,z]
-    #  if(maskBool)
-    #     CUDA.@cuprint "\n x $(x) y $(y) z $(z) xpos $(xpos) ypos $(ypos) zpos $(zpos) \n "
-    #  end   
-     @processMaskData( maskBool) 
-    #we add to source shmem also becouse we need to establish direction later 
-    sourceShmem[xpos,ypos,zpos] = maskBool
+#      maskBool=$mainArrGPU[x,y,z]
+#     #  if(maskBool)
+#     #     CUDA.@cuprint "\n x $(x) y $(y) z $(z) xpos $(xpos) ypos $(ypos) zpos $(zpos) \n "
+#     #  end   
+#      @processMaskData( maskBool) 
+#     #we add to source shmem also becouse we need to establish direction later 
+#     sourceShmem[xpos,ypos,zpos] = maskBool
 
-    end  )#iterDataBlock
+#     end  )#iterDataBlock
 end) #quote              
 end #loadMainValues
                 
 
-"""
-now in case we  want later to establish source of the data - would like to find the true distances  not taking the assumption of isometric voxels
-we need to store now data from what direction given voxel was activated what will later gratly simplify the task of finding the true distance 
-we will record first found true voxel from each of six directions 
-                 top 6 
-                bottom 5  
-                left 2
-                right 1 
-                anterior 3
-                posterior 4
-"""
-function getDir(sourceShmem,xpos,ypos,zpos,dataBdim)::UInt8
-    return if(zpos-1>0 && @inbounds(sourceShmem[xpos,ypos,zpos-1])) 
-                6
-            elseif(zpos+1<=dataBdim[3] &&  @inbounds(sourceShmem[xpos,ypos,zpos+1]))
-                5
-            elseif(xpos-1>0 && @inbounds(sourceShmem[xpos-1,ypos,zpos]))
-                2
-            elseif(xpos+1<=dataBdim[1] &&  @inbounds(sourceShmem[xpos+1,ypos,zpos]))
-                1
-            elseif(ypos+1<=dataBdim[2] &&  @inbounds(sourceShmem[xpos,ypos+1,zpos]))
-                3
-            else 
-                4            
-            end
-end#getDir
+# """
+# now in case we  want later to establish source of the data - would like to find the true distances  not taking the assumption of isometric voxels
+# we need to store now data from what direction given voxel was activated what will later gratly simplify the task of finding the true distance 
+# we will record first found true voxel from each of six directions 
+#                  top 6 
+#                 bottom 5  
+#                 left 2
+#                 right 1 
+#                 anterior 3
+#                 posterior 4
+# """
+# function getDir(sourceShmem,xpos,ypos,zpos,dataBdim)::UInt8
+#     return if(zpos-1>0 && @inbounds(sourceShmem[xpos,ypos,zpos-1])) 
+#                 6
+#             elseif(zpos+1<=dataBdim[3] &&  @inbounds(sourceShmem[xpos,ypos,zpos+1]))
+#                 5
+#             elseif(xpos-1>0 && @inbounds(sourceShmem[xpos-1,ypos,zpos]))
+#                 2
+#             elseif(xpos+1<=dataBdim[1] &&  @inbounds(sourceShmem[xpos+1,ypos,zpos]))
+#                 1
+#             elseif(ypos+1<=dataBdim[2] &&  @inbounds(sourceShmem[xpos,ypos+1,zpos]))
+#                 3
+#             else 
+#                 4            
+#             end
+# end#getDir
 
 """
 collects all needed functions to analyze given data blocks 
