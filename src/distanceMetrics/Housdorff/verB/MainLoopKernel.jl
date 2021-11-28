@@ -153,7 +153,7 @@ macro workQueueIterationInvoke(workQueaueCounter,workQueaue)
     return esc(quote
     @iterateOverWorkQueue($workQueaueCounter,$workQueaue
     ,dilatationArrs[isEvenPass[1]+1] #dilatation arrs
-    referenceArrs
+    ,referenceArrs
     ,dilatationArrs[2-isEvenPass[1]]# target arrs 
     , segmToBeDilatated[1],shmemSumLengthMaxDiv4,:(), ) 
     sync_grid(grid_handle)

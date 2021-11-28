@@ -4,7 +4,7 @@ makes some bitwise operations easier
 
 module BitWiseUtils
 
-export @setBitTo1, @setBitTo , isBit1AtPos
+export @setBitTo1, @setBitTo , isBit1AtPos, @bitDilatate
 """
 sets given bit of supplied number to 1
 """
@@ -34,8 +34,29 @@ end#isBit1AtPos
     
 
 """
+needed for bit dilatation in the kernel 
+    Given 32 bit integer source and target i woul like to do sth like one dimensional mathematical morphology dilatation so given bit at position x is 1 in source i would like to set bits at position x+1 and x-1 at target to 1 Other bits of target should not be changed so for example
+
+Given 1 0 0 0 1 0 0 0 ... Set target integer into 1 1 0 1 1 1 0 0 ...
+
+https://stackoverflow.com/questions/70134566/bit-wise-dilatation
+"""
+macro bitDilatate(x)
+    return esc(quote
+      ($x )=(($x )>> 1) | ($x) | (($x) << 1)
+    end)#quote
+end
 
 """
+Given 32 bit integers x  and y  i would like to set bits of x to 1 if in corresponding position of y there is 1  without modyfing other bits of y 
+    So for example  if x is 1 0 0 0 0 1 ...And y is 0 0 0 1 0 0  ...
+    I would like a result that would be  1 0 0 1 0 1 
+"""
+macro bitPassOnes(x)
+    return esc(quote
+
+    end)#quote
+end
 
 
 end#BitWiseUtils

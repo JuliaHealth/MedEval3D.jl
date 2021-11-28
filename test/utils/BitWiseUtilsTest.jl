@@ -26,3 +26,22 @@ pos = 2
 
 numbs=[2]
 @setBitTo(numbs[1],pos,true)
+
+
+##### bitDilatate
+numb = 0
+@setBitTo(numb,1,true)
+@setBitTo(numb,5,true)
+
+@bitDilatate(numb)
+
+@test isBit1AtPos(numb,1)
+@test isBit1AtPos(numb,2)
+@test !isBit1AtPos(numb,3)
+@test isBit1AtPos(numb,4)
+@test isBit1AtPos(numb,5)
+@test isBit1AtPos(numb,6)
+@test !isBit1AtPos(numb,7)
+
+
+
