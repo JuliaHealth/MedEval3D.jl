@@ -32,6 +32,12 @@ function isBit1AtPos(numb,pos)::Bool
   return  (numb & (1 << (pos - 1)))>0
 end#isBit1AtPos
     
+
+"""
+
+"""
+
+
 end#BitWiseUtils
 
 

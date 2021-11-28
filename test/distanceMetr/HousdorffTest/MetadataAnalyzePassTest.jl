@@ -202,7 +202,7 @@ for j in 1:2
   metaData[j,j,j, getBeginingOfFpFNcounts()+16]=15+j
   metaData[j,j,j, getBeginingOfFpFNcounts()+17]=16+j
 end  
-shmemblockDataLoop,shmemblockDataLenght,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength=calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
+inBlockLoopXZIterWithPadding,shmemblockDataLoop,shmemblockDataLenght,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength=calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
 function analyzeMetadataFirstPassKernel(loopWarpMeta,metaDataLength,workQueaue,workQueaueCounter,metaData,metaDataDims,loopXMeta,loopYZMeta,globalFpResOffsetCounter, globalFnResOffsetCounter)
   shmemSum =  @cuStaticSharedMem(Float32,(35,16)) # we need this additional 33th an 34th spots
@@ -316,7 +316,7 @@ metaData[xMeta,yMeta+1,zMeta+1,getActiveSegmNumb() ]=1
 metaData[xMeta,yMeta+1,zMeta+1,getFullInSegmNumb() ]=1
 
 
-shmemblockDataLoop,shmemblockDataLenght,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
+inBlockLoopXZIterWithPadding,shmemblockDataLoop,shmemblockDataLenght,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
 #as we have counters we check in shmem are they correct
 

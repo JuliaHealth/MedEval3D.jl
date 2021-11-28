@@ -149,11 +149,12 @@ end #loadCounters
             # #we are adding 1 to meta y z becouse those are 0 based ...           
 
             @ifY 1 if(shmemSum[threadIdxX(),15]>0 && isInRange) begin  
-                    appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 ) 
+                @appendToWorkQueue(metaX+1,metaY+1,metaZ+1,0 )  
                 end   
             end     
             @ifY 2 if(shmemSum[threadIdxX(),16]>0 && isInRange) begin 
-                 appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 ) end  
+                 @appendToWorkQueue(metaX+1,metaY+1,metaZ+1,1 )  
+                    end  
                 end      
             
             @exOnWarp 3 if((shmemSum[threadIdxX(),15]) >0 && isInRange) setBlockasCurrentlyActiveInSegm(metaData, xMeta+1,yMeta+1,zMeta+1)    end 
@@ -217,12 +218,12 @@ macro setIsToBeActive()
     return esc(quote
         @exOnWarp 1 if(!(shmemblockData[(threadIdxX())] ==1) && ((shmemblockData[(threadIdxX())+33] ==1) ||  (shmemblockData[(threadIdxX())+33*2])==1) &&isInRange  )  
                         @setMeta(getActiveGoldNumb(),1)
-                        appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 1 )
+                        @appendToWorkQueue(metaX+1,metaY+1,metaZ+1,1 )  
                     end
         @exOnWarp 2 if(!(shmemblockData[(threadIdxX())+33*3]==1)  && ((shmemblockData[(threadIdxX())+33*4]==1)  ||  (shmemblockData[(threadIdxX())+33*5])==1) &&isInRange ) 
                         @setMeta(getActiveSegmNumb(),1)
-                        appendToWorkQueue(workQueaue,workQueaueCounter, xMeta,yMeta+1,zMeta+1, 0 )             
-            end
+                        @appendToWorkQueue(metaX+1,metaY+1,metaZ+1,0 )  
+                    end
     end)#quote
 
 end    

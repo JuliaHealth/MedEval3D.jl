@@ -153,7 +153,8 @@ collects all needed functions to analyze given data blocks
 - so it loads data from main array (what is main and reference array depends on is it a gold pass or other pass)
 then 
 """
-macro executeDataIterWithPadding(mainArrDims, inBlockLoopX,inBlockLoopY,inBlockLoopZ,mainArr,refArr,xMeta,yMeta,zMeta,isGold,iterNumb)
+macro executeDataIterWithPadding(mainArrDims, inBlockLoopXZIterWithPadding
+    ,mainArr,refArr,targetArr,xMeta,yMeta,zMeta,isGold,iterNumb)
     return esc(quote
   ############## upload data
   @ifY 1 if(threadIdxX()<15) areToBeValidated[threadIdxX()] =metaData[($xMeta+1),($yMeta+1),($zMeta+1),(getIsToBeAnalyzedNumb() +threadIdxX())]  end 

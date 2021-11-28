@@ -1,6 +1,6 @@
 module WorkQueueUtils
 using  CUDA,Main.CUDAAtomicUtils
-export allocateWorkQueue,appendToWorkQueue
+export allocateWorkQueue,appendToWorkQueue,@appendToWorkQueueBasic,@appendToWorkQueue
 """
 allocate memory for  work queues
     entries means
@@ -17,15 +17,15 @@ allocate memory for  work queues
             ,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter
     """
 function allocateWorkQueue(metaDataLength)
-    queueSize = cld(metaDataLength*2,8)#*2 becouse of gold and segm pass divided by 8 becouse we have 8 work queues
-    return (  CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(UInt16) 
-    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(UInt16) 
-    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(UInt16) 
-    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(UInt16) 
-    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(UInt16) 
-    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(UInt16) 
-    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(UInt16) 
-    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(UInt16)     
+    queueSize = cld(metaDataLength*2,8)+2#*2 becouse of gold and segm pass divided by 8 becouse we have 8 work queues
+    return (  CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(UInt16,(1)) 
+    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1))     
     )
 end
 
@@ -33,25 +33,25 @@ end
 atomically append the block linear index and information is it gold or other pass 
 also we need to be sure that we appended to the correct work queue based on the properties of the xMeta,yMeta,zMeta - so are they even, odd ...
 """
-macro appendToWorkQueue(workQueaue,workQueauecounter, metaX,metaY,metaZ,isGold ) 
+macro appendToWorkQueue(metaX,metaY,metaZ,isGold ) 
     return esc(quote 
 
         if(iseven($metaX) && iseven($metaY) && iseven($metaZ) )
-            appendToWorkQueueBasic(workQueueEEE,workQueueEEEcounter, $metaX,$metaY,$metaZ,$isGold )
+            @appendToWorkQueueBasic(workQueueEEE,workQueueEEEcounter, $metaX,$metaY,$metaZ,$isGold )
         elseif(iseven($metaX) && isodd($metaY) && iseven($metaZ))    
-            appendToWorkQueueBasic(workQueueEOE,workQueueEOEcounter, $metaX,$metaY,$metaZ,$isGold )
+            @appendToWorkQueueBasic(workQueueEOE,workQueueEOEcounter, $metaX,$metaY,$metaZ,$isGold )
         elseif(iseven($metaX) && iseven($metaY) && isodd($metaZ))    
-            appendToWorkQueueBasic(workQueueEEO,workQueueEEOcounter, $metaX,$metaY,$metaZ,$isGold )
+            @appendToWorkQueueBasic(workQueueEEO,workQueueEEOcounter, $metaX,$metaY,$metaZ,$isGold )
         elseif(isodd($metaX) && iseven($metaY) && iseven($metaZ))    
-            appendToWorkQueueBasic(workQueueOEE,workQueueOEEcounter, $metaX,$metaY,$metaZ,$isGold )
+            @appendToWorkQueueBasic(workQueueOEE,workQueueOEEcounter, $metaX,$metaY,$metaZ,$isGold )
         elseif(isodd($metaX) && isodd($metaY) && iseven($metaZ))    
-            appendToWorkQueueBasic(workQueueOOE,workQueueOOEcounter, $metaX,$metaY,$metaZ,$isGold )
+            @appendToWorkQueueBasic(workQueueOOE,workQueueOOEcounter, $metaX,$metaY,$metaZ,$isGold )
         elseif(iseven($metaX) && isodd($metaY) && isodd($metaZ))    
-            appendToWorkQueueBasic(workQueueEOO,workQueueEOOcounter, $metaX,$metaY,$metaZ,$isGold )
+            @appendToWorkQueueBasic(workQueueEOO,workQueueEOOcounter, $metaX,$metaY,$metaZ,$isGold )
         elseif(isodd($metaX) && iseven($metaY) && isodd($metaZ))    
-            appendToWorkQueueBasic(workQueueOEO,workQueueOEOcounter, $metaX,$metaY,$metaZ,$isGold )  
+            @appendToWorkQueueBasic(workQueueOEO,workQueueOEOcounter, $metaX,$metaY,$metaZ,$isGold )  
         elseif(isodd($metaX) && isodd($metaY) && isodd($metaZ))    
-            appendToWorkQueueBasic(workQueueOOO,workQueueOOOcounter, $metaX,$metaY,$metaZ,$isGold )
+            @appendToWorkQueueBasic(workQueueOOO,workQueueOOOcounter, $metaX,$metaY,$metaZ,$isGold )
         end
 
     end)#qote 
@@ -61,9 +61,9 @@ end#appendToWorkQueue
 macro appendToWorkQueueBasic(workQueaue,workQueauecounter, metaX,metaY,metaZ,isGold ) 
     return esc(quote 
     old =  atomicallyAddOne($workQueauecounter)+1
-    # CUDA.@cuprint "in appendToWorkQueue metaX $(metaX) metaY $(metaY) metaZ $(metaZ) isGold $(isGold) old $(old) \n"
+    # CUDA.@cuprint " ooo old $(old) metaX $($metaX) metaY $($metaY) metaZ $($metaZ) isGold $($isGold) workQueaue $(length($workQueaue)) \n"
 
-    $workQueaue[1,old]= UInt16($metaX)
+    $workQueaue[1,old]= $metaX
     $workQueaue[2,old]= UInt16($metaY)
     $workQueaue[3,old]= UInt16($metaZ)
     $workQueaue[4,old]= UInt16($isGold)
