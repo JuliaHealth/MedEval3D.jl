@@ -11,22 +11,28 @@ allocate memory for  work queues
  In order to prevent overwriting  we will create 8 separe work queues for each even or odd metax,metay and meta Z ... 
     also initializes counters for each 
     names are encoded like E is about even and O for odd so workQueueEEE will mean that all metaX,metaY and metaZ are even    
-   returns  workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter
-            ,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter
-            ,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter
-            ,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter
+   returns  workQueue,workQueueCounter
+   
+   
+   
+
     """
 function allocateWorkQueue(metaDataLength)
     queueSize = cld(metaDataLength*2,8)+2#*2 becouse of gold and segm pass divided by 8 becouse we have 8 work queues
-    return (  CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(UInt16,(1)) 
-    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
-    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
-    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
-    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
-    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
-    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
-    ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1))     
-    )
+    return (  CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(UInt16,(1)) )
+    
+    # workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter
+    # ,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter
+    # ,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter
+    # ,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter
+    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1))     
+    
 end
 
 """

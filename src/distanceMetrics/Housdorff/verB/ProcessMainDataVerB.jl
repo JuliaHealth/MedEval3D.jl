@@ -24,52 +24,29 @@ macro validateData(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr)
    locArr = @inbounds($targetArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta])
    # here we are anaylyzing only main part of the  data block paddings will be analyzed separately
    @unroll for bitIter in 1:32
-       resShemVal = isBit1AtPos(@inbounds(resShmemblockData[threadIdxX(),threadIdxY()]), bitIter)
-       inTarget = isBit1AtPos(locArr, bitIter)
-       #later usefull to establish is mask full
-       isMaskFull= resShemVal & isMaskFull
-       #so we have voxel that was not yet covered earlier, is covered now and is in refrence arr - so one where we establish is sth covered 
-       if(resShemVal && !inTarget)
-           # we need reference array value to check weather we had covered anything in this iteration
-            if($refArr[] == numberToLooFor)
-                @addResult(metaData
-                ,$xMeta,$yMeta ,$zMeta,resList
-                ,x
-                ,y
-                ,z
-                ,getDir(sourceShmem,xpos,ypos,zpos,dataBdim)
-                ,$iterNumb
-                ,getIndexOfQueue(xpos,ypos,zpos,dataBdim,(1-$isGold))
-                ,metaDataDims
-                ,mainArrDims
-                ,$isGold)
-            end
-       end  
+    #    resShemVal = isBit1AtPos(@inbounds(resShmemblockData[threadIdxX(),threadIdxY()]), bitIter)
+    #    inTarget = isBit1AtPos(locArr, bitIter)
+    #    #later usefull to establish is mask full
+    #    isMaskFull= resShemVal & isMaskFull
+    #    #so we have voxel that was not yet covered earlier, is covered now and is in refrence arr - so one where we establish is sth covered 
+    #    if(resShemVal && !inTarget)
+    #        # we need reference array value to check weather we had covered anything new from other arrayin this iteration
+    #         # if($refArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),($zMeta-1)*dataBdim[3]+ bitIter  ] == numberToLooFor)
+    #         #     @addResult(metaData
+    #         #     ,$xMeta,$yMeta ,$zMeta,resList
+    #         #     ,(($xMeta-1)*dataBdim[1]+ threadIdxX())
+    #         #     ,(($yMeta-1)*dataBdim[2]+ threadIdxY())
+    #         #     ,($zMeta-1)*dataBdim[3]+ bitIter
+    #         #     ,getDir(sourceShmem,xpos,ypos,zpos,dataBdim)
+    #         #     ,$iterNumb
+    #         #     ,getIndexOfQueue(threadIdxX(),threadIdxY(),bitIter,dataBdim,(1-$isGold))
+    #         #     ,metaDataDims
+    #         #     ,mainArrDims
+    #         #     ,$isGold)
+    #         # end
+    #    end  
    end 
    
-    @iterDataBlock($mainArrDims,dataBdim, $inBlockLoopX,$inBlockLoopY,$inBlockLoopZ,$xMeta,$yMeta,$zMeta,begin
-        locVal = @inbounds  sourceShmem[xpos,ypos,zpos]
-        resShemVal = @inbounds resShmem[xpos+1,ypos+1,zpos+1]             
-        locValOrShmem = (locVal | resShemVal)
-        #those needed to establish weather data block will remain active
-        isMaskFull= locValOrShmem & isMaskFull
-        #if it was already true earlier we do not want to reaanalyze it 
-        if(!locVal && resShemVal)       
-   # setting value in global memory
-            @inbounds  $mainArr[x,y,z]= true
-            # if we are here we have some voxel that was false in a primary mask and is becoming now true - if it is additionaly true in reference we need to add it to result
-    
-            if(@inbounds $refArr[x,y,z])
-                #results now are stored in a matrix where first 3 entries are x,y,z coordinates entry 4 is in which iteration we covered it and entry 5 from which direction - this will be used if needed        
-                #privateResCounter privateResArray are holding in metadata blocks results and counter how many results were already added 
-                #in each thread block we will have separate rescounter, and res array for goldboolpass and other pass
-                   #adding the result to the result list at correct spot - using metadata taken from metadata
-                   
-                   
-
-            end#if
-        end#if
-     end)#3d iter 
     end)
 
 
@@ -134,32 +111,32 @@ end
 
 
 
-# """
-# now in case we  want later to establish source of the data - would like to find the true distances  not taking the assumption of isometric voxels
-# we need to store now data from what direction given voxel was activated what will later gratly simplify the task of finding the true distance 
-# we will record first found true voxel from each of six directions 
-#                  top 6 
-#                 bottom 5  
-#                 left 2
-#                 right 1 
-#                 anterior 3
-#                 posterior 4
-# """
-# function getDir(sourceShmem,xpos,ypos,zpos,dataBdim)::UInt8
-#     return if(zpos-1>0 && @inbounds(sourceShmem[xpos,ypos,zpos-1])) 
-#                 6
-#             elseif(zpos+1<=dataBdim[3] &&  @inbounds(sourceShmem[xpos,ypos,zpos+1]))
-#                 5
-#             elseif(xpos-1>0 && @inbounds(sourceShmem[xpos-1,ypos,zpos]))
-#                 2
-#             elseif(xpos+1<=dataBdim[1] &&  @inbounds(sourceShmem[xpos+1,ypos,zpos]))
-#                 1
-#             elseif(ypos+1<=dataBdim[2] &&  @inbounds(sourceShmem[xpos,ypos+1,zpos]))
-#                 3
-#             else 
-#                 4            
-#             end
-# end#getDir
+"""
+now in case we  want later to establish source of the data - would like to find the true distances  not taking the assumption of isometric voxels
+we need to store now data from what direction given voxel was activated what will later gratly simplify the task of finding the true distance 
+we will record first found true voxel from each of six directions 
+                 top 6 
+                bottom 5  
+                left 2
+                right 1 
+                anterior 3
+                posterior 4
+"""
+function getDir(sourceShmem,xpos,ypos,zpos,dataBdim)::UInt8
+    return if((bitIter-1)>0 && isBit1AtPos(@inbounds(shmemblockData[threadIdxX(),threadIdxY()]), bitIter-1) ) 
+                6
+            elseif(((bitIter)<dataBdim[3]) && isBit1AtPos(@inbounds(shmemblockData[threadIdxX(),threadIdxY()]), bitIter+1) ) 
+                5
+            elseif((threadIdxX()-1>0) && isBit1AtPos(@inbounds(shmemblockData[threadIdxX()-1,threadIdxY()]), bitIter) )
+                2
+            elseif((threadIdxX()<dataBdim[1]) && isBit1AtPos(@inbounds(shmemblockData[threadIdxX()+1,threadIdxY()]), bitIter) )
+                1
+            elseif((threadIdxY()-1>0) && isBit1AtPos(@inbounds(shmemblockData[threadIdxX(),threadIdxY()-1]), bitIter) )
+                3
+            else 
+                4            
+            end
+end#getDir
 
 """
 collects all needed functions to analyze given data blocks 
@@ -186,9 +163,9 @@ macro executeDataIterWithPadding(mainArrDims, inBlockLoopXZIterWithPadding
 
   #wheather validation took place or not we need to save resShmemblockData to target array  
   $targetArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta]= resShmemblockData[threadIdxX(),threadIdxY()]
-
+  #now we need to establish are we full here
   isMaskFull =syncThreadsAnd(isMaskFull)
-  @ifXY 1 1 if(isMaskFull) metaData[$xMeta+1,$yMeta+1,$zMeta+1,getFullInSegmNumb()-$isGold]=1  end
+  @ifXY 1 1 if(isMaskFull) metaData[$xMeta,$yMeta,$zMeta,getFullInSegmNumb()-$isGold]=1  end
   sync_warp()# so is mask full on first thread would not be overwritten
 
 
