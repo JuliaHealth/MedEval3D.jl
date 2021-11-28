@@ -37,12 +37,11 @@ end#allocateResultList
 mainArrDims - dimensions of main array
  isGold - indicated is this a gold dilatation step (then it will evaluate to 1 otherwise 0 )
  """
- macro addResult(metaData ,xMeta,yMeta,zMeta, resList,resListIndicies,x,y,z, dir,iterNumb,queueNumber,metaDataDims,mainArrDims ,isGold  )
+ macro addResult(metaData ,xMeta,yMeta,zMeta, resList,x,y,z, dir,iterNumb,queueNumber,metaDataDims,mainArrDims ,isGold  )
   return esc(quote
 
-linearIndex = ($xMeta+1) + ($yMeta)*$metaDataDims[1] + ($zMeta)*$metaDataDims[1]*$metaDataDims[2] + (getNewCountersBeg()+$queueNumber-1)*$metaDataDims[1]*$metaDataDims[2]*$metaDataDims[3]
-  count = atomicallyAddToSpot( metaData,linearIndex,UInt32(1) ) # value of counter before this addition
-  resListPos = ($metaData[($xMeta+1),($yMeta+1),($zMeta+1), (getResOffsetsBeg() +$queueNumber) ]+count)+1
+# linearIndex = ($xMeta+1) + ($yMeta)*$metaDataDims[1] + ($zMeta)*$metaDataDims[1]*$metaDataDims[2] + (getNewCountersBeg()+$queueNumber-1)*$metaDataDims[1]*$metaDataDims[2]*$metaDataDims[3]
+  resListPos = ($metaData[($xMeta+1),($yMeta+1),($zMeta+1), (getResOffsetsBeg() +$queueNumber) ]+atomicallyAddToSpot( metaData,linearIndex,UInt32(1) ))+1
 # qn = $queueNumber
 # xm = $xMeta
 # ym = $yMeta
@@ -60,7 +59,7 @@ linearIndex = ($xMeta+1) + ($yMeta)*$metaDataDims[1] + ($zMeta)*$metaDataDims[1]
 @inbounds $resList[ resListPos, 4]= $isGold
 @inbounds $resList[ resListPos, 5]= $dir
 @inbounds $resList[ resListPos, 6]= $iterNumb
-@inbounds $resListIndicies[resListPos]=getResLinIndex($x,$y,$z,$isGold,$mainArrDims)
+# @inbounds $resListIndicies[resListPos]=getResLinIndex($x,$y,$z,$isGold,$mainArrDims)
 # CUDA.@cuprint "\n linIndex $(getResLinIndex(x,y,z,isGold,mainArrDims))  \n "
 #addResHelper(resListIndicies,resListPos,x)
  end)#quote

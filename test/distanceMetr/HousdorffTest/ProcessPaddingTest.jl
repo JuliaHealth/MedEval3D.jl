@@ -196,7 +196,40 @@ end
 
 # holding data about result top, bottom, left right , anterior, posterior ,  paddings
 
-shmemPaddings[]
+@test shmemPaddings[1,1,1]
+@test shmemPaddings[1,10,1]
+@test shmemPaddings[32,1,1]
+
+@test shmemPaddings[1,1,2]
+@test shmemPaddings[1,10,2]
+@test shmemPaddings[32,1,2]
+
+@test shmemPaddings[1,1,3]
+@test shmemPaddings[5,1,3]
+@test shmemPaddings[32,1,3]
+
+@test shmemPaddings[1,10,3]
+@test shmemPaddings[5,10,3]
+@test shmemPaddings[32,10,3]
+
+@test shmemPaddings[1,1,4]
+@test shmemPaddings[5,1,4]
+@test shmemPaddings[32,1,4]
+@test !shmemPaddings[32,2,4]
+
+
+@test shmemPaddings[1,1,5]
+@test shmemPaddings[1,5,5]
+@test shmemPaddings[1,32,5]
+
+
+@test shmemPaddings[1,1,6]
+@test shmemPaddings[1,5,6]
+@test shmemPaddings[1,32,6]
+
+
+
+
 
 
 

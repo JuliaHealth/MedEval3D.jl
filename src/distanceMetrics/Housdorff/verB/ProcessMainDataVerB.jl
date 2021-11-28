@@ -18,8 +18,35 @@ export @dilatateHelper,getDir,@validateData, @executeDataIterWithPadding, @loadM
 """
  validates data is of our intrest               
 """                
-macro validateData(mainArrDims, inBlockLoopX,inBlockLoopY,inBlockLoopZ,mainArr,refArr,xMeta,yMeta,zMeta,isGold,iterNumb)
+macro validateData(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr)
     return esc(quote
+   #first we will load data from target arr so we can be sure that we are not ovewriting sth already written by diffrent thread block
+   locArr = @inbounds($targetArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta])
+   # here we are anaylyzing only main part of the  data block paddings will be analyzed separately
+   @unroll for bitIter in 1:32
+       resShemVal = isBit1AtPos(@inbounds(resShmemblockData[threadIdxX(),threadIdxY()]), bitIter)
+       inTarget = isBit1AtPos(locArr, bitIter)
+       #later usefull to establish is mask full
+       isMaskFull= resShemVal & isMaskFull
+       #so we have voxel that was not yet covered earlier, is covered now and is in refrence arr - so one where we establish is sth covered 
+       if(resShemVal && !inTarget)
+           # we need reference array value to check weather we had covered anything in this iteration
+            if($refArr[] == numberToLooFor)
+                @addResult(metaData
+                ,$xMeta,$yMeta ,$zMeta,resList
+                ,x
+                ,y
+                ,z
+                ,getDir(sourceShmem,xpos,ypos,zpos,dataBdim)
+                ,$iterNumb
+                ,getIndexOfQueue(xpos,ypos,zpos,dataBdim,(1-$isGold))
+                ,metaDataDims
+                ,mainArrDims
+                ,$isGold)
+            end
+       end  
+   end 
+   
     @iterDataBlock($mainArrDims,dataBdim, $inBlockLoopX,$inBlockLoopY,$inBlockLoopZ,$xMeta,$yMeta,$zMeta,begin
         locVal = @inbounds  sourceShmem[xpos,ypos,zpos]
         resShemVal = @inbounds resShmem[xpos+1,ypos+1,zpos+1]             
@@ -39,59 +66,15 @@ macro validateData(mainArrDims, inBlockLoopX,inBlockLoopY,inBlockLoopZ,mainArr,r
                    #adding the result to the result list at correct spot - using metadata taken from metadata
                    
                    
-                   @addResult(metaData
-                   ,$xMeta
-                   ,$yMeta
-                   ,$zMeta
-                   ,resList
-                   ,resListIndicies
-                   ,x
-                   ,y
-                   ,z
-                   ,getDir(sourceShmem,xpos,ypos,zpos,dataBdim)
-                   ,$iterNumb
-                   ,getIndexOfQueue(xpos,ypos,zpos,dataBdim,1-$isGold)
-                   ,metaDataDims
-                   ,mainArrDims
-                   ,$isGold)
+
             end#if
         end#if
      end)#3d iter 
     end)
+
+
     
  end  #validateData                  
-
-
-
-
-
-# """
-# uploaded data from shared memory in amask of intrest gets processed in this function so we need to  
-#     - save it to registers (to locArr)
-#     - save to the 6 surrounding voxels in shared memory intermediate results 
-#             - as we also have padding we generally start from spot 2,2 as up and to the left we have 1 padding
-#             - also we need to make sure that in corner cases we are getting to correct spot
-# """
-# macro processMaskData( maskBool) #::CUDA.CuRefValue{Int32}
-#     # save it to registers - we will need it later
-#     #locArr[zIter]=maskBool
-#     #now we are saving results evrywhere we are intrested in so around without diagonals (we use supremum norm instead of euclidean)
-#     #locArr.x|= maskBool << zIter
-#     return esc(quote
-#         if($maskBool)
-#             sourceShmem[xpos,ypos, zpos]= true          
-
-#             @inbounds resShmem[xpos+1,ypos+1,zpos]=true #up
-#             @inbounds resShmem[xpos+1,ypos+1,zpos+2]=true #down
-        
-#             @inbounds  resShmem[xpos,ypos+1,zpos+1]=true #left
-#             @inbounds  resShmem[xpos+2,ypos+1,zpos+1]=true #right
-
-#             @inbounds  resShmem[xpos+1,ypos+2,zpos+1]=true #front
-#             @inbounds  resShmem[xpos+1,ypos,zpos+1]=true #back
-#         end#if    
-#     end)
-# end#processMaskData
 
 
 """
@@ -99,10 +82,10 @@ macro validateData(mainArrDims, inBlockLoopX,inBlockLoopY,inBlockLoopZ,mainArr,r
    it all works under the assumption that x and y dimension of the thread block and data block is the same           
 """                
                 
-macro loadMainValues(mainArrGPU,xMeta,yMeta,zMeta)
+macro loadMainValues(mainArr,xMeta,yMeta,zMeta)
     return esc(quote
   #by construction one thread will neeed to load just one integer into its registers and to resShmemblockData
-  locArr = mainArrGPU[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta]
+  locArr = $mainArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta]
   shmemblockData[threadIdxX(),threadIdxY()] = locArr
   #now immidiately we can go with dilatation up and down and save it to res shmem we are not modyfing  locArr
   resShmemblockData[threadIdxX(),threadIdxY()]=@bitDilatate(locArr)
@@ -198,6 +181,12 @@ macro executeDataIterWithPadding(mainArrDims, inBlockLoopXZIterWithPadding
   #processing padding
   @processPadding($isGold,$xMeta,$yMeta,$zMeta,$iterNumb,$mainArr,$refArr)
   #now in case to establish is the block full we need to reduce the isMaskFull information
+  
+
+
+  #wheather validation took place or not we need to save resShmemblockData to target array  
+  $targetArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta]= resShmemblockData[threadIdxX(),threadIdxY()]
+
   isMaskFull =syncThreadsAnd(isMaskFull)
   @ifXY 1 1 if(isMaskFull) metaData[$xMeta+1,$yMeta+1,$zMeta+1,getFullInSegmNumb()-$isGold]=1  end
   sync_warp()# so is mask full on first thread would not be overwritten
@@ -205,6 +194,11 @@ macro executeDataIterWithPadding(mainArrDims, inBlockLoopXZIterWithPadding
 
 end)
 end#executeDataIterWithPadding
+
+
+
+
+
 
 
 
