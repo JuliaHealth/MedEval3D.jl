@@ -4,7 +4,7 @@ makes some bitwise operations easier
 
 module BitWiseUtils
 
-export @setBitTo1, @setBitTo , isBit1AtPos, @bitDilatate
+export @setBitTo1, @setBitTo , isBit1AtPos, @bitDilatate,@bitPassOnes
 """
 sets given bit of supplied number to 1
 """
@@ -43,7 +43,7 @@ https://stackoverflow.com/questions/70134566/bit-wise-dilatation
 """
 macro bitDilatate(x)
     return esc(quote
-      ($x )=(($x )>> 1) | ($x) | (($x) << 1)
+      (($x )>> 1) | ($x) | (($x) << 1)
     end)#quote
 end
 
@@ -52,9 +52,9 @@ Given 32 bit integers x  and y  i would like to set bits of x to 1 if in corre
     So for example  if x is 1 0 0 0 0 1 ...And y is 0 0 0 1 0 0  ...
     I would like a result that would be  1 0 0 1 0 1 
 """
-macro bitPassOnes(x)
+macro bitPassOnes(source,target)
     return esc(quote
-
+         (($target)|($source))
     end)#quote
 end
 

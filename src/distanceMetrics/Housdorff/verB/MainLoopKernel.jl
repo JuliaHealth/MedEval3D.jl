@@ -45,7 +45,7 @@ grid_handle = this_grid()
 shmemblockData = @cuDynamicSharedMem(UInt32,(dataBdim[1], dataBdim[2] ))
 # holding values of results
 resShmemblockData = @cuDynamicSharedMem(UInt32,(dataBdim[1], dataBdim[2] ))
-# holding data about result anterior, posterior , right and left paddings
+# holding data about result top, bottom, left right , anterior, posterior ,  paddings
 shmemPaddings = @cuDynamicSharedMem(Bool,(  max(dataBdim[1], dataBdim[2]), max(dataBdim[1], dataBdim[2])   ,6 ))
 
 

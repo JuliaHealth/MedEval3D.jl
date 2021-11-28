@@ -1,6 +1,6 @@
 module ProcessMainDataVerB
 using CUDA, Logging,Main.CUDAGpuUtils,Main.WorkQueueUtils, Logging,StaticArrays,Main.MetaDataUtils, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils, Main.ResultListUtils
-export getDir,@validateData, @executeDataIterWithPadding, @loadMainValues,setNextBlockAsIsToBeActivated,@paddingProcessCombined,calculateLoopsIter,@processMaskData, @paddingIter,@processPadding
+export @dilatateHelper,getDir,@validateData, @executeDataIterWithPadding, @loadMainValues,setNextBlockAsIsToBeActivated,@paddingProcessCombined,calculateLoopsIter,@processMaskData, @paddingIter,@processPadding
 
 # """
 # we need to establish is the block full after dilatation step 
@@ -102,24 +102,54 @@ macro validateData(mainArrDims, inBlockLoopX,inBlockLoopY,inBlockLoopZ,mainArr,r
 macro loadMainValues(mainArrGPU,xMeta,yMeta,zMeta)
     return esc(quote
   #by construction one thread will neeed to load just one integer into its registers and to resShmemblockData
-  locArr = mainArrGPU[$xMeta*dataBdim[1]+ threadIdX(),$yMeta*dataBdim[2]+ threadIdY(),$zMeta]
-  shmemblockData[threadIdX(),threadIdY()] = locArr
-  #now immidiately we can go with dilatationsand top and down padding analysis 
+  locArr = mainArrGPU[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta]
+  shmemblockData[threadIdxX(),threadIdxY()] = locArr
+  #now immidiately we can go with dilatation up and down and save it to res shmem we are not modyfing  locArr
+  resShmemblockData[threadIdxX(),threadIdxY()]=@bitDilatate(locArr)
+  # now if we have values in first or last bit we need to modify appropriate spots in the shmemPaddings
+  shmemPaddings[threadIdxX(),threadIdxY(),1]=isBit1AtPos(locArr,1)#top
+  shmemPaddings[threadIdxX(),threadIdxY(),2]=isBit1AtPos(locArr,dataBdim[3])#bottom
+  #now we will  do left - right dilatations howvewer we must be sure that we checked boundary conditions 
   
-#     @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,$xMeta,$yMeta,$zMeta, begin
-    
-#      maskBool=$mainArrGPU[x,y,z]
-#     #  if(maskBool)
-#     #     CUDA.@cuprint "\n x $(x) y $(y) z $(z) xpos $(xpos) ypos $(ypos) zpos $(zpos) \n "
-#     #  end   
-#      @processMaskData( maskBool) 
-#     #we add to source shmem also becouse we need to establish direction later 
-#     sourceShmem[xpos,ypos,zpos] = maskBool
+  #left
+  @dilatateHelper((threadIdxX()==1), 3,bitPos,threadIdxY(),(-1), (0))
 
-#     end  )#iterDataBlock
+ #right
+ @dilatateHelper((threadIdxX()==dataBdim[1]), 4,bitPos,threadIdxY(),(1), (0))
+
+#  #posterior
+ @dilatateHelper((threadIdxY()==1), 5,threadIdxX(), bitPos,(0), (-1))
+
+#   #anterior 
+@dilatateHelper((threadIdxY()==dataBdim[2]), 6,threadIdxX(), bitPos,(0), (1))
+
 end) #quote              
 end #loadMainValues
-                
+
+
+"""
+helper macro to iterate over the threads and given their position - checking edge cases do appropriate dilatations ...
+    predicate - indicates what we consider border case here 
+    paddingPos= integer marking which padding we are currently talking about (top? bottom? anterior ? ...)
+    padingVariedA, padingVariedB - eithr bitPos threadid X or Y depending what will be changing in this case
+    
+    normalXChange, normalYchange - indicating which wntries we are intrested in if we are not at the boundary so how much to add to x and y thread position
+
+"""
+macro dilatateHelper(predicate, paddingPos, padingVariedA, padingVariedB,normalXChange, normalYchange)
+    return esc(quote
+        if($predicate)
+            for bitPos in 1:32
+                shmemPaddings[$padingVariedA,$padingVariedB,$paddingPos]=isBit1AtPos(locArr,bitPos)
+            end
+        else
+          resShmemblockData[threadIdxX(),threadIdxY()]= @bitPassOnes(resShmemblockData[threadIdxX(),threadIdxY()],shmemblockData[threadIdxX()+($normalXChange),threadIdxY()+$(normalYchange)]   )
+        end 
+    end)#quote
+end
+
+
+
 
 # """
 # now in case we  want later to establish source of the data - would like to find the true distances  not taking the assumption of isometric voxels

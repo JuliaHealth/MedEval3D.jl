@@ -33,15 +33,47 @@ numb = 0
 @setBitTo(numb,1,true)
 @setBitTo(numb,5,true)
 
-@bitDilatate(numb)
+numbB= @bitDilatate(numb)
 
-@test isBit1AtPos(numb,1)
-@test isBit1AtPos(numb,2)
-@test !isBit1AtPos(numb,3)
-@test isBit1AtPos(numb,4)
-@test isBit1AtPos(numb,5)
-@test isBit1AtPos(numb,6)
-@test !isBit1AtPos(numb,7)
+@test isBit1AtPos(numbB,1)
+@test isBit1AtPos(numbB,2)
+@test !isBit1AtPos(numbB,3)
+@test isBit1AtPos(numbB,4)
+@test isBit1AtPos(numbB,5)
+@test isBit1AtPos(numbB,6)
+@test !isBit1AtPos(numbB,7)
+
+@test !isBit1AtPos(numb,2)
 
 
+#### bitPassOnes
 
+
+source = 0
+target = 0
+@setBitTo(source,1,true)
+@setBitTo(source,5,true)
+@setBitTo(target,4,true)
+new = @bitPassOnes(source,target)
+
+@test isBit1AtPos(new,1)
+@test !isBit1AtPos(new,2)
+@test !isBit1AtPos(new,3)
+@test isBit1AtPos(new,4)
+@test isBit1AtPos(new,5)
+
+
+# using Revise, Parameters, Logging, Test
+# using CUDA
+# includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+
+# using CUDA, Main.CUDAGpuUtils
+# function simpleShuffle()
+#     xx = threadIdxX()
+#     xx+=shfl_down_sync(FULL_MASK, xx, 1) 
+#     CUDA.@cuprint "xx $(xx) \n"
+
+#     return
+# end
+
+# @cuda threads=(32,1) blocks=1 simpleShuffle()

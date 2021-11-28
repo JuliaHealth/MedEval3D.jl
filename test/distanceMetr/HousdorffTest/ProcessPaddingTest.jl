@@ -117,3 +117,92 @@ iterationNumber= UInt32(2);
 @device_code_warntype interactive=true @cuda testKernelForPaddingAnalysis(testArrIn,referenceArray,blockBeginingX,blockBeginingY,blockBeginingZ,  resArray,resArraysCounter,isPassGold,currBlockX,currBlockY,currBlockZ,metaData,metadataDims,mainQuesCounter,mainWorkQueue,iterationNumber,debugArr)
 
 #end
+
+
+
+
+###########loadMainValues
+using Revise, Parameters, Logging, Test
+using CUDA
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
+using Main.BitWiseUtils,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
+
+
+mainArrGPU= CUDA.zeros(UInt32, 50,50)
+
+dataBdim= (32,10,32)
+
+xMeta,yMeta,zMeta = 1,1,1
+
+resShmemblockData= CUDA.zeros(UInt32, 32,10);
+shmemblockData= CUDA.zeros(UInt32, 32,10);
+shmemPaddings= CUDA.zeros(Bool, 32,32,6);
+
+rowOne = 0
+@setBitTo(rowOne,1,true)
+@setBitTo(rowOne,5,true)
+@setBitTo(rowOne,32,true)
+
+
+
+mainArrGPU[1,1,1]= rowOne
+mainArrGPU[1,10,1]= rowOne
+mainArrGPU[32,1,1]= rowOne
+
+
+function testLoadMainValues(shmemPaddings,shmemblockData,resShmemblockData,dataBdim,mainArrGPU,xMeta,yMeta,zMeta)
+
+  sync_threads()
+
+
+  @loadMainValues(mainArrGPU,xMeta,yMeta,zMeta)
+
+    return
+end
+
+@cuda threads=(32,10) blocks=1 testLoadMainValues(shmemPaddings,shmemblockData,resShmemblockData,dataBdim,mainArrGPU,xMeta,yMeta,zMeta)
+
+@test shmemblockData[1,1]==rowOne
+@test shmemblockData[1,10]==rowOne
+@test shmemblockData[32,1]==rowOne
+
+
+
+@test isBit1AtPos(resShmemblockData[1,1],1)
+@test isBit1AtPos(resShmemblockData[1,1],2)
+@test !isBit1AtPos(resShmemblockData[1,1],3)
+@test isBit1AtPos(resShmemblockData[1,1],4)
+@test isBit1AtPos(resShmemblockData[1,1],5)
+@test isBit1AtPos(resShmemblockData[1,1],6)
+@test isBit1AtPos(resShmemblockData[1,1],31)
+@test isBit1AtPos(resShmemblockData[1,1],32)
+
+@test isBit1AtPos(resShmemblockData[1,10],1)
+@test isBit1AtPos(resShmemblockData[1,10],2)
+@test isBit1AtPos(resShmemblockData[1,10],4)
+@test isBit1AtPos(resShmemblockData[1,10],5)
+@test isBit1AtPos(resShmemblockData[1,10],6)
+@test isBit1AtPos(resShmemblockData[1,10],31)
+@test isBit1AtPos(resShmemblockData[1,10],32)
+
+@test isBit1AtPos(resShmemblockData[32,1],1)
+@test isBit1AtPos(resShmemblockData[32,1],2)
+@test isBit1AtPos(resShmemblockData[32,1],4)
+@test isBit1AtPos(resShmemblockData[32,1],5)
+@test isBit1AtPos(resShmemblockData[32,1],6)
+@test isBit1AtPos(resShmemblockData[32,1],31)
+@test isBit1AtPos(resShmemblockData[32,1],32)
+
+# holding data about result top, bottom, left right , anterior, posterior ,  paddings
+
+shmemPaddings[]
+
+
+
+
+
+
+mainArrGPU[1,1,1]= rowOne
+mainArrGPU[1,10,1]= rowOne
+mainArrGPU[32,1,1]= rowOne
