@@ -329,12 +329,13 @@ using Main.BitWiseUtils,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.Meta
 
 
 
-mainArr= CUDA.zeros(UInt32, 50,50,10)
-refArr= CUDA.zeros(UInt32, 50,50,10)
-targetArr= CUDA.zeros(UInt32, 50,50,10)
+mainArr= CUDA.zeros(UInt32, 500,500,100)
+refArr= CUDA.zeros(UInt32, 500,500,100)
 
 dataBdim= (32,10,32)
 
+
+############ some arbitrary data  meta 2,2,2 with some results to be set 
 xMeta,yMeta,zMeta = 2,2,2
 
 resShmemblockData= CUDA.zeros(UInt32, 32,10);
@@ -359,9 +360,18 @@ rowB = 0
 @setBitTo(rowB,32,true)
 
 targetArr[33,20,2]= rowB
+################   here we will get a block that will become full after the dilatation meta 3,3,3
+xMeta,yMeta,zMeta = 3,3,3
+fullOnes = 0
+for bitPos in 1:32
+  @setBitTo(fullOnes,bitPos,true)
+end
+for xx in ((3*32)+1):((4*32)), yy in ((3*10)+1):((4*10))
+  mainArr[xx,yy,3]= fullOnes
+end
 
 
-
+### configurations
 
 blocks =1
 mainArrDims= (50,50,320)
@@ -380,23 +390,46 @@ iterNumb = 1
 
 resList = allocateResultLists(1000,1000)
 
-function testvalidateData(resList               shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter)
-  @loadMainValues(mainArr,xMeta,yMeta,zMeta)
+function testProcessDataBlock(resList               shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter)
+  xMeta,yMeta,zMeta = 2,2,2
 
   sync_threads()
-  @validateData(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr)
+  xMeta,yMeta,zMeta = 3,3,3
+
 
     return
 end
 
-@cuda threads=threads blocks=blocks testvalidateData(shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter)
+@cuda threads=threads blocks=blocks testProcessDataBlock(shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter)
 
-@test shmemPaddings[1,1,4]
-@test shmemPaddings[5,1,4]
-@test shmemPaddings[32,1,4]
-@test !shmemPaddings[32,2,4]
+#we need to test couple thing
+#1) does dilateted data correctly was written to correct spot in the mainArr 
 
-@test !shmemPaddings[32,2,4]
+
+#2) does value from paddings affected - modified mainArr as it should
+
+
+
+#3) weather the information is block full has been properly set in the metadata
+
+
+#4)wheather in results  we have entries that should be present there so correct x,y,z and dir 
+
+
+#5 check weather result counters are set to correct numbers
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 @setBitTo(rowB,1,true)
 @setBitTo(rowB,2,true)
