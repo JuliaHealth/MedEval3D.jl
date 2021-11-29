@@ -476,13 +476,30 @@ end
 
 
 for i in [-1,1] 
-  @test metaData[2,2+i,2,getIsToBeActivatedInGoldNumb()]==1
-  @test metaData[2,2+i,2,getIsToBeActivatedInGoldNumb()]==1
-  @test metaData[2,2+i,2,getIsToBeActivatedInGoldNumb()]==1
+  @test metaData[2,2,2+i,getIsToBeActivatedInGoldNumb()]==1
+  @test metaData[2,2,2+i,getIsToBeActivatedInGoldNumb()]==1
+  @test metaData[2,2,2+i,getIsToBeActivatedInGoldNumb()]==1
 end
 
 
 #4)wheather in results  we have entries that should be present there so correct x,y,z and dir 
+function checkIsInResList()::Bool
+  for i in 1:length(resList)
+      
+  end  
+end  
+
+
+
+# @inbounds $resList[ resListPos, 1]=$x 
+# @inbounds $resList[ resListPos, 2]=$y 
+# @inbounds $resList[ resListPos, 3]=$z 
+# @inbounds $resList[ resListPos, 4]= $isGold
+# @inbounds $resList[ resListPos, 5]= $dir
+# @inbounds $resList[ resListPos, 6]= $iterNumb
+
+
+
 resList
 
 
