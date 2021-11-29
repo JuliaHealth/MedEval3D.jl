@@ -61,28 +61,39 @@ macro validateData(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr)
                 
 macro loadMainValues(mainArr,xMeta,yMeta,zMeta)
     return esc(quote
-  #by construction one thread will neeed to load just one integer into its registers and to resShmemblockData
-  locArr = $mainArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta]
-  shmemblockData[threadIdxX(),threadIdxY()] = locArr
-  #now immidiately we can go with dilatation up and down and save it to res shmem we are not modyfing  locArr
-  resShmemblockData[threadIdxX(),threadIdxY()]=@bitDilatate(locArr)
-  # now if we have values in first or last bit we need to modify appropriate spots in the shmemPaddings
-  shmemPaddings[threadIdxX(),threadIdxY(),1]=isBit1AtPos(locArr,1)#top
-  shmemPaddings[threadIdxX(),threadIdxY(),2]=isBit1AtPos(locArr,dataBdim[3])#bottom
-  #now we will  do left - right dilatations howvewer we must be sure that we checked boundary conditions 
-  
-  #left
-  @dilatateHelper((threadIdxX()==1), 3,bitPos,threadIdxY(),(-1), (0))
+    #by construction one thread will neeed to load just one integer into its registers and to resShmemblockData
+    locArr = $mainArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta]
+    @inbounds shmemblockData[threadIdxX(),threadIdxY()] = locArr
+    #now immidiately we can go with dilatation up and down and save it to res shmem we are not modyfing  locArr
+    @inbounds resShmemblockData[threadIdxX(),threadIdxY()]=@bitDilatate(locArr)
+    # now if we have values in first or last bit we need to modify appropriate spots in the shmemPaddings
+    @inbounds shmemPaddings[threadIdxX(),threadIdxY(),1]=isBit1AtPos(locArr,1)#top
+    @inbounds shmemPaddings[threadIdxX(),threadIdxY(),2]=isBit1AtPos(locArr,dataBdim[3])#bottom
+    #now we will  do left - right dilatations howvewer we must be sure that we checked boundary conditions 
+    
+    #left
+    @dilatateHelper((threadIdxX()==1), 3,bitPos,threadIdxY(),(-1), (0))
 
- #right
- @dilatateHelper((threadIdxX()==dataBdim[1]), 4,bitPos,threadIdxY(),(1), (0))
+    #right
+    @dilatateHelper((threadIdxX()==dataBdim[1]), 4,bitPos,threadIdxY(),(1), (0))
 
-#  #posterior
- @dilatateHelper((threadIdxY()==1), 5,threadIdxX(), bitPos,(0), (-1))
+    #  #posterior
+    @dilatateHelper((threadIdxY()==1), 5,threadIdxX(), bitPos,(0), (-1))
 
-#   #anterior 
-@dilatateHelper((threadIdxY()==dataBdim[2]), 6,threadIdxX(), bitPos,(0), (1))
-
+    #   #anterior 
+    @dilatateHelper((threadIdxY()==dataBdim[2]), 6,threadIdxX(), bitPos,(0), (1))
+    sync_threads()
+    #now we need to persist the paddings still becouse its size is up to 32 by 32 we need to iterate over y dimension
+    for iterY in 1:inBlockLoopXZIterWithPadding
+        if((threadIdxY()+iterY)<=dataBdim[1]  )
+            #we are reusing offsetIter
+            offsetIter=0
+            for bitPos in 1:6
+                @setBitTo(offsetIter,bitPos, shmemPaddings[threadIdxX(),(threadIdxY()+iterY) ])
+            end
+            @inbounds paddingStore[$xMeta,$yMeta,$zMeta,threadIdxX(),(threadIdxY()+iterY)]= offsetIter
+        end
+    end
 end) #quote              
 end #loadMainValues
 

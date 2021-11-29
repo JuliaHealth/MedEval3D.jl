@@ -63,7 +63,7 @@ alreadyCoveredInQueues =@cuStaticSharedMem(UInt32,(14))
  isMaskFull= false
  #here we will store in registers data uploaded from mask for later verification wheather we should send it or not
  locArr= Int32(0)
- offsetIter = UInt16(0)
+ offsetIter = UInt8(0)
 #  localOffset= UInt32(0)
  #boolean usefull in the iterating over private part of work queue 
  isAnyBiggerThanZero =  @cuStaticSharedMem(Bool,1)
@@ -89,9 +89,6 @@ alreadyCoveredInQueues =@cuStaticSharedMem(UInt32,(14))
  @ifXY 9 1 workCounterBiggerThan0[1]= 0
  @ifXY 19 1 isEvenPass[1]= true# set to true becouse it would be altered befor first dilatation step
  
- @unroll for i in 10:18
-    @ifXY i 1 workCountersInshmem[i]=0
- end
 
  sync_threads()
 
@@ -286,36 +283,52 @@ loads data at the begining of each dilatation step
     fp, fn  
 """
 macro loadDataAtTheBegOfDilatationStep(  )
+
     return esc(quote
     #so we know that becouse of sync grid we will have evrywhere the same  iterationNumberShmem and positionInMainWorkQueaue
     
     @ifXY 1 1 iterationNumberShmem[1]+=1
     #@ifXY 2 2 positionInMainWorkQueaue[1]=0 
 
-
+    @ifXY 2 1 begin
+        workCounterInshmem[1]= workQueaueCounter[1] 
+        workCounterBiggerThan0[1]= (workCounterInshmem[1]>0)
+                    end 
     #we do corection for robustness so we can ignore some of the most distant points - this will reduce the influence of outliers                
     @ifXY 3 1 goldToBeDilatated[1]=(globalCurrentFpCount[1] <= ceil(fp[1]*robustnessPercent))
     @ifXY 4 1 segmToBeDilatated[1]=(globalCurrentFnCount[1] <= ceil(fn[1]*robustnessPercent))
-    #we just negate  so every dilatation pass it would be altered
-    @ifXY 5 1 isEvenPass[1]= !isEvenPass[1]
+        end)#quote
+
+
+    # #so we know that becouse of sync grid we will have evrywhere the same  iterationNumberShmem and positionInMainWorkQueaue
     
-    #managing work queue counters
-    @ifXY 1 2  workCountersInshmem[1]= workQueueEEEcounter[1] 
-    @ifXY 2 2  workCountersInshmem[2]= workQueueEOEcounter[1] 
-    @ifXY 3 4  workCountersInshmem[3]= workQueueEEOcounter[1] 
-    @ifXY 4 2  workCountersInshmem[4]= workQueueOEEcounter[1] 
+    # @ifXY 1 1 iterationNumberShmem[1]+=1
+    # #@ifXY 2 2 positionInMainWorkQueaue[1]=0 
 
-    @ifXY 5 2  workCountersInshmem[5]= workQueueOOEcounter[1] 
-    @ifXY 6 2  workCountersInshmem[6]= workQueueEOOcounter[1] 
-    @ifXY 2 1  workCountersInshmem[7]= workQueueOEOcounter[1] 
-    @ifXY 2 1  workCountersInshmem[8]= workQueueOOOcounter[1] 
+
+    # #we do corection for robustness so we can ignore some of the most distant points - this will reduce the influence of outliers                
+    # @ifXY 3 1 goldToBeDilatated[1]=(globalCurrentFpCount[1] <= ceil(fp[1]*robustnessPercent))
+    # @ifXY 4 1 segmToBeDilatated[1]=(globalCurrentFnCount[1] <= ceil(fn[1]*robustnessPercent))
+    # #we just negate  so every dilatation pass it would be altered
+    # @ifXY 5 1 isEvenPass[1]= !isEvenPass[1]
     
-    sync_warp()                
-    @ifXY 1 2 workCounterBiggerThan0[1]= ((workQueueOOOcounter[1] +workQueueOEOcounter[1]+workQueueEOOcounter[1] +workQueueOOEcounter[1] +workQueueOEEcounter[1] +workQueueEEEcounter[1] +workQueueEOEcounter[1]+workQueueEEOcounter[1])>0)
+    # #managing work queue counters
+    # @ifXY 1 2  workCountersInshmem[1]= workQueueEEEcounter[1] 
+    # @ifXY 2 2  workCountersInshmem[2]= workQueueEOEcounter[1] 
+    # @ifXY 3 4  workCountersInshmem[3]= workQueueEEOcounter[1] 
+    # @ifXY 4 2  workCountersInshmem[4]= workQueueOEEcounter[1] 
+
+    # @ifXY 5 2  workCountersInshmem[5]= workQueueOOEcounter[1] 
+    # @ifXY 6 2  workCountersInshmem[6]= workQueueEOOcounter[1] 
+    # @ifXY 2 1  workCountersInshmem[7]= workQueueOEOcounter[1] 
+    # @ifXY 2 1  workCountersInshmem[8]= workQueueOOOcounter[1] 
+    
+    # sync_warp()                
+    # @ifXY 1 2 workCounterBiggerThan0[1]= ((workQueueOOOcounter[1] +workQueueOEOcounter[1]+workQueueEOOcounter[1] +workQueueOOEcounter[1] +workQueueOEEcounter[1] +workQueueEEEcounter[1] +workQueueEOEcounter[1]+workQueueEEOcounter[1])>0)
 
 
 
-end)#quote
+# end)#quote
 end
 
 
@@ -359,15 +372,18 @@ function getBigGPUForHousedorffAfterBoolKernel(metaData,minxRes,maxxRes,minyRes,
     goldArr= reducedGoldA[minxRes[1]*dataBdim[1]:maxxRes[1]*dataBdim[1],minyRes[1]*dataBdim[2]:maxyRes[1]*dataBdim[2],minzRes[1]:maxzRes[1]]
     segmArr = reducedSegmA[minxRes[1]*dataBdim[1]:maxxRes[1]*dataBdim[1],minyRes[1]*dataBdim[2]:maxyRes[1]*dataBdim[2],minzRes[1]:maxzRes[1]]
     newMeta = metaData[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]   ]
-    workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter= WorkQueueUtils.allocateWorkQueue( max(length(newMeta),1) )
+    workQueue,workQueueCounter= WorkQueueUtils.allocateWorkQueue( max(length(newMeta),1) )
+    metaSize = size(newMeta)
+    #here we need to define data structure that will hold all data about paddings
+    # it will be composed of 32x32 blocks of UInt8 where first 6 bits will represent paddings 
+    # number of such blocks will be the same as innersingleDataBlockPass
+    paddingStore = CUDA.zeros(UInt8, metaSize[1],metaSize[2],metaSize[3],32,32)
+    
+    
     return(newMeta
-            ,goldArr  ,segmArr
-            ,copy(goldArr) ,copy(segmArr)
-            ,resList,workQueueEEE
-            ,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter
-            ,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter
-            ,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter
-            ,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter
+            ,goldArr  ,segmArr ,paddingStore
+
+            ,resList,workQueue,workQueueCounter
     )
 end 
 

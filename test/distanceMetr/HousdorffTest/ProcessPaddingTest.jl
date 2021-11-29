@@ -277,7 +277,7 @@ metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim)
 #metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:9,2:3,4:6,: );
 metaDataDims=size(metaData)
 
-workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter= WorkQueueUtils.allocateWorkQueue( max(length(metaData),1) )
+workQueue,workQueueCounter= WorkQueueUtils.allocateWorkQueue( max(length(newMeta),1) )
 metaData[2,2,2,2]=UInt32(1)
 #setting offsets in metadata
 for i in 1:14
@@ -285,7 +285,7 @@ for i in 1:14
 end
 isGold = 1
 iterNumb = 1
-function testvalidateData(shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter)
+function testvalidateData(shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueue,workQueueCounter)
   @loadMainValues(mainArr,xMeta,yMeta,zMeta)
 
   sync_threads()

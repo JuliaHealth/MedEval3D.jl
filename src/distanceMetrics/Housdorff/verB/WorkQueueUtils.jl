@@ -12,10 +12,7 @@ allocate memory for  work queues
     also initializes counters for each 
     names are encoded like E is about even and O for odd so workQueueEEE will mean that all metaX,metaY and metaZ are even    
    returns  workQueue,workQueueCounter
-   
-   
-   
-
+    
     """
 function allocateWorkQueue(metaDataLength)
     queueSize = cld(metaDataLength*2,8)+2#*2 becouse of gold and segm pass divided by 8 becouse we have 8 work queues
