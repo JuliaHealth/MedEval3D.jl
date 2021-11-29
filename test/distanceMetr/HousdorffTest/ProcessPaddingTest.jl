@@ -330,8 +330,8 @@ using Main.BitWiseUtils,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.Meta
 
 
 mainArr= CUDA.zeros(UInt32, 500,500,100)
-refArr= CUDA.zeros(UInt32, 500,500,100)
-
+refArr= CUDA.zeros(UInt8, 500,500,100)
+numbToLooFor = 2
 dataBdim= (32,10,32)
 
 
@@ -348,27 +348,34 @@ rowOne = 0
 @setBitTo(rowOne,5,true)
 @setBitTo(rowOne,32,true)
 
-mainArr[33,11,2]= rowOne
-mainArr[33,20,2]= rowOne
-mainArr[64,11,2]= rowOne
-
-rowB = 0
-@setBitTo(rowB,1,true)
-@setBitTo(rowB,2,true)
-@setBitTo(rowB,5,true)
-@setBitTo(rowB,6,true)
-@setBitTo(rowB,32,true)
+refArr[33,11,33]= 2
+refArr[33,20,34]= 2
+refArr[64,11,37]= 2
+refArr[64,11,38]= 2
+refArr[64,11,64]= 2
 
 targetArr[33,20,2]= rowB
 ################   here we will get a block that will become full after the dilatation meta 3,3,3
 xMeta,yMeta,zMeta = 3,3,3
-fullOnes = 0
+fullOnesTobecome = 0
 for bitPos in 1:32
-  @setBitTo(fullOnes,bitPos,true)
+  if(isodd(bitPos))
+    @setBitTo(fullOnesTobecome,bitPos,true)
+  end
 end
 for xx in ((3*32)+1):((4*32)), yy in ((3*10)+1):((4*10))
-  mainArr[xx,yy,3]= fullOnes
+  mainArr[xx,yy,3]= fullOnesTobecome
 end
+
+for xx in ((3*32)+1):((4*32)), yy in ((3*10)+1):((4*10)), zz in ((3*32)+1):((4*32))
+  refArr[xx,yy,zz]= 2
+end
+
+refArr[33,11,33]= 2
+refArr[33,20,34]= 2
+refArr[64,11,37]= 2
+refArr[64,11,38]= 2
+refArr[64,11,64]= 2
 
 
 ### configurations
@@ -383,8 +390,13 @@ workQueue,workQueueCounter= WorkQueueUtils.allocateWorkQueue( max(length(metaDat
 metaData[2,2,2,2]=UInt32(1)
 #setting offsets in metadata
 for i in 1:14
-  metaData[xMeta,yMeta,zMeta,getResOffsetsBeg()+i]=i*10
+  metaData[2,2,2,getResOffsetsBeg()+i]=i*10
 end
+
+for i in 1:14
+  metaData[3,3,3,getResOffsetsBeg()+i+20]=i*10
+end
+
 isGold = 1
 iterNumb = 1
 
@@ -405,18 +417,92 @@ end
 #we need to test couple thing
 #1) does dilateted data correctly was written to correct spot in the mainArr 
 
+afterDil = 0
+for bitPos in [1,2,4,5,6,31,32]
+    @setBitTo(afterDil,bitPos,true)
+end
 
-#2) does value from paddings affected - modified mainArr as it should
+
+@test mainArr[33,11,2]== afterDil
+@test mainArr[33,20,2]== afterDil
+@test mainArr[64,11,2]== afterDil
+
+rowOne = 0
+@setBitTo(rowOne,1,true)
+@setBitTo(rowOne,5,true)
+@setBitTo(rowOne,32,true)
+
+for i in [-1,1] 
+  @test mainArr[33+i,11,2]== rowOne
+  @test mainArr[33+i,20,2]== rowOne
+  @test mainArr[64+i,11,2]== rowOne
+end
+
+for i in [-1,1] 
+  @test mainArr[33,11+i,2]== rowOne
+  @test mainArr[33,20+i,2]== rowOne
+  @test mainArr[64,11+i,2]== rowOne
+end
+fullOnes = 0
+for bitPos in 1:32
+    @setBitTo(fullOnesTobecome,bitPos,true)
+end
+
+#this should be full after dilatation
+for xx in ((3*32)+1):((4*32)), yy in ((3*10)+1):((4*10))
+  @test mainArr[xx,yy,3]== fullOnes
+end
 
 
+#3) weather the information is block full has been properly set in the metadata the same is to be activated ...
+ @test metaData[2,2,2,getFullInGoldNumb()]==0
+ @test metaData[3,3,3,getFullInGoldNumb()]==1
 
-#3) weather the information is block full has been properly set in the metadata
+ @test metaData[2,2,2,getActiveGoldNumb()]==1
+
+ @test metaData[2,2,2,getIsToBeActivatedInGoldNumb()]==1
+
+for i in [-1,1] 
+  @test metaData[2+i,2,2,getIsToBeActivatedInGoldNumb()]==1
+  @test metaData[2+i,2,2,getIsToBeActivatedInGoldNumb()]==1
+  @test metaData[2+i,2,2,getIsToBeActivatedInGoldNumb()]==1
+end
+
+for i in [-1,1] 
+  @test metaData[2,2+i,2,getIsToBeActivatedInGoldNumb()]==1
+  @test metaData[2,2+i,2,getIsToBeActivatedInGoldNumb()]==1
+  @test metaData[2,2+i,2,getIsToBeActivatedInGoldNumb()]==1
+end
+
+
+for i in [-1,1] 
+  @test metaData[2,2+i,2,getIsToBeActivatedInGoldNumb()]==1
+  @test metaData[2,2+i,2,getIsToBeActivatedInGoldNumb()]==1
+  @test metaData[2,2+i,2,getIsToBeActivatedInGoldNumb()]==1
+end
 
 
 #4)wheather in results  we have entries that should be present there so correct x,y,z and dir 
+resList
+
+
+
+# for xx in ((3*32)+1):((4*32)), yy in ((3*10)+1):((4*10)), zz in ((3*32)+1):((4*32))
+#   refArr[xx,yy,zz]= 2
+# end
+
+# refArr[33,11,33]= 2
+# refArr[33,20,34]= 2
+# refArr[64,11,37]= 2
+# refArr[64,11,38]= 2
+# refArr[64,11,64]= 2
+
 
 
 #5 check weather result counters are set to correct numbers
+
+
+#6) are the results in correct spots - weahter they are related to the ques the should be ...
 
 
 
