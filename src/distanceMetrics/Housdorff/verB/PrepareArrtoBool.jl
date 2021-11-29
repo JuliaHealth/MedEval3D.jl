@@ -326,7 +326,7 @@ function getLargeForBoolKernel(mainArrDims,dataBdim)
     #this is in order to be sure that array is divisible by data block so we reduce necessity of boundary checks
     xDim= cld(mainArrDims[1],dataBdim[1])*dataBdim[1]
     yDim = cld(mainArrDims[2],dataBdim[2])*dataBdim[2]
-    zDim = cld(mainArrDims[3],dataBdim[3])*dataBdim[3]
+    zDim = cld(mainArrDims[3],dataBdim[3])
     newDims = (xDim,yDim,zDim)
 return (
     CUDA.zeros(UInt32,(newDims)),CUDA.zeros(UInt32,(newDims))

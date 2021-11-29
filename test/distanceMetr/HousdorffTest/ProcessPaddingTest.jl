@@ -312,3 +312,241 @@ end
 targetArr[1,10,1]= rowB
 
 
+
+
+
+
+
+
+################## execute Data Iter With Padding  first data 
+
+using Revise, Parameters, Logging, Test
+using CUDA
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
+using Main.BitWiseUtils,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
+
+
+
+
+mainArr= CUDA.zeros(UInt32, 500,500,100)
+refArr= CUDA.zeros(UInt8, 500,500,100)
+numbToLooFor = 2
+dataBdim= (32,10,32)
+
+
+############ some arbitrary data  meta 2,2,2 with some results to be set 
+xMeta,yMeta,zMeta = 2,2,2
+
+resShmemblockData= CUDA.zeros(UInt32, 32,10);
+shmemblockData= CUDA.zeros(UInt32, 32,10);
+shmemPaddings= CUDA.zeros(Bool, 32,32,6);
+
+threads=(32,10)
+rowOne = 0
+@setBitTo(rowOne,1,true)
+@setBitTo(rowOne,5,true)
+@setBitTo(rowOne,32,true)
+
+refArr[33,11,33]= 2
+refArr[33,20,34]= 2
+refArr[64,11,37]= 2
+refArr[64,11,38]= 2
+refArr[64,11,64]= 2
+
+targetArr[33,20,2]= rowB
+################   here we will get a block that will become full after the dilatation meta 3,3,3
+xMeta,yMeta,zMeta = 3,3,3
+fullOnesTobecome = 0
+for bitPos in 1:32
+  if(isodd(bitPos))
+    @setBitTo(fullOnesTobecome,bitPos,true)
+  end
+end
+for xx in ((3*32)+1):((4*32)), yy in ((3*10)+1):((4*10))
+  mainArr[xx,yy,3]= fullOnesTobecome
+end
+
+for xx in ((3*32)+1):((4*32)), yy in ((3*10)+1):((4*10)), zz in ((3*32)+1):((4*32))
+  refArr[xx,yy,zz]= 2
+end
+
+refArr[33,11,33]= 2
+refArr[33,20,34]= 2
+refArr[64,11,37]= 2
+refArr[64,11,38]= 2
+refArr[64,11,64]= 2
+
+
+### configurations
+
+blocks =1
+mainArrDims= (50,50,320)
+metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim)
+#metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:9,2:3,4:6,: );
+metaDataDims=size(metaData)
+
+workQueue,workQueueCounter= WorkQueueUtils.allocateWorkQueue( max(length(metaData),1) )
+metaData[2,2,2,2]=UInt32(1)
+#setting offsets in metadata
+for i in 1:14
+  metaData[2,2,2,getResOffsetsBeg()+i]=i*10
+end
+
+for i in 1:14
+  metaData[3,3,3,getResOffsetsBeg()+i+20]=i*10
+end
+
+isGold = 1
+iterNumb = 1
+
+resList = allocateResultLists(1000,1000)
+
+function testProcessDataBlock(resList               shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter)
+  xMeta,yMeta,zMeta = 2,2,2
+
+  sync_threads()
+  xMeta,yMeta,zMeta = 3,3,3
+
+
+    return
+end
+
+@cuda threads=threads blocks=blocks testProcessDataBlock(shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter)
+
+#we need to test couple thing
+#1) does dilateted data correctly was written to correct spot in the mainArr 
+
+afterDil = 0
+for bitPos in [1,2,4,5,6,31,32]
+    @setBitTo(afterDil,bitPos,true)
+end
+
+
+@test mainArr[33,11,2]== afterDil
+@test mainArr[33,20,2]== afterDil
+@test mainArr[64,11,2]== afterDil
+
+rowOne = 0
+@setBitTo(rowOne,1,true)
+@setBitTo(rowOne,5,true)
+@setBitTo(rowOne,32,true)
+
+for i in [-1,1] 
+  @test mainArr[33+i,11,2]== rowOne
+  @test mainArr[33+i,20,2]== rowOne
+  @test mainArr[64+i,11,2]== rowOne
+end
+
+for i in [-1,1] 
+  @test mainArr[33,11+i,2]== rowOne
+  @test mainArr[33,20+i,2]== rowOne
+  @test mainArr[64,11+i,2]== rowOne
+end
+fullOnes = 0
+for bitPos in 1:32
+    @setBitTo(fullOnesTobecome,bitPos,true)
+end
+
+#this should be full after dilatation
+for xx in ((3*32)+1):((4*32)), yy in ((3*10)+1):((4*10))
+  @test mainArr[xx,yy,3]== fullOnes
+end
+
+
+#3) weather the information is block full has been properly set in the metadata the same is to be activated ...
+ @test metaData[2,2,2,getFullInGoldNumb()]==0
+ @test metaData[3,3,3,getFullInGoldNumb()]==1
+
+ @test metaData[2,2,2,getActiveGoldNumb()]==1
+
+ @test metaData[2,2,2,getIsToBeActivatedInGoldNumb()]==1
+
+for i in [-1,1] 
+  @test metaData[2+i,2,2,getIsToBeActivatedInGoldNumb()]==1
+  @test metaData[2+i,2,2,getIsToBeActivatedInGoldNumb()]==1
+  @test metaData[2+i,2,2,getIsToBeActivatedInGoldNumb()]==1
+end
+
+for i in [-1,1] 
+  @test metaData[2,2+i,2,getIsToBeActivatedInGoldNumb()]==1
+  @test metaData[2,2+i,2,getIsToBeActivatedInGoldNumb()]==1
+  @test metaData[2,2+i,2,getIsToBeActivatedInGoldNumb()]==1
+end
+
+
+for i in [-1,1] 
+  @test metaData[2,2,2+i,getIsToBeActivatedInGoldNumb()]==1
+  @test metaData[2,2,2+i,getIsToBeActivatedInGoldNumb()]==1
+  @test metaData[2,2,2+i,getIsToBeActivatedInGoldNumb()]==1
+end
+
+
+#4)wheather in results  we have entries that should be present there so correct x,y,z and dir 
+function checkIsInResList()::Bool
+  for i in 1:length(resList)
+      
+  end  
+end  
+
+
+
+# @inbounds $resList[ resListPos, 1]=$x 
+# @inbounds $resList[ resListPos, 2]=$y 
+# @inbounds $resList[ resListPos, 3]=$z 
+# @inbounds $resList[ resListPos, 4]= $isGold
+# @inbounds $resList[ resListPos, 5]= $dir
+# @inbounds $resList[ resListPos, 6]= $iterNumb
+
+
+
+resList
+
+
+
+# for xx in ((3*32)+1):((4*32)), yy in ((3*10)+1):((4*10)), zz in ((3*32)+1):((4*32))
+#   refArr[xx,yy,zz]= 2
+# end
+
+# refArr[33,11,33]= 2
+# refArr[33,20,34]= 2
+# refArr[64,11,37]= 2
+# refArr[64,11,38]= 2
+# refArr[64,11,64]= 2
+
+
+
+#5 check weather result counters are set to correct numbers
+
+
+#6) are the results in correct spots - weahter they are related to the ques the should be ...
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@setBitTo(rowB,1,true)
+@setBitTo(rowB,2,true)
+@setBitTo(rowB,5,true)
+@setBitTo(rowB,6,true)
+@setBitTo(rowB,32,true)
+
+targetArr[1,10,1]= rowB
+
+
+
+
+
+
+
+
+
