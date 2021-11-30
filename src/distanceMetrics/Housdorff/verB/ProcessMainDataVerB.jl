@@ -78,7 +78,7 @@ macro loadMainValues(mainArr,xMeta,yMeta,zMeta)
             #we are reusing offsetIter
             offsetIter=0
             for bitPos in 1:6
-                @setBitTo(offsetIter,bitPos, shmemPaddings[threadIdxX(),(threadIdxY()+iterY) ])
+                @setBitTo(offsetIter,bitPos, shmemPaddings[threadIdxX(),(threadIdxY()+iterY),bitPos ])
             end
             @inbounds paddingStore[$xMeta,$yMeta,$zMeta,threadIdxX(),(threadIdxY()+iterY)]= offsetIter
         end
@@ -101,6 +101,10 @@ macro dilatateHelper(predicate, paddingPos, padingVariedA, padingVariedB,normalX
         if($predicate)
             for bitPos in 1:32
                 shmemPaddings[$padingVariedA,$padingVariedB,$paddingPos]=isBit1AtPos(locArr,bitPos)
+                #we need to mark weather there is anything in padding so we will mark block as to be activates 
+                if(shmemPaddings[$padingVariedA,$padingVariedB,$paddingPos]) 
+                    isAnythingInPadding[$paddingPos]= true 
+                end
             end
         else
           resShmemblockData[threadIdxX(),threadIdxY()]= @bitPassOnes(resShmemblockData[threadIdxX(),threadIdxY()],shmemblockData[threadIdxX()+($normalXChange),threadIdxY()+$(normalYchange)]   )
@@ -155,10 +159,16 @@ macro executeDataIter(mainArrDims
   if(areToBeValidated[14-$isGold])
       @validateData($mainArrDims, $inBlockLoopX,$inBlockLoopY,$inBlockLoopZ,$mainArr,$refArr,$xMeta,$yMeta,$zMeta,$isGold,$iterNumb) 
   end                  
-#now we need to establish are we full here
+  
+  #now we need to establish are we full here; and whether neighbours are to be activated
   isMaskFull =syncThreadsAnd(isMaskFull)
-  @ifXY 1 1 if(isMaskFull) metaData[$xMeta,$yMeta,$zMeta,getFullInSegmNumb()-$isGold]=1  end
-
+  @ifXY 1 1 setNextBlockAsIsToBeActivated(isAnythingInPadding[1] ,-1,0,0,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
+  @ifXY 2 1 setNextBlockAsIsToBeActivated(isAnythingInPadding[2] ,1,0,0,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
+  @ifXY 3 1 setNextBlockAsIsToBeActivated(isAnythingInPadding[3] ,0,-1,0,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
+  @ifXY 4 1 setNextBlockAsIsToBeActivated(isAnythingInPadding[4] ,0,1,0,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
+  @ifXY 5 1 setNextBlockAsIsToBeActivated(isAnythingInPadding[5] ,0,0,-1,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
+  @ifXY 6 1 setNextBlockAsIsToBeActivated(isAnythingInPadding[6] , 0,0,1,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
+  @ifXY 7 1 if(isMaskFull) metaData[$xMeta,$yMeta,$zMeta,getFullInSegmNumb()-$isGold]=1  end
 
 end)
 end#executeDataIterWithPadding
@@ -171,12 +181,36 @@ then
 """
 macro executeIterPadding(mainArr,refArr,xMeta,yMeta,zMeta,isGold,iterNumb)
     return esc(quote
+    # we already gone through dilatation and metadata analysis so now we are analysing paddings from previous loop
+    #first we need to load data from paddings of surrounding blocks and  push it into shared memory
+    #yet we need to check weather in given direction there is some block so if we are on edge ?
 
+
+    #as we have all in the shmem we can now check is there are any trues in the shmem so wheather 
     end)
 end#executeDataIterWithPadding
 
-
-
+"""
+helper function for executeIterPadding - we will check is next block in each direction is in metadata 
+    xMetaChange,yMetaChange,zMetaChange - whrere to look for block of interest relative to current position
+    bitOfIntrest - which bit from paddingStore we are intrested in in a block we are analyzing now 
+    shmemPaddingTargetNumb - where we should write the data from surrounding block into our local shmem padding
+    """
+macro loadToshmemPaddings(xMeta,yMeta,zMeta, xMetaChange,yMetaChange,zMetaChange, bitOfIntrest, shmemPaddingTargetNumb)
+    return esc(quote
+    #we need to be sure that such block exists
+    if( ($xMeta)+$xMetaChange<=metaDataDims[1]  && ($yMeta)+$yMetaChange>0 && ($yMeta)+$yMetaChange<=metaDataDims[2] && ($zMeta)+$zMetaChange>0 && ($zMeta)+$zMetaChange<=metaDataDims[3])
+        for iterY in 1:inBlockLoopXZIterWithPadding
+            if((threadIdxY()+iterY)<=dataBdim[1]  )
+                #so we are intrested only in given bit from neighbouring block
+                booll = isBit1AtPos(paddingStore[$xMeta+$xChange,$yMeta+$yChange,$zMeta+$zChange],bitOfIntrest)
+                shmemPaddings[threadIdxX(),(threadIdxY()+iterY),shmemPaddingTargetNumb ]=booll
+            end    
+        end#for    
+    end#if such block exists    
+    offsetIter
+    end)
+end
 
 
 
@@ -249,7 +283,7 @@ metaDataDims - dimensions of metadata
 
 """
 function setNextBlockAsIsToBeActivated(isToBeActivated::Bool,xMetaChange,yMetaChange,zMetaChange,xMeta,yMeta,zMeta,isGold,  metaData, metaDataDims)
-   if(isToBeActivated && (xMeta+1)+xMetaChange<=metaDataDims[1]  && (yMeta+1)+yMetaChange>0 && (yMeta+1)+yMetaChange<=metaDataDims[2] && (zMeta+1)+zMetaChange>0 && (zMeta+1)+zMetaChange<=metaDataDims[3]) 
+   if(isToBeActivated && (xMeta)+xMetaChange<=metaDataDims[1]  && (yMeta)+yMetaChange>0 && (yMeta)+yMetaChange<=metaDataDims[2] && (zMeta)+zMetaChange>0 && (zMeta)+zMetaChange<=metaDataDims[3]) 
     metaData[(xMeta+1)+xMetaChange,(yMeta+1)+yMetaChange,(zMeta+1)+zMetaChange,getIsToBeActivatedInSegmNumb()-isGold  ]=1 
     end
 end
@@ -282,12 +316,6 @@ macro processPadding(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr)
         
         sync_threads()
         
-        @ifXY 1 1 setNextBlockAsIsToBeActivated(isAnythingInPadding[1] ,-1,0,0,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
-        @ifXY 2 1 setNextBlockAsIsToBeActivated(isAnythingInPadding[2] ,1,0,0,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
-        @ifXY 3 1 setNextBlockAsIsToBeActivated(isAnythingInPadding[3] ,0,-1,0,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
-        @ifXY 4 1 setNextBlockAsIsToBeActivated(isAnythingInPadding[4] ,0,1,0,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
-        @ifXY 5 1 setNextBlockAsIsToBeActivated(isAnythingInPadding[5] ,0,0,-1,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
-        @ifXY 6 1 setNextBlockAsIsToBeActivated(isAnythingInPadding[6] , 0,0,1,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
 
     end)
 

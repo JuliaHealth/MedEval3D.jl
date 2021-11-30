@@ -410,17 +410,14 @@ end
 isGold = 1
 iterNumb = 1
 
-<<<<<<< HEAD
 resList = allocateResultLists(1000,1000)
 inBlockLoopXZIterWithPadding = cld(32,10)
 numberToLooFor = 2
 function testProcessDataBlock(resList,inBlockLoopXZIterWithPadding  ,numberToLooFor,             shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim)
-=======
 resList = allocateResultLists(100000,100000)
 
 function testProcessDataBlock(resList               shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter)
   krowa not manually meta but set manually list for work queue that block will iterate over
->>>>>>> 630b33992709367b0f83ad9baf4f89e3d52eece0
   xMeta,yMeta,zMeta = 2,2,2
   isMaskFull = true
 

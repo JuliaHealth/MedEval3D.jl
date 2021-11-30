@@ -107,8 +107,22 @@ macro mainLoop()
     sync_grid(grid_handle)
     @loadDataAtTheBegOfDilatationStep()
     sync_threads()
+    #now we should have all data needed to analyze padding from previous dilatation
+    @iterateOverWorkQueue($workQueaueCounter,$workQueaue
+    ,shmemSumLengthMaxDiv4,begin 
+    
+        @executeIterPadding(mainArrDims 
+        ,dilatationArrs[shmemSum[shmemIndex*4+4]+1]
+        ,referenceArrs[shmemSum[shmemIndex*4+4]+1]
+        ,shmemSum[shmemIndex*4+1]#xMeta
+        ,shmemSum[shmemIndex*4+2]#yMeta
+        ,shmemSum[shmemIndex*4+3]#zMeta
+        ,shmemSum[shmemIndex*4+4]#isGold
+        ,iterationNumberShmem[1]#iterNumb
+        )
+   sync_grid(grid_handle)
 
-
+    #we get dilatation from block its padding will be analyzed later
     @iterateOverWorkQueue($workQueaueCounter,$workQueaue
     ,shmemSumLengthMaxDiv4,begin 
         @executeDataIter(mainArrDims 
@@ -123,20 +137,6 @@ macro mainLoop()
 
     end ) 
     sync_grid(grid_handle)
-    #now we should have all data needed to analyze padding ...
-    @iterateOverWorkQueue($workQueaueCounter,$workQueaue
-    ,shmemSumLengthMaxDiv4,begin 
-    
-        @executeIterPadding(mainArrDims 
-        ,dilatationArrs[shmemSum[shmemIndex*4+4]+1]
-        ,referenceArrs[shmemSum[shmemIndex*4+4]+1]
-        ,shmemSum[shmemIndex*4+1]#xMeta
-        ,shmemSum[shmemIndex*4+2]#yMeta
-        ,shmemSum[shmemIndex*4+3]#zMeta
-        ,shmemSum[shmemIndex*4+4]#isGold
-        ,iterationNumberShmem[1]#iterNumb
-        )
-   sync_grid(grid_handle)
 
 
     end ) 
