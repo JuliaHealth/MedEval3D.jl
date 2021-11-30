@@ -96,23 +96,6 @@ end)#quote
 end    
 
 
-# """
-# stores the most important part of the kernel where we analyze supplied data blocks
-# do the dilatation and add to the result queue
-# """
-# macro  innersingleDataBlockPass()
-#    return esc(quote
-
-#             #in order to be able to skip some of the validations we will load now informations about this block and neighbouring blocks 
-#            #like for example are there any futher results to be written in this block including border queues
-#            #and is there sth in border queues of the neighbouring data blocks
-
-#            sync_threads()
-#            ############### execution
-#            #@executeDataIterWithPadding() 
-# end) #quote
-# end
-
 
 
 """
@@ -124,39 +107,44 @@ macro mainLoop()
     sync_grid(grid_handle)
     @loadDataAtTheBegOfDilatationStep()
     sync_threads()
-    #now in order to prevent  ovewriting  we will execute iteration over work queues in such a way that concurrently only non adjacent blocks will be analyzed
-    #this will be achived by multiple runs where each is  separated from another by sync grid    
+
+
+    @iterateOverWorkQueue($workQueaueCounter,$workQueaue
+    ,shmemSumLengthMaxDiv4,begin 
+        @executeDataIter(mainArrDims 
+        ,dilatationArrs[shmemSum[shmemIndex*4+4]+1]
+        ,referenceArrs[shmemSum[shmemIndex*4+4]+1]
+        ,shmemSum[shmemIndex*4+1]#xMeta
+        ,shmemSum[shmemIndex*4+2]#yMeta
+        ,shmemSum[shmemIndex*4+3]#zMeta
+        ,shmemSum[shmemIndex*4+4]#isGold
+        ,iterationNumberShmem[1]#iterNumb
+    )
+
+    end ) 
+    sync_grid(grid_handle)
+    #now we should have all data needed to analyze padding ...
+    @iterateOverWorkQueue($workQueaueCounter,$workQueaue
+    ,shmemSumLengthMaxDiv4,begin 
     
-    @workQueueIterationInvoke(workCountersInshmem[1],workQueueEEE)
-    @workQueueIterationInvoke(workCountersInshmem[2],workQueueEOE)
-    @workQueueIterationInvoke(workCountersInshmem[3],workQueueEEO)
-    @workQueueIterationInvoke(workCountersInshmem[4],workQueueOEE)
+        @executeIterPadding(mainArrDims 
+        ,dilatationArrs[shmemSum[shmemIndex*4+4]+1]
+        ,referenceArrs[shmemSum[shmemIndex*4+4]+1]
+        ,shmemSum[shmemIndex*4+1]#xMeta
+        ,shmemSum[shmemIndex*4+2]#yMeta
+        ,shmemSum[shmemIndex*4+3]#zMeta
+        ,shmemSum[shmemIndex*4+4]#isGold
+        ,iterationNumberShmem[1]#iterNumb
+        )
+   sync_grid(grid_handle)
 
-    @workQueueIterationInvoke(workCountersInshmem[5],workQueueOOE)
-    @workQueueIterationInvoke(workCountersInshmem[6],workQueueEOO)
-    @workQueueIterationInvoke(workCountersInshmem[7],workQueueOEO)
-    @workQueueIterationInvoke(workCountersInshmem[8],workQueueOOO)
 
-
-
+    end ) 
 
 end) #quote
 end#mainLoop
 
-"""
-helper to invoke the @iterateOverWorkQueue where only workQueaueCounter ande workQueue are changing
-"""
-macro workQueueIterationInvoke(workQueaueCounter,workQueaue)
-    return esc(quote
-    @iterateOverWorkQueue($workQueaueCounter,$workQueaue
-    ,dilatationArrs[isEvenPass[1]+1] #dilatation arrs
-    ,referenceArrs
-    ,dilatationArrs[2-isEvenPass[1]]# target arrs 
-    , segmToBeDilatated[1],shmemSumLengthMaxDiv4,:(), ) 
-    sync_grid(grid_handle)
 
-end)
-end
 
 """
 iterating over elements in work queaue  in order to make it work we need  to 
@@ -168,9 +156,6 @@ iterating over elements in work queaue  in order to make it work we need  to
     ex - actions invoked on the data block when its xMeta,yMeta,zMeta and is gold pass informations are already known
     """
 macro iterateOverWorkQueue(workQueaueCounter,workQueaue
-    ,dilatationArrs
-    ,referenceArrs
-    ,targetArrs
     ,shmemSumLengthMaxDiv4,ex )
    return esc(quote
     #first part we load data from work queue to shmem sum 
@@ -205,17 +190,7 @@ macro iterateOverWorkQueue(workQueaueCounter,workQueaue
                 # checking is there any point in futher dilatations of this block
                 if((isGold==1 && goldToBeDilatated[1]) || (isGold==0 && segmToBeDilatated[1]) )
                     #finally all ready for dilatation step to be executed on this particular block
-                    @executeDataIterWithPadding(mainArrDims 
-                                                ,inBlockLoopXZIterWithPadding
-                                                ,$dilatationArrs[shmemSum[shmemIndex*4+4]+1]
-                                                ,$referenceArrs[shmemSum[shmemIndex*4+4]+1]
-                                                ,$targetArrs[shmemSum[shmemIndex*4+4]+1]
-                                                ,shmemSum[shmemIndex*4+1]#xMeta
-                                                ,shmemSum[shmemIndex*4+2]#yMeta
-                                                ,shmemSum[shmemIndex*4+3]#zMeta
-                                                ,shmemSum[shmemIndex*4+4]#isGold
-                                                ,iterationNumberShmem[1]#iterNumb
-                    )
+
             
                         $ex # left just for debugging purposes
                 end    

@@ -228,88 +228,93 @@ end
 @test shmemPaddings[1,32,6]
 
 #############  validateData
-using Revise, Parameters, Logging, Test
-using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
-using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
-using Main.BitWiseUtils,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
+# using Revise, Parameters, Logging, Test
+# using CUDA
+# includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+# using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
+# using Main.BitWiseUtils,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
 
 
 
 
-mainArr= CUDA.zeros(UInt32, 50,50,10)
-refArr= CUDA.zeros(UInt32, 50,50,10)
-targetArr= CUDA.zeros(UInt32, 50,50,10)
+# mainArr= CUDA.zeros(UInt32, 50,50,10)
+# refArr= CUDA.zeros(UInt32, 50,50,10)
+# targetArr= CUDA.zeros(UInt32, 50,50,10)
 
-dataBdim= (32,10,32)
+# dataBdim= (32,10,32)
 
-xMeta,yMeta,zMeta = 1,1,1
+# xMeta,yMeta,zMeta = 1,1,1
 
-resShmemblockData= CUDA.zeros(UInt32, 32,10);
-shmemblockData= CUDA.zeros(UInt32, 32,10);
-shmemPaddings= CUDA.zeros(Bool, 32,32,6);
+# resShmemblockData= CUDA.zeros(UInt32, 32,10);
+# shmemblockData= CUDA.zeros(UInt32, 32,10);
+# shmemPaddings= CUDA.zeros(Bool, 32,32,6);
 
-threads=(32,10)
-rowOne = 0
-@setBitTo(rowOne,1,true)
-@setBitTo(rowOne,5,true)
-@setBitTo(rowOne,32,true)
+# threads=(32,10)
+# rowOne = 0
+# @setBitTo(rowOne,1,true)
+# @setBitTo(rowOne,5,true)
+# @setBitTo(rowOne,32,true)
 
-mainArr[1,1,1]= rowOne
-mainArr[1,10,1]= rowOne
-mainArr[32,1,1]= rowOne
+# mainArr[1,1,1]= rowOne
+# mainArr[1,10,1]= rowOne
+# mainArr[32,1,1]= rowOne
 
-rowB = 0
-@setBitTo(rowB,1,true)
-@setBitTo(rowB,2,true)
-@setBitTo(rowB,5,true)
-@setBitTo(rowB,6,true)
-@setBitTo(rowB,32,true)
+# rowB = 0
+# @setBitTo(rowB,1,true)
+# @setBitTo(rowB,2,true)
+# @setBitTo(rowB,5,true)
+# @setBitTo(rowB,6,true)
+# @setBitTo(rowB,32,true)
 
-targetArr[1,10,1]= rowB
-
-
+# targetArr[1,10,1]= rowB
 
 
-blocks =1
-mainArrDims= (50,50,320)
-metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim)
-#metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:9,2:3,4:6,: );
-metaDataDims=size(metaData)
 
-workQueue,workQueueCounter= WorkQueueUtils.allocateWorkQueue( max(length(newMeta),1) )
-metaData[2,2,2,2]=UInt32(1)
-#setting offsets in metadata
-for i in 1:14
-  metaData[xMeta,yMeta,zMeta,getResOffsetsBeg()+i]=i*10
-end
-isGold = 1
-iterNumb = 1
-function testvalidateData(shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueue,workQueueCounter)
-  @loadMainValues(mainArr,xMeta,yMeta,zMeta)
 
-  sync_threads()
-  @validateData(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr)
+# blocks =1
+# mainArrDims= (50,50,320)
+# metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim)
+# #metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:9,2:3,4:6,: );
+# metaDataDims=size(metaData)
+# metaSize= metaDataDims
+# workQueue,workQueueCounter= WorkQueueUtils.allocateWorkQueue( max(length(metaData),1) )
+# metaData[2,2,2,2]=UInt32(1)
+# #setting offsets in metadata
+# for i in 1:14
+#   metaData[xMeta,yMeta,zMeta,getResOffsetsBeg()+i]=i*10
+# end
+# isGold = 1
+# iterNumb = 1
+# resList = allocateResultLists(1000,1000)
+# paddingStore = CUDA.zeros(UInt8, metaSize[1],metaSize[2],metaSize[3],32,32)
+# inBlockLoopXZIterWithPadding = cld(32,10)
+# numberToLooFor = 2
+# function testvalidateData(numberToLooFor,inBlockLoopXZIterWithPadding,paddingStore,resList,shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueue,workQueueCounter)
+#   isMaskFull = true
+#   @loadMainValues(mainArr,xMeta,yMeta,zMeta)
 
-    return
-end
+#   sync_threads()
+#   @validateData(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr)
 
-@cuda threads=threads blocks=blocks testvalidateData(shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter)
+#     return
+# end
 
-@test shmemPaddings[1,1,4]
-@test shmemPaddings[5,1,4]
-@test shmemPaddings[32,1,4]
-@test !shmemPaddings[32,2,4]
+# @cuda threads=threads blocks=blocks testvalidateData(inBlockLoopXZIterWithPadding,paddingStore,resList,shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueue,workQueueCounter)
 
-@test !shmemPaddings[32,2,4]
+# @test shmemPaddings[1,1,4]
+# @test shmemPaddings[5,1,4]
+# @test shmemPaddings[32,1,4]
+# @test !shmemPaddings[32,2,4]
 
-@setBitTo(rowB,1,true)
-@setBitTo(rowB,2,true)
-@setBitTo(rowB,5,true)
-@setBitTo(rowB,6,true)
-@setBitTo(rowB,32,true)
+# @test !shmemPaddings[32,2,4]
 
-targetArr[1,10,1]= rowB
+# @setBitTo(rowB,1,true)
+# @setBitTo(rowB,2,true)
+# @setBitTo(rowB,5,true)
+# @setBitTo(rowB,6,true)
+# @setBitTo(rowB,32,true)
+
+# targetArr[1,10,1]= rowB
 
 
 
@@ -401,9 +406,11 @@ isGold = 1
 iterNumb = 1
 
 resList = allocateResultLists(1000,1000)
-
-function testProcessDataBlock(resList               shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter)
+inBlockLoopXZIterWithPadding = cld(32,10)
+numberToLooFor = 2
+function testProcessDataBlock(resList,inBlockLoopXZIterWithPadding  ,numberToLooFor,             shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim)
   xMeta,yMeta,zMeta = 2,2,2
+  isMaskFull = true
 
   sync_threads()
   xMeta,yMeta,zMeta = 3,3,3
@@ -412,7 +419,7 @@ function testProcessDataBlock(resList               shmemPaddings,shmemblockData
     return
 end
 
-@cuda threads=threads blocks=blocks testProcessDataBlock(shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter)
+@cuda threads=threads blocks=blocks testProcessDataBlock(workQueue,workQueueCounter,shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter)
 
 #we need to test couple thing
 #1) does dilateted data correctly was written to correct spot in the mainArr 
