@@ -349,19 +349,22 @@ shmemPaddings= CUDA.zeros(Bool, 32,32,6);
 
 threads=(32,10)
 rowOne = 0
+
+#below we will organize it so we should have results in all neghbouring blocks - also from corners 
 @setBitTo(rowOne,1,true)
 @setBitTo(rowOne,5,true)
 @setBitTo(rowOne,32,true)
 
-refArr[33,11,33]= 2
-refArr[33,20,34]= 2
-refArr[64,11,37]= 2
-refArr[64,11,38]= 2
-refArr[64,11,64]= 2
+mainArr[33,11,2]= rowOne
+mainArr[33,20,2]= rowOne
+mainArr[64,11,2]= rowOne
+mainArr[64,20,2]= rowOne
 
-targetArr[33,20,2]= rowB
+mainArr[64,11,2]= rowOne
+
+
 ################   here we will get a block that will become full after the dilatation meta 3,3,3
-xMeta,yMeta,zMeta = 3,3,3
+xMeta,yMeta,zMeta = 4,4,4
 fullOnesTobecome = 0
 for bitPos in 1:32
   if(isodd(bitPos))
@@ -394,21 +397,30 @@ metaDataDims=size(metaData)
 workQueue,workQueueCounter= WorkQueueUtils.allocateWorkQueue( max(length(metaData),1) )
 metaData[2,2,2,2]=UInt32(1)
 #setting offsets in metadata
-for i in 1:14
-  metaData[2,2,2,getResOffsetsBeg()+i]=i*10
+
+metaBlock = 0
+for xMetaa in 1:3,yMetaa in 1:3, zMetaa in 1:3 
+  metaBlock+=20
+  for i in 1:14
+    metaData[2,2,2,getResOffsetsBeg()+metaBlock]=i*1000
+  end
 end
 
-for i in 1:14
-  metaData[3,3,3,getResOffsetsBeg()+i+20]=i*10
-end
 
 isGold = 1
 iterNumb = 1
 
+<<<<<<< HEAD
 resList = allocateResultLists(1000,1000)
 inBlockLoopXZIterWithPadding = cld(32,10)
 numberToLooFor = 2
 function testProcessDataBlock(resList,inBlockLoopXZIterWithPadding  ,numberToLooFor,             shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim)
+=======
+resList = allocateResultLists(100000,100000)
+
+function testProcessDataBlock(resList               shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter)
+  krowa not manually meta but set manually list for work queue that block will iterate over
+>>>>>>> 630b33992709367b0f83ad9baf4f89e3d52eece0
   xMeta,yMeta,zMeta = 2,2,2
   isMaskFull = true
 
@@ -490,36 +502,40 @@ end
 
 
 #4)wheather in results  we have entries that should be present there so correct x,y,z and dir 
-function checkIsInResList()::Bool
+function checkIsInResList(resList,x,y,z,dir)::Bool
   for i in 1:length(resList)
-      
+      if(resList[i,:]== [x,y,z,isGold,dir,iterNumb])
+        return true
+      end
   end  
+  return false
 end  
 
-
-
-# @inbounds $resList[ resListPos, 1]=$x 
-# @inbounds $resList[ resListPos, 2]=$y 
-# @inbounds $resList[ resListPos, 3]=$z 
-# @inbounds $resList[ resListPos, 4]= $isGold
-# @inbounds $resList[ resListPos, 5]= $dir
-# @inbounds $resList[ resListPos, 6]= $iterNumb
-
-
-
-resList
-
-
-
-# for xx in ((3*32)+1):((4*32)), yy in ((3*10)+1):((4*10)), zz in ((3*32)+1):((4*32))
-#   refArr[xx,yy,zz]= 2
-# end
+@test checkIsInResList(resList,x,y,z,dir)
 
 # refArr[33,11,33]= 2
 # refArr[33,20,34]= 2
 # refArr[64,11,37]= 2
 # refArr[64,11,38]= 2
 # refArr[64,11,64]= 2
+# for xx in ((3*32)+1):((4*32)), yy in ((3*10)+1):((4*10)), zz in ((3*32)+1):((4*32))
+#   refArr[xx,yy,zz]= 2
+# end
+# @setBitTo(rowOne,1,true)
+# @setBitTo(rowOne,5,true)
+# @setBitTo(rowOne,32,true)
+
+# mainArr[33,11,2]= rowOne
+# mainArr[33,20,2]= rowOne
+# mainArr[64,11,2]= rowOne
+# mainArr[64,11,2]= rowOne
+# mainArr[64,11,2]= rowOne
+
+
+
+
+
+
 
 
 
@@ -527,6 +543,16 @@ resList
 
 
 #6) are the results in correct spots - weahter they are related to the ques the should be ...
+#where offset will be 0 for block 2,2,2 and 20000 for 3,3,3
+
+  
+metaBlock = 0
+for xMetaa in 1:3,yMetaa in 1:3, zMetaa in 1:3 
+  metaBlock+=20
+  for i in 1:14
+    metaData[2,2,2,getResOffsetsBeg()+metaBlock]=i*1000
+  end
+end
 
 
 
@@ -535,19 +561,6 @@ resList
 
 
 
-
-
-
-
-
-
-@setBitTo(rowB,1,true)
-@setBitTo(rowB,2,true)
-@setBitTo(rowB,5,true)
-@setBitTo(rowB,6,true)
-@setBitTo(rowB,32,true)
-
-targetArr[1,10,1]= rowB
 
 
 
