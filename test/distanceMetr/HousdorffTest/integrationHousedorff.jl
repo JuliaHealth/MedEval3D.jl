@@ -21,8 +21,13 @@
 
     robustnessPercent= 0.95
     numberToLooFor=1
-    boolKernelArgs, mainKernelArgs,threadsBoolKern,blocksBoolKern ,threadsMainKern,blocksMainKern= Housdorff.preparehousedorfKernel(goldGPU,segmGPU,robustnessPercent,numberToLooFor);
+    boolKernelArgs, mainKernelArgs,threadsBoolKern,blocksBoolKern ,threadsMainKern,blocksMainKern,shmemSizeBool,shmemSizeMain= Housdorff.preparehousedorfKernel(goldGPU,segmGPU,robustnessPercent,numberToLooFor);
     threadsBoolKern,Int64(blocksBoolKern) ,threadsMainKern,Int64(blocksMainKern)
+    
+    goldGPU = CuArray(mainArrCPU);
+    segmGPU= CuArray(mainArrCPU);
 
-    Housdorff.getHousedorffDistance(goldGPU,segmGPU,boolKernelArgs,mainKernelArgs,threadsBoolKern,blocksBoolKern ,threadsMainKern,blocksMainKern)
-
+    CUDA.memory_status() 
+    globalIterationNumb= Housdorff.getHousedorffDistance(goldGPU,segmGPU,boolKernelArgs,mainKernelArgs,threadsBoolKern,blocksBoolKern ,threadsMainKern,blocksMainKern,shmemSizeBool,shmemSizeMain)
+    globalIterationNumb[1]
+    goldGPU;

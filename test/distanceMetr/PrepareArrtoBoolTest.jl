@@ -86,27 +86,29 @@ end
     # threads=(32,20)
 
 
-    threads=(32,5)
+    threads=(32,8)
     # blocks =2
 
     # mainArrDims= (7,7,7)
     # dataBdim = (2,2,2)
 
-    blocks =7
-    metaDataDims= (8,9,7)
-    dataBdim = (33,40,37)
-    mainArrDims= (7,15,13)
+    blocks =136
+    dataBdim = (33,32,32)
+    mainArrDims= (512, 512, 500)
 
     metaDataDims= (cld(mainArrDims[1],dataBdim[1] ),cld(mainArrDims[2],dataBdim[2]),cld(mainArrDims[3],dataBdim[3]))
     #we are iterating here block by block sequentially
+    metaDataDims= (16, 16, 16,90)
     metaDataLength= metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
     loopMeta= fld(metaDataLength,blocks )
 
+
+    # metaDataDims (16, 16, 16, 90)  loopMeta 409 metaDataLength 4096
     function iter3dOuterKernel(mainArrDims,singleVal,metaDataDims,dataBdim, metaDataLength, loopMeta )
         @iter3dOuter(metaDataDims,loopMeta,metaDataLength,
         begin
         @ifXY 1 1  @atomic singleVal[]+=1
-    # @ifXY 1 1    CUDA.@cuprint "zMeta $(zMeta)  yMeta$(yMeta) xMeta$(xMeta)  idX $(blockIdxX()) \n"   
+     @ifXY 1 1    CUDA.@cuprint " linIdexMeta $(linIdexMeta)  zMeta $(zMeta)  yMeta$(yMeta) xMeta$(xMeta)  idX $(blockIdxX()) \n"   
 
     end)
         
@@ -169,7 +171,22 @@ end #"iter3dOuter"
     cartt = CartesianIndices(inddd);
     filtered = filter(cc-> !inddd[cc]  ,cartt)
     sum(indices)
+
+
+
+    
+
+
+
+
+
+
+
+
 end #iter data block
+
+
+
 ##### @uploadLocalfpFNCounters
 @testset "uploadLocalfpFNCounters" begin 
 
@@ -470,12 +487,17 @@ end #test set
 
 ###########################   getBoolCubeKernel
 @testset "getBoolCubeKernel" begin
+
+
+
+
+
     using Revise, Parameters, Logging, Test
     using CUDA
     includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
-    using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils, Main.PrepareArrtoBool
-    using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
-
+    using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils, Main.PrepareArrtoBool, Main.BitWiseUtils
+    using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates, Main.Housdorff
+    
 
     threads=(32,5)
     blocks =8
@@ -485,9 +507,6 @@ end #test set
     metaDataDims= size(metaData)
     arrGold = zeros(Int32,mainArrDims);
     arrSegm = zeros(Int32,mainArrDims);
-    loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
-    minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp  =getSmallForBoolKernel();
-    reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB=  getLargeForBoolKernel(mainArrDims,dataBdim);
 
         # so we should get all mins as 2 and all maxes as 5
     
@@ -504,17 +523,20 @@ end #test set
 
         gold3d,segm3d = CuArray(arrGold), CuArray(arrSegm)
         numberToLooFor =Int32(2)
+        robustnessPercent = 0.9
 
-    function locForKernel(mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,gold3d,segm3d,numberToLooFor,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength)
-
+        boolKernelArgs, mainKernelArgs,threadsBoolKern,blocksBoolKern ,threadsMainKern,blocksMainKern ,shmemSizeBool,shmemSizeMain=    preparehousedorfKernel(gold3d,segm3d,robustnessPercent,numberToLooFor)
+        mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,loopXinPlane,loopYinPlane,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,numberToLooFor,inBlockLoopXZIterWithPadding,shmemblockDataLoop,shmemblockDataLenght,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength=boolKernelArgs
+   
+   
+        function locForKernel(goldGPU,segmGPU,mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,loopXinPlane,loopYinPlane,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,numberToLooFor,inBlockLoopXZIterWithPadding,shmemblockDataLoop,shmemblockDataLenght,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength)
+     
         @getBoolCubeKernel()
 
         return
     end
 
-        @cuda threads=threads blocks=blocks locForKernel(mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,gold3d,segm3d,numberToLooFor,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength)
-
-
+        @cuda threads=threadsBoolKern blocks=blocksBoolKern locForKernel(gold3d,segm3d,boolKernelArgs...)
             @test  Int64( maxzRes[])==6
 
         @test Int64(fn[])==3
@@ -765,3 +787,55 @@ using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.Wor
 end# test set 
 
 end#total test set
+
+
+
+
+
+
+using Revise, Parameters, Logging, Test
+using CUDA
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
+using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
+
+
+
+##### iter data block
+singleVal = CUDA.zeros(Int64,14)
+threads=(32,5)
+
+blocks =17
+mainArrDims= (67,177,90)
+dataBdim = (43,21,17)
+indices = CUDA.zeros(Bool,mainArrDims)
+
+metaDataDims= (cld(mainArrDims[1],dataBdim[1] ),cld(mainArrDims[2],dataBdim[2]),cld(mainArrDims[3],dataBdim[3]))
+
+inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(dataBdim[1] ,threads[1]),fld(dataBdim[2] ,threads[2]),dataBdim[3]    )
+#we are iterating here block by block sequentially
+metaDataLength= metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
+loopMeta= fld(metaDataLength,blocks )
+
+function iterDataBlocksKernel(loopMeta,metaDataLength,mainArrDims,singleVal,metaDataDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ ,indices)
+    @iter3dOuter(metaDataDims,loopMeta,metaDataLength,
+    begin 
+        @iterDataBlockZdeepest(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,xMeta,yMeta,zMeta,
+        begin
+        @atomic singleVal[1]+=1
+        indices[x,y,z]=true
+        #CUDA.@cuprint "x $(x) y $(y) z $(z) zMeta $(zMeta)  yMeta $(yMeta) xMeta $(xMeta)  idX $(blockIdxX()) \n"   
+
+    end,begin indices[1]=true
+                 end )end)
+    
+    return
+end
+@cuda threads=threads blocks=blocks iterDataBlocksKernel(loopMeta,metaDataLength,mainArrDims,singleVal,metaDataDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ ,indices)
+@test singleVal[1]==mainArrDims[1]*mainArrDims[2]*mainArrDims[3]
+Int64(singleVal[1])
+7*7*7
+inddd = Array(indices);
+cartt = CartesianIndices(inddd);
+filtered = filter(cc-> !inddd[cc]  ,cartt)
+sum(indices)

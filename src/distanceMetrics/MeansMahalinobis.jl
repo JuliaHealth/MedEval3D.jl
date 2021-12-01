@@ -10,8 +10,8 @@ varianceZGlobal - should be reduced atomically in the end with all other variabl
 """
 
 module MeansMahalinobis
-using Main.BasicPreds, Main.CUDAGpuUtils, CUDA, Main.IterationUtils, Main.ReductionUtils, Main.MemoryUtils
-export meansMahalinobisKernel
+using Main.CUDAGpuUtils, CUDA, Main.IterationUtils, Main.ReductionUtils, Main.MemoryUtils
+export meansMahalinobisKernel,prepareMahalinobisKernel
 
 
 
@@ -24,68 +24,76 @@ function prepareMahalinobisKernel(goldGPU,segmGPU,numberToLooFor)
    
     
     
-#we will fill it after we work with launch configuration
-loopXdim = UInt32(1);loopYdim = UInt32(1) ;loopZdim = UInt32(1) ;
-sizz = size(segmGPU);maxX = UInt32(sizz[1]);maxY = UInt32(sizz[2]);maxZ = UInt32(sizz[3])
-#gold
-totalXGold= CuArray([0.0]);
-totalYGold= CuArray([0.0]);
-totalZGold= CuArray([0.0]);
-totalCountGold= CuArray([0]);
-#segm
-totalXSegm= CuArray([0.0]);
-totalYSegm= CuArray([0.0]);
-totalZSegm= CuArray([0.0]);
+    #we will fill it after we work with launch configuration
+    loopXdim = UInt32(1);loopYdim = UInt32(1) ;loopZdim = UInt32(1) ;
+    sizz = size(segmGPU);maxX = UInt32(sizz[1]);maxY = UInt32(sizz[2]);maxZ = UInt32(sizz[3])
+    #gold
+    totalXGold= CuArray([0.0]);
+    totalYGold= CuArray([0.0]);
+    totalZGold= CuArray([0.0]);
+    totalCountGold= CuArray([0]);
+    #segm
+    totalXSegm= CuArray([0.0]);
+    totalYSegm= CuArray([0.0]);
+    totalZSegm= CuArray([0.0]);
 
-varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
-varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
+    varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
+    varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
 
-totalCountSegm= CuArray([0]);
-totalCountGold
+    totalCountSegm= CuArray([0]);
+    totalCountGold= CuArray([0]);
 
-countPerZGold= CUDA.zeros(Float32,sizz[3]+1);
-countPerZSegm= CUDA.zeros(Float32,sizz[3]+1);
+    countPerZGold= CUDA.zeros(Float32,sizz[3]+1);
+    countPerZSegm= CUDA.zeros(Float32,sizz[3]+1);
 
-covariancesSliceWiseGold= CUDA.zeros(Float32,6,sizz[3]+1);
-covariancesSliceWiseSegm= CUDA.zeros(Float32,6,sizz[3]+1);
+    # covariancesSliceWiseGold= CUDA.zeros(Float32,6,sizz[3]+1);
+    # covariancesSliceWiseSegm= CUDA.zeros(Float32,6,sizz[3]+1);
 
 
-covarianceGlobal= CUDA.zeros(Float32,12,1);
+    covarianceGlobal= CUDA.zeros(Float32,12,1);
 
-mahalanobisResGlobal= CUDA.zeros(1);
-mahalanobisResSliceWise= CUDA.zeros(sizz[3]+1);
-#mahalanobisResSliceWise= CUDA.zeros(sizz[3]);
+    mahalanobisResGlobal= CUDA.zeros(1);
+    # mahalanobisResSliceWise= CUDA.zeros(sizz[3]+1);
+    #mahalanobisResSliceWise= CUDA.zeros(sizz[3]);
 
-args = (goldGPU,segmGPU,numberToLooFor
-,loopYdim,loopXdim,loopZdim
-,(maxX, maxY,maxZ)
-,totalXGold,totalYGold,totalZGold,totalCountGold
-,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,countPerZGold
-, countPerZSegm,covariancesSliceWiseGold, covariancesSliceWiseSegm,
-varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
-    ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
-    ,mahalanobisResGlobal, mahalanobisResSliceWise)
+    args = (numberToLooFor
+    ,loopYdim,loopXdim,loopZdim
+    ,(maxX, maxY,maxZ)
+    ,totalXGold,totalYGold,totalZGold,totalCountGold
+    ,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,
+        countPerZGold, countPerZSegm,
+        #,covariancesSliceWiseGold, covariancesSliceWiseSegm,
+    varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
+        ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
+        ,mahalanobisResGlobal
+        #, mahalanobisResSliceWise
     
+    )
+        
+        
+        get_shmem(threads) = (sizeof(UInt32)*3*4)
     
-    get_shmem(threads) = (sizeof(UInt32)*3*4)
-  
-  threads ,blocks  = getThreadsAndBlocksNumbForKernel(get_shmem,meansMahalinobisKernel,args)
+    threads ,blocks  = getThreadsAndBlocksNumbForKernel(get_shmem,meansMahalinobisKernel,(goldGPU,segmGPU,args...))
 
-        loopXdim = UInt32(fld(maxX, threads[1]))
-    loopYdim = UInt32(fld(maxY, threads[2])) 
-    loopZdim = UInt32(fld(maxZ,blocks )) 
-    
+            loopXdim = UInt32(fld(maxX, threads[1]))
+        loopYdim = UInt32(fld(maxY, threads[2])) 
+        loopZdim = UInt32(fld(maxZ,blocks )) 
+        
 
-args = (goldGPU,segmGPU,numberToLooFor
-,loopYdim,loopXdim,loopZdim
-,(maxX, maxY,maxZ)
-,totalXGold,totalYGold,totalZGold,totalCountGold
-,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,countPerZGold
-, countPerZSegm,covariancesSliceWiseGold, covariancesSliceWiseSegm,
-varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
-    ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
-    ,mahalanobisResGlobal, mahalanobisResSliceWise)
+    args = (numberToLooFor
+    ,loopYdim,loopXdim,loopZdim
+    ,(maxX, maxY,maxZ)
+    ,totalXGold,totalYGold,totalZGold,totalCountGold
+    ,totalXSegm,totalYSegm,totalZSegm,totalCountSegm
+        ,countPerZGold, countPerZSegm,
+        #,covariancesSliceWiseGold, covariancesSliceWiseSegm,
+    varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
+        ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
+        ,mahalanobisResGlobal
+        #, mahalanobisResSliceWise
     
+    )
+        
     
   
   return(args,threads ,blocks)
@@ -100,16 +108,15 @@ executed after prepareMahalinobisKernel - will execute on given arrays
 function calculateMalahlinobisDistance(goldGPU,segmGPU,args,threads ,blocks)
 
 # setting main arays
-args[1]= goldGPU
-args[2]= segmGPU  
+
 ##### setting to 0 all entries that require it    
-for i in 8:33    
-    CUDA.fill!(0,args[i])
+for i in 6:28    
+    CUDA.fill!(args[i],0)
 end    
     
-@cuda cooperative=true threads=threads blocks=blocks meansMahalinobisKernel(args...)
+@cuda cooperative=true threads=threads blocks=blocks meansMahalinobisKernel(goldGPU,segmGPU,args...)
 
-    
+return  args[28][1]
 end
 
 
@@ -183,7 +190,7 @@ end
 calculates variances and covariances needed for calculation of mahalanobis
 
 """
-macro calculateVariancesAdCov(countPerZ,arrToAnalyze,covariancesSliceWise,varianceXGlobal,covarianceXYGlobal,covarianceXZGlobal,varianceYGlobal,covarianceYZGlobal,varianceZGlobal)
+macro calculateVariancesAdCov(countPerZ,arrToAnalyze,varianceXGlobal,covarianceXYGlobal,covarianceXZGlobal,varianceYGlobal,covarianceYZGlobal,varianceZGlobal)
     return esc(quote
     @iter3dAdditionalxyzActsAndZcheck(arrDims,loopXdim,loopYdim,loopZdim
     #z check
@@ -450,10 +457,10 @@ function meansMahalinobisKernel(goldArr,segmArr
     ,arrDims::Tuple{UInt32,UInt32,UInt32}
     ,totalXGold,totalYGold,totalZGold,totalCountGold
     ,totalXSegm,totalYSegm,totalZSegm,totalCountSegm
-    ,countPerZGold,countPerZSegm,covariancesSliceWiseGold, covariancesSliceWiseSegm
+    ,countPerZGold,countPerZSegm
     ,varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
     ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
-    ,mahalanobisResGlobal, mahalanobisResSliceWise   )
+    ,mahalanobisResGlobal   )
 
     grid_handle = this_grid()
     # keeping counter of old z value - in order to be able to get slicewise z counter
@@ -507,13 +514,13 @@ function meansMahalinobisKernel(goldArr,segmArr
     @resetForVarAndCov(totalXGold,totalYGold, totalZGold, totalCountGold)
     sync_threads()
     #calculate means and covariances
-    @calculateVariancesAdCov(countPerZGold,goldArr,covariancesSliceWiseGold,varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold)
+    @calculateVariancesAdCov(countPerZGold,goldArr,varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold)
     
     ######### other mask
     sync_threads()
     @resetForVarAndCov(totalXSegm,totalYSegm,totalZSegm,totalCountSegm)
     sync_threads()
-    @calculateVariancesAdCov(countPerZSegm,segmArr,covariancesSliceWiseSegm,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm)
+    @calculateVariancesAdCov(countPerZSegm,segmArr,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm)
     
 ###################### getting final results
 

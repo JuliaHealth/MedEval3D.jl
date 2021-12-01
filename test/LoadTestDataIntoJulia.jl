@@ -2,30 +2,11 @@
 #module LoadTestDataIntoJulia
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
-
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
-
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\overLap\\MainOverlap.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\PairCounting\\RandIndex.jl")
-
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\Probabilistic\\ProbabilisticMetrics.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\InformationTheorhetic\\InformationTheorhetic.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\volume\\VolumeMetric.jl")
-
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernels\\TpfpfnKernel.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernels\\InterClassCorrKernel.jl")
-
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
-using Main.BasicPreds, Main.CUDAGpuUtils 
-using Main.MainOverlap, Main.TpfpfnKernel
-using BenchmarkTools,StaticArrays
-
+includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils, Main.BasicStructs
+using Shuffle,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
 using Main.MainOverlap, Main.RandIndex , Main.ProbabilisticMetrics , Main.VolumeMetric ,Main.InformationTheorhetic
+using Main.CUDAAtomicUtils, Main.TpfpfnKernel, Main.InterClassCorrKernel,Main.MeansMahalinobis
 
 
 using Conda
@@ -109,38 +90,19 @@ examplemhaDat = exampleFiles[2]
 
 goldS,segmAlgo =getDataAndEvaluationFromPymia(examplemhaDat);
 
-arrGold = CuArray(vec(goldS))
-arrAlgo = CuArray(vec(segmAlgo))
+arrGold = CuArray(goldS)
+arrAlgo = CuArray(segmAlgo)
 sizz= size(goldS)
-
-
-goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools();
-IndexesArray= CUDA.zeros(Int32,10000000)
-#TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn,sizz[1],sizz[1]*sizz[2],1,UInt8(1),IndexesArray)
-using Main.BasicStructs
+##### load tests ...
 conf = ConfigurtationStruct(trues(12)...)
-sliceMetricsTupl=(CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3])
-                            ,CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3])
-                            ,CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]),CUDA.zeros(sizz[3]) )#eleven entries
+numberToLooFor = UInt8(1)
+args,threads,blocks,metricsTuplGlobal= TpfpfnKernel.prepareForconfusionTableMetrics(arrGold    , arrAlgo    ,numberToLooFor  ,conf)
 
-metricsTuplGlobal=  (CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1)
-,CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1)
-,CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1) )#eleven entries
+argsB = TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal)
+argsB[5][1]
+metricsTuplGlobal
 
-totalNumberOfVoxels=sizz[1]*sizz[2]*sizz[3]
 
-argsB = TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn
-                            ,sliceMetricsTupl
-                            ,metricsTuplGlobal
-                            ,sizz[1]*sizz[2]
-                            ,sizz[3]
-                            ,UInt8(1)
-                            ,conf
-                            ,totalNumberOfVoxels)
-@test tp[1]==206422
-#tn[1]==6684530
-@test fp[1]==0
-@test fn[1]==218185
 
 #numbers below taken from pymia
 
@@ -154,136 +116,120 @@ argsB = TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn
 @test isapprox(metricsTuplGlobal[11][1],0.256; atol = 0.1) #11) variation of information
 
 
-################## icc
-sumOfGold= CuArray([0]);
-sumOfSegm= CuArray([0]);
-
-sswTotal= CUDA.zeros(1);
-ssbTotal= CUDA.zeros(1);
-
-iccPerSlice = CuArray(zeros(Float32,sizz[3]));
-numberToLooFor= UInt8(1)
-# arrGoldB = vec(CUDA.ones(UInt8,sizz));
-# arrAlgoB =  vec(CUDA.ones(UInt8,sizz));
-maxNumberOfBlocks = attribute(device(), CUDA.DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT)*1
-
-globalICC= InterClassCorrKernel.calculateInterclassCorr(arrGold,arrAlgo
-                                ,sizz
-                                ,sumOfGold
-                                ,sumOfSegm
-                                ,sswTotal
-                                ,ssbTotal
-                                ,iccPerSlice
-                                ,numberToLooFor
-                                ,maxNumberOfBlocks)
-
+################# icc
+argsMain, threads,blocks, totalNumbOfVoxels=InterClassCorrKernel.prepareInterClassCorrKernel(arrGold ,arrAlgo,numberToLooFor)
+globalICC= InterClassCorrKernel.calculateInterclassCorr(arrGold,arrAlgo,threads,blocks,argsMain)
 @test isapprox(globalICC,0.6381813122385622; atol = 0.1)
 
-################ Mahalinobis 
 
-goldS3d= CuArray(goldS);
-segmS3d= CuArray(segmAlgo);
-#we will fill it after we work with launch configuration
-loopXdim = UInt32(1);loopYdim = UInt32(1) ;loopZdim = UInt32(1) ;
-sizz = size(goldS3d);maxX = UInt32(sizz[1]);maxY = UInt32(sizz[2]);maxZ = UInt32(sizz[3])
-#gold
-totalXGold= CuArray([0.0]);
-totalYGold= CuArray([0.0]);
-totalZGold= CuArray([0.0]);
-totalCountGold= CuArray([0]);
-#segm
-totalXSegm= CuArray([0.0]);
-totalYSegm= CuArray([0.0]);
-totalZSegm= CuArray([0.0]);
+# ################ Mahalinobis 
+using Main.MeansMahalinobis
+args,threads ,blocks= MeansMahalinobis.prepareMahalinobisKernel(arrGold,arrAlgo,numberToLooFor)
+mahalanobisResGlob=  MeansMahalinobis.calculateMalahlinobisDistance(arrGold,arrAlgo,args,threads ,blocks)
+@test isapprox(mahalanobisResGlob,0.08;atol = 0.1 )
+# goldS3d= CuArray(goldS);
+# segmS3d= CuArray(segmAlgo);
+# #we will fill it after we work with launch configuration
+# loopXdim = UInt32(1);loopYdim = UInt32(1) ;loopZdim = UInt32(1) ;
+# sizz = size(goldS3d);maxX = UInt32(sizz[1]);maxY = UInt32(sizz[2]);maxZ = UInt32(sizz[3])
+# #gold
+# totalXGold= CuArray([0.0]);
+# totalYGold= CuArray([0.0]);
+# totalZGold= CuArray([0.0]);
+# totalCountGold= CuArray([0]);
+# #segm
+# totalXSegm= CuArray([0.0]);
+# totalYSegm= CuArray([0.0]);
+# totalZSegm= CuArray([0.0]);
 
-varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
-varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
+# varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
+# varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
 
-totalCountSegm= CuArray([0]);
-totalCountGold
-#countPerZGold= CUDA.zeros(Float32,sizz[3]+1);
-#countPerZSegm= CUDA.zeros(Float32,sizz[3]+1);
-countPerZGold= CUDA.zeros(Float32,500);
-countPerZSegm= CUDA.zeros(Float32,500);
+# totalCountSegm= CuArray([0]);
+# totalCountGold
+# #countPerZGold= CUDA.zeros(Float32,sizz[3]+1);
+# #countPerZSegm= CUDA.zeros(Float32,sizz[3]+1);
+# countPerZGold= CUDA.zeros(Float32,500);
+# countPerZSegm= CUDA.zeros(Float32,500);
 
-#covariancesSliceWise= CUDA.zeros(Float32,12,sizz[3]+1);
-covariancesSliceWiseGold= CUDA.zeros(Float32,6,500);
-covariancesSliceWiseSegm= CUDA.zeros(Float32,6,500);
-covarianceGlobal= CUDA.zeros(Float32,12,1);
+# #covariancesSliceWise= CUDA.zeros(Float32,12,sizz[3]+1);
+# covariancesSliceWiseGold= CUDA.zeros(Float32,6,500);
+# covariancesSliceWiseSegm= CUDA.zeros(Float32,6,500);
+# covarianceGlobal= CUDA.zeros(Float32,12,1);
 
-mahalanobisResGlobal= CUDA.zeros(1);
-mahalanobisResSliceWise= CUDA.zeros(500);
-#mahalanobisResSliceWise= CUDA.zeros(sizz[3]);
+# mahalanobisResGlobal= CUDA.zeros(1);
+# mahalanobisResSliceWise= CUDA.zeros(500);
+# #mahalanobisResSliceWise= CUDA.zeros(sizz[3]);
 
-args = (goldS3d,segmS3d,numberToLooFor
-,loopYdim,loopXdim,loopZdim
-,(maxX, maxY,maxZ)
-,totalXGold,totalYGold,totalZGold,totalCountGold
-,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,countPerZGold
-, countPerZSegm,covariancesSliceWiseGold, covariancesSliceWiseSegm,
-varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
-    ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
-    ,mahalanobisResGlobal, mahalanobisResSliceWise)
-
-
+# args = (goldS3d,segmS3d,numberToLooFor
+# ,loopYdim,loopXdim,loopZdim
+# ,(maxX, maxY,maxZ)
+# ,totalXGold,totalYGold,totalZGold,totalCountGold
+# ,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,countPerZGold
+# , countPerZSegm,covariancesSliceWiseGold, covariancesSliceWiseSegm,
+# varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
+#     ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
+#     ,mahalanobisResGlobal, mahalanobisResSliceWise)
 
 
-    # calculate the amount of dynamic shared memory for a 2D block size
-    get_shmem(threads) = (sizeof(UInt32)*3*4)
+
+
+#     # calculate the amount of dynamic shared memory for a 2D block size
+#     get_shmem(threads) = (sizeof(UInt32)*3*4)
     
-    function get_threads(threads)
-        threads_x = 32
-        threads_y = cld(threads,threads_x )
-        return (threads_x, threads_y)
-    end
+#     function get_threads(threads)
+#         threads_x = 32
+#         threads_y = cld(threads,threads_x )
+#         return (threads_x, threads_y)
+#     end
 
-    kernel = @cuda launch=false MeansMahalinobis.meansMahalinobisKernel(args...)
+#     kernel = @cuda launch=false MeansMahalinobis.meansMahalinobisKernel(args...)
    
-    config = launch_configuration(kernel.fun, shmem=threads->get_shmem(get_threads(threads)))
+#     config = launch_configuration(kernel.fun, shmem=threads->get_shmem(get_threads(threads)))
 
-   # convert to 2D block size and figure out appropriate grid size
-    threads = get_threads(config.threads)
-    blocks = UInt32(config.blocks)
-    loopXdim = UInt32(cld(maxX, threads[1]))
-    loopYdim = UInt32(cld(maxY, threads[2])) 
-    loopZdim = UInt32(cld(maxZ,blocks )) 
+#    # convert to 2D block size and figure out appropriate grid size
+#     threads = get_threads(config.threads)
+#     blocks = UInt32(config.blocks)
+#     loopXdim = UInt32(cld(maxX, threads[1]))
+#     loopYdim = UInt32(cld(maxY, threads[2])) 
+#     loopZdim = UInt32(cld(maxZ,blocks )) 
 
-#covariancesSliceWise= CUDA.zeros(Float32,12,sizz[3]+1);
-covariancesSliceWiseGold= CUDA.zeros(Float32,6,500);
-covariancesSliceWiseSegm= CUDA.zeros(Float32,6,500);
+# #covariancesSliceWise= CUDA.zeros(Float32,12,sizz[3]+1);
+# covariancesSliceWiseGold= CUDA.zeros(Float32,6,500);
+# covariancesSliceWiseSegm= CUDA.zeros(Float32,6,500);
 
-#gold
-totalXGold= CuArray([0.0]);
-totalYGold= CuArray([0.0]);
-totalZGold= CuArray([0.0]);
-totalCountGold= CuArray([0]);
-#segm
-totalXSegm= CuArray([0.0]);
-totalYSegm= CuArray([0.0]);
-totalZSegm= CuArray([0.0]);
-totalCountSegm= CuArray([0]);
-
-
-
-varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
-varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
+# #gold
+# totalXGold= CuArray([0.0]);
+# totalYGold= CuArray([0.0]);
+# totalZGold= CuArray([0.0]);
+# totalCountGold= CuArray([0]);
+# #segm
+# totalXSegm= CuArray([0.0]);
+# totalYSegm= CuArray([0.0]);
+# totalZSegm= CuArray([0.0]);
+# totalCountSegm= CuArray([0]);
 
 
 
-args = (goldS3d,segmS3d,numberToLooFor
-,loopYdim,loopXdim,loopZdim
-,(maxX, maxY,maxZ)
-,totalXGold,totalYGold,totalZGold,totalCountGold
-,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,countPerZGold
-, countPerZSegm,covariancesSliceWiseGold, covariancesSliceWiseSegm,
-varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
-    ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
-    ,mahalanobisResGlobal, mahalanobisResSliceWise)
+# varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
+# varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
 
 
-    @cuda cooperative=true threads=threads blocks=blocks MeansMahalinobis.meansMahalinobisKernel(args...)
+
+# args = (goldS3d,segmS3d,numberToLooFor
+# ,loopYdim,loopXdim,loopZdim
+# ,(maxX, maxY,maxZ)
+# ,totalXGold,totalYGold,totalZGold,totalCountGold
+# ,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,countPerZGold
+# , countPerZSegm,covariancesSliceWiseGold, covariancesSliceWiseSegm,
+# varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
+#     ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
+#     ,mahalanobisResGlobal, mahalanobisResSliceWise)
+
+
+#     @cuda cooperative=true threads=threads blocks=blocks MeansMahalinobis.meansMahalinobisKernel(args...)
     
-    @test isapprox(mahalanobisResGlobal[1],0.08;atol = 0.1 )
+#     @test isapprox(mahalanobisResGlobal[1],0.08;atol = 0.1 )
 
 
 
@@ -295,98 +241,98 @@ varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGloba
 
 
 
-####################### some benchmarks 
+# ####################### some benchmarks 
 
 
-BenchmarkTools.DEFAULT_PARAMETERS.samples = 100
-BenchmarkTools.DEFAULT_PARAMETERS.seconds =60
-BenchmarkTools.DEFAULT_PARAMETERS.gcsample = true
+# BenchmarkTools.DEFAULT_PARAMETERS.samples = 100
+# BenchmarkTools.DEFAULT_PARAMETERS.seconds =60
+# BenchmarkTools.DEFAULT_PARAMETERS.gcsample = true
 
 
-function toBench(FlattGoldGPU,FlattSegGPU,tp,tn,fp,fn)
-    CUDA.@sync TpfpfnKernel.getTpfpfnData!(FlattGoldGPU,FlattSegGPU,tp,tn,fp,fn
-                            ,sliceMetricsTupl
-                            ,metricsTuplGlobal
-                            ,sizz[1]*sizz[2]
-                            ,sizz[3]
-                            ,UInt8(1)
-                            ,conf
-                            ,totalNumberOfVoxels)
-                        end
+# function toBench(FlattGoldGPU,FlattSegGPU,tp,tn,fp,fn)
+#     CUDA.@sync TpfpfnKernel.getTpfpfnData!(FlattGoldGPU,FlattSegGPU,tp,tn,fp,fn
+#                             ,sliceMetricsTupl
+#                             ,metricsTuplGlobal
+#                             ,sizz[1]*sizz[2]
+#                             ,sizz[3]
+#                             ,UInt8(1)
+#                             ,conf
+#                             ,totalNumberOfVoxels)
+#                         end
 
-bb2 = @benchmark toBench(FlattGoldGPU,FlattSegGPU,tp,tn,fp,fn)  setup=(goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools())
-
-
-CUDA.@profile begin
-    TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn
-    , intermediateResTp,intermediateResFp
-    ,intermediateResFn,sizz[1]*sizz[2],sizz[3]
-    ,UInt8(1)
-    ,IndexesArray)
-end
+# bb2 = @benchmark toBench(FlattGoldGPU,FlattSegGPU,tp,tn,fp,fn)  setup=(goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools())
 
 
-## stored indexes  and now we are inspecting it 
-diff = Int64(round(length(goldS)- maximum(IndexesArray)))
+# CUDA.@profile begin
+#     TpfpfnKernel.getTpfpfnData!(arrGold,arrAlgo,tp,tn,fp,fn
+#     , intermediateResTp,intermediateResFp
+#     ,intermediateResFn,sizz[1]*sizz[2],sizz[3]
+#     ,UInt8(1)
+#     ,IndexesArray)
+# end
 
 
-
-diff/pixelNumberPerSlice
-cpuZZ = zeros(Int32,10000000)
-copyto!(cpuZZ, zz)
-zz = filter(it->it>0 ,cpuZZ)
-
-
-diffrenceOfIndexes = filter(pair->pair[1]!=pair[2], collect(enumerate(zz))  )
-length(zz) - length(goldS)
-
-sort(zz)
-
-pixelNumberPerSlice-512*77
-
-# Subject_2  GREYMATTER   0.298  10.863     74392.000   0.298
-# Subject_2  WHITEMATTER  0.654  6.000      206422.000  0.654
-
-#tpTotalTrue = filter(pair->pair[2]== vec(goldS)[pair[1]] ==1 ,collect(enumerate(vec(segmAlgo))))|>length
-
-
-arrOnesA = CUDA.ones(sizz);
-arrOnesB = CUDA.ones(sizz);
-
-goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools();
-IndexesArray= CUDA.zeros(Int32,10000000)
-
-TpfpfnKernel.getTpfpfnData!(arrOnesA,arrOnesB,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn,sizz[1]*sizz[2],sizz[3],Float32(1),IndexesArray)
-# sum(IndexesArray)
-tp[1]
-tp[1] -length(arrOnesA)
-# length(arrOnesA) -sum(IndexesArray)
-#length(arrOnesA) - tp[1]
-
-
-tp = 5
-fp = 5
-fn = 5
-tn = 5
-
-
-using Main.RandIndex
-
-MainOverlap.dice(tp,fp, fn)
-MainOverlap.jaccard(tp,fp, fn)
-MainOverlap.gce(tn,tp,fp, fn)
-RandIndex.calculateAdjustedRandIndex(tn,tp,fp, fn)
-ProbabilisticMetrics.calculateCohenCappa(tn,tp,fp, fn )
-VolumeMetric.getVolumMetric(tp,fp, fn )
-InformationTheorhetic.mutualInformationMetr(tn,tp,fp, fn)
-InformationTheorhetic.variationOfInformation(tn,tp,fp, fn)
+# ## stored indexes  and now we are inspecting it 
+# diff = Int64(round(length(goldS)- maximum(IndexesArray)))
 
 
 
+# diff/pixelNumberPerSlice
+# cpuZZ = zeros(Int32,10000000)
+# copyto!(cpuZZ, zz)
+# zz = filter(it->it>0 ,cpuZZ)
 
 
-rand(1,3,7)[19]
+# diffrenceOfIndexes = filter(pair->pair[1]!=pair[2], collect(enumerate(zz))  )
+# length(zz) - length(goldS)
+
+# sort(zz)
+
+# pixelNumberPerSlice-512*77
+
+# # Subject_2  GREYMATTER   0.298  10.863     74392.000   0.298
+# # Subject_2  WHITEMATTER  0.654  6.000      206422.000  0.654
+
+# #tpTotalTrue = filter(pair->pair[2]== vec(goldS)[pair[1]] ==1 ,collect(enumerate(vec(segmAlgo))))|>length
 
 
-end #module
+# arrOnesA = CUDA.ones(sizz);
+# arrOnesB = CUDA.ones(sizz);
+
+# goldBoolGPU,segmBoolGPU,tp,tn,fp,fn, tpArr,tnArr,fpArr, fnArr, blockNum , nx,ny,nz ,tpTotalTrue,tnTotalTrue,fpTotalTrue, fnTotalTrue ,tpPerSliceTrue,  tnPerSliceTrue,fpPerSliceTrue,fnPerSliceTrue ,flattG, flattSeg ,FlattGoldGPU,FlattSegGPU,intermediateResTp,intermediateResFp,intermediateResFn = getSmallTestBools();
+# IndexesArray= CUDA.zeros(Int32,10000000)
+
+# TpfpfnKernel.getTpfpfnData!(arrOnesA,arrOnesB,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn,sizz[1]*sizz[2],sizz[3],Float32(1),IndexesArray)
+# # sum(IndexesArray)
+# tp[1]
+# tp[1] -length(arrOnesA)
+# # length(arrOnesA) -sum(IndexesArray)
+# #length(arrOnesA) - tp[1]
+
+
+# tp = 5
+# fp = 5
+# fn = 5
+# tn = 5
+
+
+# using Main.RandIndex
+
+# MainOverlap.dice(tp,fp, fn)
+# MainOverlap.jaccard(tp,fp, fn)
+# MainOverlap.gce(tn,tp,fp, fn)
+# RandIndex.calculateAdjustedRandIndex(tn,tp,fp, fn)
+# ProbabilisticMetrics.calculateCohenCappa(tn,tp,fp, fn )
+# VolumeMetric.getVolumMetric(tp,fp, fn )
+# InformationTheorhetic.mutualInformationMetr(tn,tp,fp, fn)
+# InformationTheorhetic.variationOfInformation(tn,tp,fp, fn)
+
+
+
+
+
+# rand(1,3,7)[19]
+
+
+# end #module
 

@@ -24,6 +24,9 @@ tp[1] ==tpTotalTrue && fp[1] ==fpTotalTrue && fn[1] ==fnTotalTrue #tn[1] == tnTo
 
 
 
+using CUDA
+
+
 
 #@benchmark CUDA.@sync 
 # we are adding false in the end to make indexing easier

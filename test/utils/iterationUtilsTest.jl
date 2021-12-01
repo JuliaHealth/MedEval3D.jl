@@ -100,7 +100,55 @@ end
 
 
 
+    using Revise, Parameters, Logging, Test
+    using CUDA
+    includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+    using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils, Main.BasicStructs
+    using Shuffle,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
+    using Main.MainOverlap, Main.RandIndex , Main.ProbabilisticMetrics , Main.VolumeMetric ,Main.InformationTheorhetic
+    using Main.CUDAAtomicUtils, Main.TpfpfnKernel, Main.InterClassCorrKernel
+    
 
+    dimx = 529
+    dimy = 556
+    dimz = 339
+    # dimx = 333
+    # dimy = 33
+    # dimz = 33
+    arrGold = CUDA.ones(UInt8,(dimx,dimy,dimz))
+    arrAlgo =  CUDA.ones(UInt8,(dimx,dimy,dimz))
+    sizz= size(arrGold)
+    ##### load tests ...
+    conf = ConfigurtationStruct(trues(12)...)
+    numberToLooFor = UInt8(1)
+    
+    args,threads,blocks,metricsTuplGlobal= TpfpfnKernel.prepareForconfusionTableMetrics(arrGold    , arrAlgo    ,numberToLooFor  ,conf)
+    
+    # iterLoop= args[9]
+    # pixPerSlice = Int64(args[10]) 
+    singleSum= CUDA.zeros(UInt64,1)
+    function testIter(goldGPU#goldBoolGPU
+        , segmGPU#segmBoolGPU
+        ,sliceMetricsTupl
+        ,tp,tn,fp,fn#tp,tn,fp,fn
+        ,arrDims,totalNumbOfVoxels,iterLoop,pixPerSlice
+        ,numberToLooFor#numberToLooFor
+        #,metricsTuplGlobal
+        ,conf,singleSum)
+        @iterateLinearlyMultipleBlocks(iterLoop,pixPerSlice,totalNumbOfVoxels,begin 
+            @atomic singleSum[1]+=1
+            #CUDA.@cuprint "i $(i) \n"
+        end)
+    
+    return 
+    end
+    
+    @cuda threads=threads blocks=blocks testIter(arrGold, arrAlgo,args..., singleSum) #args[8][3]  is number of slices ...
+    
+    @test Int64(singleSum[1]) ==dimx*dimy*dimz
+    
+    Int64(singleSum[1])-dimx*dimy*dimz
+    
 
 
 

@@ -385,7 +385,7 @@ kernelFun - reference to kernel function that is to be analyzed by occupancy API
 args - arguments tuple  for kernel function
 reurn 2 tuple with optimal threads and blocks number (threads,blocks)
 """
-function getThreadsAndBlocksNumbForKernel(get_shmem,kernelFun,args)
+function getThreadsAndBlocksNumbForKernel(get_shmemm,kernelFun,args)
     # calculate the amount of dynamic shared memory for a 2D block size
     #get_shmem(threads) = (sizeof(UInt32)*3*4)
     
@@ -397,7 +397,7 @@ function getThreadsAndBlocksNumbForKernel(get_shmem,kernelFun,args)
 
     kernel = @cuda launch=false kernelFun(args...)
    
-    config = launch_configuration(kernel.fun, shmem=threads->get_shmem(get_threads(threads)))
+    config = launch_configuration(kernel.fun, shmem=threads->get_shmemm(get_threads(threads)))
     threads = get_threads(config.threads)
     blocks = UInt32(config.blocks)
     return (threads,blocks)

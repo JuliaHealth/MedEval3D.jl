@@ -77,7 +77,7 @@ macro redOnlyStepOne(offsetIter,shmem, varActTuples...)
    """
   macro redOnlyStepThree(offsetIter,shmem, actions...)
   
-    thirdPart =   reduceWitActThirdPartOnly(shmem, actions)
+    thirdPart =   reduceWitActThirdPartOnly(offsetIter,shmem, actions)
 
       return esc(:(
         $offsetIter=1;
@@ -146,7 +146,7 @@ function reduceWitActThirdPart(offsetIter,shmem, varActTuples...)
       push!(tmp, quote
       if(threadIdxY()==$index)
         while(offsetIter <32) 
-          @inbounds $shmem[threadIdxX(),$index]=$op($shmem[threadIdxX(),$index],  shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),$index], $offsetIter))  
+          @inbounds $shmem[threadIdxX(),$index]=$op($shmem[threadIdxX(),$index],  shfl_down_sync(FULL_MASK, $shmem[threadIdxX(),$index], $offsetIter))  
           offsetIter<<= 1
         end
       end  
@@ -157,16 +157,15 @@ end
 """
 modification where we pass only actions - as we know from indicies what need to be done
 """
-function reduceWitActThirdPartOnly(shmem, actions)
+function reduceWitActThirdPartOnly(offsetIter,shmem, actions)
   tmp = []
   for index in 1:length(actions)
       op = actions[index]
       push!(tmp, quote
-      locOffset= UInt8(1)
       if(threadIdxY()==$index)
-        while(offsetIter <32) 
+        while($offsetIter <32) 
           @inbounds $shmem[threadIdxX(),$index]=$op($shmem[threadIdxX(),$index],  shfl_down_sync(FULL_MASK, shmemSum[threadIdxX(),$index], $offsetIter))  
-          offsetIter<<= 1
+          $offsetIter<<= 1
         end
       end  
       end)
@@ -200,7 +199,7 @@ function sendAtomicHelperAndAdd(shmemSum, vars...)
   for index in 1:length(vars)
       varr = vars[index]
       push!(tmp, quote
-      @ifXY $index $index if(shmemSum[1,$index]>0)   @inbounds @atomic $varr[]+=$shmemSum[1,$(index)]  end   
+      @ifXY $index $index if($shmemSum[1,$index]>0)   @inbounds @atomic $varr[]+=$shmemSum[1,$(index)]  end   
        
       end)
   end#for
@@ -209,7 +208,7 @@ function sendAtomicHelperAndAdd(shmemSum, vars...)
   for index in 1:length(varActTuples)
     varr= vars[index]
       push!(tmp, quote
-     @ifXY $index $index if(shmemSum[1,$index]>0)   @inbounds @atomic $varr[]= $shmemSum[1,$(index)] end   
+     @ifXY $index $index if($shmemSum[1,$index]>0)   @inbounds @atomic $varr[]= $shmemSum[1,$(index)] end   
   
       end)
   end#for

@@ -12,7 +12,7 @@ we need also to supply functions of iterating the 3 dimensional data but with ch
 module IterationUtils
 using CUDA,Logging
 export generalizedItermultiDim
-export @iterateLinearlyWithStart, @iterateLinearly,@exOnWarp,@exOnWarpIfBool, @iter3d, @iter3dAdditionalxyzActsAndZcheck, @iter3dAdditionalxyzActs, @iter3dAdditionalzActs,@iter3dWithVal
+export generalizedItermultiDimZdeepest,@iterateLinearlyMultipleBlocks,@iterateLinearlyWithStart, @iterateLinearly,@exOnWarp,@exOnWarpIfBool, @iter3d, @iter3dAdditionalxyzActsAndZcheck, @iter3dAdditionalxyzActs, @iter3dAdditionalzActs,@iter3dWithVal
 
 """
 arrDims- dimensions of main arrya
@@ -289,6 +289,224 @@ return exp2
 end#generalizedIter3d
 
 
+
+
+
+
+
+
+
+"""
+alternative with z dimension as the most inner iteration
+"""
+
+function generalizedItermultiDimZdeepest(; #we keep all as keyword arguments
+  arrDims = (UInt32(1),UInt32(1),UInt32(1) )
+   ,xname = :x
+   ,yname = :y
+   ,zname = :z
+   ,loopIterNameX = :xdim
+   ,loopIterNameY = :ydim
+   ,loopIterNameZ = :zdim    
+   ,loopXdim = 1
+   ,loopYdim= 1
+   ,loopZdim= 1
+  ,zOffset= :(zdim*gridDim().x)
+   ,zAdd =:(blockIdxX())
+  ,yOffset = :(ydim* blockDimY())
+  ,yAdd= :(threadIdxY())
+  ,xOffset= :(xdim * blockDimX())
+   ,xAdd= :(threadIdxX())
+  ,xCheck = :($xname <= $arrDims[1])
+  ,yCheck = :($yname <= $arrDims[2])
+  ,zCheck = :($zname <= $arrDims[3])    
+  ,additionalActionAfterZ= :()
+   ,additionalActionAfterY= :()
+   ,additionalActionAfterX = :()
+   ,additionalActionBeforeZ= :()
+   ,additionalActionBeforeY= :()
+   ,additionalActionBeforeX = :()
+
+
+   , is3d = true
+   ,ex 
+   ,isFullBoundaryCheckX =false
+   , isFullBoundaryCheckY=false
+   , isFullBoundaryCheckZ=true
+   ,nobundaryCheckX=false
+   , nobundaryCheckY=false
+   , nobundaryCheckZ =false
+   ,isVal=false
+   ,arrMain=:()
+   ,loopStartX = 0
+   ,loopStartY= 0
+   ,loopStartZ= 0
+   
+   
+   )
+#we will define expressions from deepest to most superficial
+
+# ,zOffset= :($loopIterNameZ*gridDim().x)
+# ,zAdd =:(blockIdxX())
+# ,yOffset = :($loopIterNameY* blockDimY())
+# ,yAdd= :(threadIdxY())
+# ,xOffset= :($loopIterNameX * blockDimX())
+
+  # xState = :(x= $xOffset +$xAdd)
+  # yState = :(y= $yOffset +$yAdd)
+  # zState = :(z= $zOffset +$zAdd)
+  # xState = :($xname= $xOffset +$xAdd)
+  # yState = :($yname= $yOffset +$yAdd)
+  # zState = :($zname= $zOffset +$zAdd)
+
+  valExp= :()
+  if(isVal)
+    valExp=:(value = $arrMain[$xname,$yname,$zname ])
+  end  
+
+
+############################### z 
+exp1= :()
+
+if(isFullBoundaryCheckZ)
+  exp1= quote
+    @unroll for $loopIterNameZ in $loopStartZ:$loopZdim
+      $zname = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
+      $additionalActionBeforeZ
+      if($zCheck)          
+        $valExp
+        $ex
+      end#if z 
+      $additionalActionAfterZ  
+  end#for z dim
+  end 
+
+elseif(nobundaryCheckZ)
+  exp1= quote
+    @unroll for $loopIterNameZ in $loopStartZ:$loopZdim
+      $zname = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
+      $additionalActionBeforeZ
+      $valExp
+      $ex
+      $additionalActionAfterZ  
+  end#for z dim
+  end 
+else
+  exp1= quote
+    @unroll for $loopIterNameZ in $loopStartZ:$loopZdim-1
+      $zname = $zOffset + $zAdd#multiply by blocks to avoid situation that a single block of threads would have no work to do
+      $additionalActionBeforeZ
+      $valExp
+      $ex
+      $additionalActionAfterZ  
+  end#for z dim
+  $loopIterNameZ=$loopZdim
+  $additionalActionBeforeZ
+  $zname = $zOffset + $zAdd
+  if($zCheck)          
+    $valExp
+    $ex
+  end#if z 
+
+  end 
+end
+
+  ##############  x
+  exp2= :()
+
+  if(isFullBoundaryCheckX)
+    exp2 = quote
+      @unroll for $loopIterNameX in $loopStartX:$loopXdim
+          $xname= $xOffset +$xAdd
+          $additionalActionBeforeX  
+          if( $xCheck)
+            $exp1
+          end#if x
+        $additionalActionAfterX  
+        end#for x dim
+      end#quote
+  elseif(nobundaryCheckX)
+    exp2 = quote
+      @unroll for $loopIterNameX in $loopStartX:$loopXdim
+          $xname= $xOffset +$xAdd
+          $additionalActionBeforeX 
+          $exp1
+        $additionalActionAfterX  
+        end#for x dim
+      end#quote
+
+
+  else
+    exp2 = quote
+      @unroll for $loopIterNameX in $loopStartX:$loopXdim-1
+          $xname= $xOffset +$xAdd
+          $additionalActionBeforeX 
+          $exp1
+          $additionalActionAfterX 
+      end#for x dim
+      
+      $loopIterNameX=$loopXdim
+      $xname= $xOffset +$xAdd
+      $additionalActionBeforeX 
+        if( $xCheck)
+          $exp1
+        end#if x     
+      $additionalActionAfterX  
+      end#quote
+  end  
+
+
+#######y 
+  exp3= :()
+if(isFullBoundaryCheckY)
+    exp3= quote
+      @unroll for $loopIterNameY in  $loopStartY:$loopYdim
+        $yname = $yOffset +$yAdd
+        $additionalActionBeforeY
+          if($yCheck)
+            $exp2
+          end#if y
+          $additionalActionAfterY
+          end#for  yLoops 
+        end#quote
+elseif(nobundaryCheckY)
+  exp3= quote
+    @unroll for $loopIterNameY in  $loopStartY:$loopYdim
+      $yname = $yOffset +$yAdd
+      $additionalActionBeforeY
+          $exp2
+        $additionalActionAfterY
+        end#for  yLoops 
+      end#quote
+else
+  exp3= quote
+    @unroll for $loopIterNameY in  $loopStartY:$loopYdim-1
+      $yname = $yOffset +$yAdd
+      $additionalActionBeforeY
+        $exp2
+        $additionalActionAfterY
+    end#for  yLoops 
+        $loopIterNameY=$loopYdim
+        $yname = $yOffset +$yAdd
+        $additionalActionBeforeY
+
+        if($yCheck)
+          $exp2
+        end#if y
+        $additionalActionAfterY
+      end#quote
+end
+
+
+if(is3d)
+  return exp3
+end  
+#if 2d 
+return exp2
+
+end#generalizedIter3d
+
+
 """
 macro will know about the number of available warps as this will equall the  y dimension of thread block
     now we will supply on what warp we want to execute the function  if the number will be smaller than number of warps 
@@ -351,6 +569,36 @@ macro iterateLinearly(iterLoop,lengthh, ex)
 end)
 
 end
+
+
+
+"""
+as x,y,z positions are not important we can just treat the array as it would be linear
+loop will be divided into two parts in order to reduce number of if statements
+each thread block iterates over just one slice in order to enable also slice wise results    
+iterLoop - how many times block needs to loop through slice to cover all
+pixPerSlice - pixels per slice 
+"""
+macro iterateLinearlyMultipleBlocks(iterLoop,pixPerSlice,totalNumbOfVoxels, ex)
+    return  esc(quote
+    i = UInt32(0)
+    @unroll for j in 0:($iterLoop-1)
+        i= threadIdxX()+(threadIdxY()-1)*blockDimX()+ j* blockDimX()*blockDimY()+ ((blockIdxX()-1) *$pixPerSlice)
+            if(i<=$totalNumbOfVoxels)
+                $ex
+            end
+    end 
+      i= threadIdxX()+(threadIdxY()-1)*blockDimX()+ $iterLoop* blockDimX()*blockDimY()
+      if(i<=$pixPerSlice ) 
+        i= i+ ((blockIdxX()-1) *$pixPerSlice)
+        if(i<=$totalNumbOfVoxels)
+            $ex
+        end
+      end
+  end)
+  
+  end
+  
 
 """
 iterate over array that is treated as one dimensional with given length lengthh as argument
