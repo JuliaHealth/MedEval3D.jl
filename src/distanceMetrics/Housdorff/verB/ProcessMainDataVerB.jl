@@ -50,9 +50,8 @@ macro validateData(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr)
                 
 macro loadMainValues(mainArr,xMeta,yMeta,zMeta)
     return esc(quote
-    #by construction one thread will neeed to load just one integer into its registers and to resShmemblockData
-    locArr = $mainArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta]
-    @inbounds shmemblockData[threadIdxX(),threadIdxY()] = locArr
+    # we already loaded locArr and shmemblockData in executeIterPadding
+
     #now immidiately we can go with dilatation up and down and save it to res shmem we are not modyfing  locArr
     @inbounds resShmemblockData[threadIdxX(),threadIdxY()]=@bitDilatate(locArr)
     # now if we have values in first or last bit we need to modify appropriate spots in the shmemPaddings
@@ -185,10 +184,42 @@ macro executeIterPadding(mainArr,refArr,xMeta,yMeta,zMeta,isGold,iterNumb)
     #first we need to load data from paddings of surrounding blocks and  push it into shared memory
     #yet we need to check weather in given direction there is some block so if we are on edge ?
 
+    #order of paddings for reference 1)top, 2)bottom, 3)left 4)right , 5)anterior, 6)posterior
+    
+    #for example here we look to the right  block so we are putting data in our local right padding from left padding of neighpbouring block
+    loadToshmemPaddings(xMeta,yMeta,zMeta, 1,0,0, 3, 4)
 
-    #as we have all in the shmem we can now check is there are any trues in the shmem so wheather 
+    loadToshmemPaddings(xMeta,yMeta,zMeta, -1,0,0, 4, 3)
+    loadToshmemPaddings(xMeta,yMeta,zMeta, 0,1,0, 6, 5)
+    loadToshmemPaddings(xMeta,yMeta,zMeta, 0,-1,0, 5, 6)
+    loadToshmemPaddings(xMeta,yMeta,zMeta, 0,0,1, 2, 1)
+    loadToshmemPaddings(xMeta,yMeta,zMeta, 0,0,-1, 1, 2)
+    #so now we have data loaded from surrounding blocks about their paddings we may now modify accordingly current block
+    #by construction one thread will neeed to load just one integer into its registers and to resShmemblockData
+    locArr = $mainArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta]
+    @inbounds shmemblockData[threadIdxX(),threadIdxY()] = locArr
+    sync_threads()
+    # now we have data loaded about what is already in dilatation array what was marked from paddings of neighbouring blocks
+    # so we need to add dilatation and if needed result to result list 
+
+
+    
+
+
     end)
 end#executeDataIterWithPadding
+
+"""
+# now we have data loaded about what is already in dilatation array what was marked from paddings of neighbouring blocks
+# so we need to add dilatation and if needed result to result list
+predicate - checks weather we have set bit in position we are intrested in 
+"""
+macro dilatateAndAddResFromPadding(predicate, )
+    return esc(quote
+
+    end)
+end
+
 
 """
 helper function for executeIterPadding - we will check is next block in each direction is in metadata 
@@ -200,7 +231,7 @@ macro loadToshmemPaddings(xMeta,yMeta,zMeta, xMetaChange,yMetaChange,zMetaChange
     return esc(quote
     #we need to be sure that such block exists
     if( ($xMeta)+$xMetaChange<=metaDataDims[1]  && ($yMeta)+$yMetaChange>0 && ($yMeta)+$yMetaChange<=metaDataDims[2] && ($zMeta)+$zMetaChange>0 && ($zMeta)+$zMetaChange<=metaDataDims[3])
-        for iterY in 1:inBlockLoopXZIterWithPadding
+        @unroll for iterY in 1:inBlockLoopXZIterWithPadding
             if((threadIdxY()+iterY)<=dataBdim[1]  )
                 #so we are intrested only in given bit from neighbouring block
                 booll = isBit1AtPos(paddingStore[$xMeta+$xChange,$yMeta+$yChange,$zMeta+$zChange],bitOfIntrest)
