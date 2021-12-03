@@ -1,3 +1,4 @@
+
     ######### getting all together in Housedorff 
 
     using Revise, Parameters, Logging, Test
@@ -11,8 +12,8 @@
     mainArrCPU= ones(UInt8,mainArrDims);
     refArrCPU = ones(UInt8,mainArrDims);
     ##### we will create two planes 20 units apart from each 
-    mainArrCPU[10:50,10:50,10].= true;
-    refArrCPU[10:50,10:50,30].= true;
+    mainArrCPU[10:50,10:50,10].= 1;
+    refArrCPU[10:50,10:50,30].= 1;
 
 
         
