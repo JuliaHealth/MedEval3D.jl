@@ -45,8 +45,8 @@ grid_handle = this_grid()
 shmemblockData = @cuDynamicSharedMem(UInt32,($dataBdim[1], $dataBdim[2] ))
 # holding values of results
 resShmemblockData = @cuDynamicSharedMem(UInt32,($dataBdim[1], $dataBdim[2] ))
-# holding data about result 1)top, 2)bottom, 3)left 4)right , 5)anterior, 6)posterior ,  paddings
-shmemPaddings = @cuDynamicSharedMem(Bool,(  max($dataBdim[1], $dataBdim[2]), max($dataBdim[1], $dataBdim[2])   ,6 ))
+# holding data about result  2)bottom, 3)left 4)right , 5)anterior, 6)posterior , 7) top,  paddings
+shmemPaddings = @cuDynamicSharedMem(Bool,(  max($dataBdim[1], $dataBdim[2]), max($dataBdim[1], $dataBdim[2])   ,7 ))
 
 
 #for storing sums for reductions
@@ -190,8 +190,6 @@ macro iterateOverWorkQueue(workQueaueCounter,workQueaue
                 # checking is there any point in futher dilatations of this block
                 if((shmemSum[shmemIndex*4+4]==1 && goldToBeDilatated[1]) || (shmemSum[shmemIndex*4+4]==0 && segmToBeDilatated[1]) )
                     #finally all ready for dilatation step to be executed on this particular block
-
-            
                         $ex 
                 end    
             end#if in range

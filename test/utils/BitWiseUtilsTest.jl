@@ -63,6 +63,10 @@ new = @bitPassOnes(source,target)
 @test isBit1AtPos(new,5)
 
 
+nnn = UInt8(1)
+isBit1AtPos(nnn,1)
+
+
 # using Revise, Parameters, Logging, Test
 # using CUDA
 # includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")

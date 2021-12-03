@@ -337,7 +337,7 @@ using Main.Housdorff,Main.ProcessMainDataVerB,Main.MainLoopKernel,Main.BitWiseUt
 mainArr= CUDA.zeros(UInt32, 500,500,30)
 refArr= CUDA.zeros(UInt8, 500,500,1000)
 numbToLooFor = 2
-dataBdim= (32,10,32)
+dataBdim= (32,5,32)
 
 
 ############ some arbitrary data  meta 2,2,2 with some results to be set 
@@ -347,48 +347,48 @@ resShmemblockData= CUDA.zeros(UInt32, 32,10);
 shmemblockData= CUDA.zeros(UInt32, 32,10);
 shmemPaddings= CUDA.zeros(Bool, 32,32,6);
 
-threads=(32,10)
-rowOne = 0
+threads=(dataBdim[1],dataBdim[2])
+rowOne = UInt32(0)
 
 #below we will organize it so we should have results in all neghbouring blocks - also from corners 
 @setBitTo(rowOne,1,true)
 @setBitTo(rowOne,5,true)
 @setBitTo(rowOne,32,true)
 
-mainArr[33,11,2]= rowOne
-mainArr[33,20,2]= rowOne
-mainArr[64,11,2]= rowOne
-mainArr[64,20,2]= rowOne
+mainArr[33,dataBdim[2]+1,2]= rowOne
+mainArr[33,dataBdim[2]*2,2]= rowOne
+mainArr[64,dataBdim[2]+1,2]= rowOne
+mainArr[64,dataBdim[2]*2,2]= rowOne
 
-mainArr[64,11,2]= rowOne
-
+mainArr[64,dataBdim[2]+1,2]= rowOne
 
 ################   here we will get a block that will become full after the dilatation meta 3,3,3
 xMeta,yMeta,zMeta = 4,4,4
-fullOnesTobecome = 0
+fullOnesTobecome = UInt32(0)
 for bitPos in 1:32
   if(isodd(bitPos))
     @setBitTo(fullOnesTobecome,bitPos,true)
   end
 end
-for xx in ((3*32)+1):((4*32)), yy in ((3*10)+1):((4*10))
+for xx in ((2*32)+1):((3*32)), yy in ((2*dataBdim[2])+1):((3*dataBdim[2]))
   mainArr[xx,yy,3]= fullOnesTobecome
 end
 
-for xx in ((3*32)+1):((4*32)), yy in ((3*10)+1):((4*10)), zz in ((3*32)+1):((4*32))
+mainArr[100,16,3]
+
+for xx in ((3*32)+1):((4*32)), yy in ((3*dataBdim[2])+1):((4*dataBdim[2])), zz in ((3*32)+1):((4*32))
   refArr[xx,yy,zz]= 2
 end
 
-refArr[33,11,33]= 2
-refArr[33,20,34]= 2
-refArr[64,11,37]= 2
-refArr[64,11,38]= 2
-refArr[64,11,64]= 2
+refArr[33,dataBdim[2]+1,33]= 2
+refArr[33,dataBdim[2]*2,34]= 2
+refArr[64,dataBdim[2]+1,37]= 2
+refArr[64,dataBdim[2]+1,38]= 2
+refArr[64,dataBdim[2]+1,64]= 2
 
 
 ### configurations
 
-blocks =1
 mainArrDims= size(mainArr)
 metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim)
 #metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:9,2:3,4:6,: );
@@ -403,6 +403,7 @@ for xMetaa in 1:3,yMetaa in 1:3, zMetaa in 1:3
   metaBlock+=20
   for i in 1:14
     metaData[2,2,2,getResOffsetsBeg()+i]=i*1000+metaBlock*15*1000
+    metaData[(xMetaa),(yMetaa),(zMetaa),(getIsToBeAnalyzedNumb() +i)] =1
   end
 end
 
@@ -414,38 +415,24 @@ resList = allocateResultLists(1000,1000)
 inBlockLoopXZIterWithPadding = cld(32,10)
 numberToLooFor = 2
 resList = allocateResultLists(100000,100000)
-workQueaue[:,1] = [1,1,1,1] 
+workQueaue[:,1] = [2,2,2,1] 
 workQueaue[:,2] = [3,3,3,1] 
 workQueaueCounter[1] = 2
 dilatationArrs= (mainArr,mainArr)
 referenceArrs=(refArr,refArr)
-shmemSumLengthMaxDiv4 = 5
+shmemSumLengthMaxDiv4 = 20
 paddingStore = CUDA.zeros(UInt8, metaDataDims[1],metaDataDims[2],metaDataDims[3],32,32)
-function testProcessDataBlock(refArr,inBlockLoopXZIterWithPadding,paddingStore,shmemSumLengthMaxDiv4,referenceArrs,dilatationArrs,resList, metaData,metaDataDims,mainArrDims,isGold,iterNumb,mainArr,dataBdim,workQueaue,workQueaueCounter)
+function testProcessDataBlock(numberToLooFor,refArr,inBlockLoopXZIterWithPadding,paddingStore,shmemSumLengthMaxDiv4,referenceArrs,dilatationArrs,resList, metaData,metaDataDims,mainArrDims,isGold,iterNumb,mainArr,dataBdim,workQueaue,workQueaueCounter)
   MainLoopKernel.@mainLoopKernelAllocations(dataBdim)
   @ifXY 1 1 for i in 1:14
     areToBeValidated[i]=true
   end  
-  
+  @ifXY 3 1 goldToBeDilatated[1]=true
+  @ifXY 3 1 segmToBeDilatated[1]=true
+
   sync_threads()
 
 
- 
- #  @ifXY 1 1 "aaaaaaaaa  $(Int64(((dilatationArrs[1])[1] )))  \n"
-
-  # @iterateOverWorkQueue(workQueaueCounter,workQueaue
-  # ,shmemSumLengthMaxDiv4,begin     
-  # ProcessMainDataVerB.@executeIterPadding(dilatationArrs[shmemSum[shmemIndex*4+4]+1]
-  #     ,referenceArrs[shmemSum[shmemIndex*4+4]+1]
-  #     ,shmemSum[shmemIndex*4+1]#xMeta
-  #     ,shmemSum[shmemIndex*4+2]#yMeta
-  #     ,shmemSum[shmemIndex*4+3]#zMeta
-  #     ,shmemSum[shmemIndex*4+4]#isGold
-  #     ,iterationNumberShmem[1]#iterNumb
-  #     )
-
-  # end ) 
- sync_grid(grid_handle)
 
   #we get dilatation from block its padding will be analyzed later
   @iterateOverWorkQueue(workQueaueCounter,workQueaue
@@ -464,10 +451,27 @@ function testProcessDataBlock(refArr,inBlockLoopXZIterWithPadding,paddingStore,s
 
   sync_grid(grid_handle)
 
+ 
+  # @iterateOverWorkQueue(workQueaueCounter,workQueaue
+  # ,shmemSumLengthMaxDiv4,begin
+
+  
+  # ProcessMainDataVerB.@executeIterPadding(dilatationArrs[shmemSum[shmemIndex*4+4]+1]
+  #     ,referenceArrs[shmemSum[shmemIndex*4+4]+1]
+  #     ,(shmemSum[shmemIndex*4+1])#xMeta
+  #     ,(shmemSum[shmemIndex*4+2])#yMeta
+  #     ,(shmemSum[shmemIndex*4+3])#zMeta
+  #     ,shmemSum[shmemIndex*4+4]#isGold
+  #     ,iterationNumberShmem[1]#iterNumb
+  #     )
+
+  # end ) 
+
+
     return
 end
 
-@cuda threads=threads blocks=blocks shmem = get_shmemMainKernel(dataBdim) testProcessDataBlock(refArr,inBlockLoopXZIterWithPadding,paddingStore,shmemSumLengthMaxDiv4,referenceArrs,dilatationArrs,resList, metaData,metaDataDims,mainArrDims,isGold,iterNumb,mainArr,dataBdim,workQueaue,workQueaueCounter)
+@cuda threads=threads blocks=2 cooperative = true shmem = get_shmemMainKernel(dataBdim) testProcessDataBlock(numberToLooFor,refArr,inBlockLoopXZIterWithPadding,paddingStore,shmemSumLengthMaxDiv4,referenceArrs,dilatationArrs,resList, metaData,metaDataDims,mainArrDims,isGold,iterNumb,mainArr,dataBdim,workQueaue,workQueaueCounter)
 
 #we need to test couple thing
 #1) does dilateted data correctly was written to correct spot in the mainArr 
@@ -475,31 +479,39 @@ mainArr[1]
 referenceArrs[1][1,1,1]
 referenceArrs[2][1,1,1]
 
-afterDil = 0
+afterDil = UInt32(0)
 for bitPos in [1,2,4,5,6,31,32]
     @setBitTo(afterDil,bitPos,true)
 end
+afterDil
+nn = mainArr[33,dataBdim[2]+1,2]
+zz= @bitDilatate(nn)
+rowOne==nn
+afterDil==zz
 
+isBit1AtPos(nn,32)
 
-@test mainArr[33,11,2]== afterDil
-@test mainArr[33,20,2]== afterDil
-@test mainArr[64,11,2]== afterDil
+mainArr[32,dataBdim[2]+1,2]
 
-rowOne = 0
+@test mainArr[33,dataBdim[2]+1,2]== afterDil
+@test mainArr[33,dataBdim[2]*2,2]== afterDil
+@test mainArr[64,dataBdim[2]+1,2]== afterDil
+
+rowOne = UInt32(0)
 @setBitTo(rowOne,1,true)
 @setBitTo(rowOne,5,true)
 @setBitTo(rowOne,32,true)
 
 for i in [-1,1] 
-  @test mainArr[33+i,11,2]== rowOne
-  @test mainArr[33+i,20,2]== rowOne
-  @test mainArr[64+i,11,2]== rowOne
+  @test mainArr[33+i,dataBdim[2]+1,2]== rowOne
+  @test mainArr[33+i,dataBdim[2]*2,2]== rowOne
+  @test mainArr[64+i,dataBdim[2]+1,2]== rowOne
 end
 
 for i in [-1,1] 
-  @test mainArr[33,11+i,2]== rowOne
-  @test mainArr[33,20+i,2]== rowOne
-  @test mainArr[64,11+i,2]== rowOne
+  @test mainArr[33,dataBdim[2]+1+i,2]== rowOne
+  @test mainArr[33,dataBdim[2]*2+i,2]== rowOne
+  @test mainArr[64,dataBdim[2]+1+i,2]== rowOne
 end
 fullOnes = 0
 for bitPos in 1:32
@@ -507,7 +519,7 @@ for bitPos in 1:32
 end
 
 #this should be full after dilatation
-for xx in ((3*32)+1):((4*32)), yy in ((3*10)+1):((4*10))
+for xx in ((3*32)+1):((4*32)), yy in ((3*dataBdim[2])+1):((4*dataBdim[2]))
   @test mainArr[xx,yy,3]== fullOnes
 end
 
@@ -551,6 +563,8 @@ function checkIsInResList(resList,x,y,z,dir)::Bool
 end  
 
 @test checkIsInResList(resList,x,y,z,dir)
+
+sum(resList)
 
 # refArr[33,11,33]= 2
 # refArr[33,20,34]= 2
