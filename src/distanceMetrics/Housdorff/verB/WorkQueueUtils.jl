@@ -1,5 +1,5 @@
 module WorkQueueUtils
-using  CUDA,Main.CUDAAtomicUtils
+using  Main.BitWiseUtils,CUDA, Logging,Main.CUDAGpuUtils, Main.ResultListUtils,Main.WorkQueueUtils, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils, Main.BitWiseUtils
 export allocateWorkQueue,appendToWorkQueue,@appendToWorkQueueBasic,@appendToWorkQueue
 """
 allocate memory for  work queues
@@ -38,24 +38,25 @@ also we need to be sure that we appended to the correct work queue based on the 
 """
 macro appendToWorkQueue(metaX,metaY,metaZ,isGold ) 
     return esc(quote 
+    @appendToWorkQueueBasic(workQueue,workQueuecounter, $metaX,$metaY,$metaZ,$isGold )
 
-        if(iseven($metaX) && iseven($metaY) && iseven($metaZ) )
-            @appendToWorkQueueBasic(workQueueEEE,workQueueEEEcounter, $metaX,$metaY,$metaZ,$isGold )
-        elseif(iseven($metaX) && isodd($metaY) && iseven($metaZ))    
-            @appendToWorkQueueBasic(workQueueEOE,workQueueEOEcounter, $metaX,$metaY,$metaZ,$isGold )
-        elseif(iseven($metaX) && iseven($metaY) && isodd($metaZ))    
-            @appendToWorkQueueBasic(workQueueEEO,workQueueEEOcounter, $metaX,$metaY,$metaZ,$isGold )
-        elseif(isodd($metaX) && iseven($metaY) && iseven($metaZ))    
-            @appendToWorkQueueBasic(workQueueOEE,workQueueOEEcounter, $metaX,$metaY,$metaZ,$isGold )
-        elseif(isodd($metaX) && isodd($metaY) && iseven($metaZ))    
-            @appendToWorkQueueBasic(workQueueOOE,workQueueOOEcounter, $metaX,$metaY,$metaZ,$isGold )
-        elseif(iseven($metaX) && isodd($metaY) && isodd($metaZ))    
-            @appendToWorkQueueBasic(workQueueEOO,workQueueEOOcounter, $metaX,$metaY,$metaZ,$isGold )
-        elseif(isodd($metaX) && iseven($metaY) && isodd($metaZ))    
-            @appendToWorkQueueBasic(workQueueOEO,workQueueOEOcounter, $metaX,$metaY,$metaZ,$isGold )  
-        elseif(isodd($metaX) && isodd($metaY) && isodd($metaZ))    
-            @appendToWorkQueueBasic(workQueueOOO,workQueueOOOcounter, $metaX,$metaY,$metaZ,$isGold )
-        end
+        # if(iseven($metaX) && iseven($metaY) && iseven($metaZ) )
+        #     @appendToWorkQueueBasic(workQueueEEE,workQueueEEEcounter, $metaX,$metaY,$metaZ,$isGold )
+        # elseif(iseven($metaX) && isodd($metaY) && iseven($metaZ))    
+        #     @appendToWorkQueueBasic(workQueueEOE,workQueueEOEcounter, $metaX,$metaY,$metaZ,$isGold )
+        # elseif(iseven($metaX) && iseven($metaY) && isodd($metaZ))    
+        #     @appendToWorkQueueBasic(workQueueEEO,workQueueEEOcounter, $metaX,$metaY,$metaZ,$isGold )
+        # elseif(isodd($metaX) && iseven($metaY) && iseven($metaZ))    
+        #     @appendToWorkQueueBasic(workQueueOEE,workQueueOEEcounter, $metaX,$metaY,$metaZ,$isGold )
+        # elseif(isodd($metaX) && isodd($metaY) && iseven($metaZ))    
+        #     @appendToWorkQueueBasic(workQueueOOE,workQueueOOEcounter, $metaX,$metaY,$metaZ,$isGold )
+        # elseif(iseven($metaX) && isodd($metaY) && isodd($metaZ))    
+        #     @appendToWorkQueueBasic(workQueueEOO,workQueueEOOcounter, $metaX,$metaY,$metaZ,$isGold )
+        # elseif(isodd($metaX) && iseven($metaY) && isodd($metaZ))    
+        #     @appendToWorkQueueBasic(workQueueOEO,workQueueOEOcounter, $metaX,$metaY,$metaZ,$isGold )  
+        # elseif(isodd($metaX) && isodd($metaY) && isodd($metaZ))    
+        #     @appendToWorkQueueBasic(workQueueOOO,workQueueOOOcounter, $metaX,$metaY,$metaZ,$isGold )
+        # end
 
     end)#qote 
 end#appendToWorkQueue

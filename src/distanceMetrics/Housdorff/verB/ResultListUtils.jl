@@ -40,8 +40,8 @@ mainArrDims - dimensions of main array
  macro addResult(metaData ,xMeta,yMeta,zMeta, resList,x,y,z, dir,iterNumb,queueNumber,metaDataDims,mainArrDims ,isGold  )
   return esc(quote
 
-# linearIndex = ($xMeta+1) + ($yMeta)*$metaDataDims[1] + ($zMeta)*$metaDataDims[1]*$metaDataDims[2] + (getNewCountersBeg()+$queueNumber-1)*$metaDataDims[1]*$metaDataDims[2]*$metaDataDims[3]
-  resListPos = ($metaData[($xMeta+1),($yMeta+1),($zMeta+1), (getResOffsetsBeg() +$queueNumber) ]+atomicallyAddToSpot( metaData,linearIndex,UInt32(1) ))+1
+# linearIndex = 
+  resListPos = ($metaData[($xMeta+1),($yMeta+1),($zMeta+1), (getResOffsetsBeg() +$queueNumber) ]+atomicallyAddToSpot( metaData,(($xMeta+1) + ($yMeta)*$metaDataDims[1] + ($zMeta)*$metaDataDims[1]*$metaDataDims[2] + (getNewCountersBeg()+$queueNumber-1)*$metaDataDims[1]*$metaDataDims[2]*$metaDataDims[3]),UInt32(1) ))+1
 # qn = $queueNumber
 # xm = $xMeta
 # ym = $yMeta

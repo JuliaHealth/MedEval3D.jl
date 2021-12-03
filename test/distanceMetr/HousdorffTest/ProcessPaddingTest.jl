@@ -329,13 +329,13 @@ using Revise, Parameters, Logging, Test
 using CUDA
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
 using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
-using Main.BitWiseUtils,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
+using Main.Housdorff,Main.ProcessMainDataVerB,Main.MainLoopKernel,Main.BitWiseUtils,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
 
 
 
 
-mainArr= CUDA.zeros(UInt32, 500,500,100)
-refArr= CUDA.zeros(UInt8, 500,500,100)
+mainArr= CUDA.zeros(UInt32, 500,500,30)
+refArr= CUDA.zeros(UInt8, 500,500,1000)
 numbToLooFor = 2
 dataBdim= (32,10,32)
 
@@ -389,12 +389,12 @@ refArr[64,11,64]= 2
 ### configurations
 
 blocks =1
-mainArrDims= (50,50,320)
+mainArrDims= size(mainArr)
 metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim)
 #metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:9,2:3,4:6,: );
 metaDataDims=size(metaData)
 
-workQueue,workQueueCounter= WorkQueueUtils.allocateWorkQueue( max(length(metaData),1) )
+workQueaue,workQueaueCounter= WorkQueueUtils.allocateWorkQueue( max(length(metaData),1) )
 metaData[2,2,2,2]=UInt32(1)
 #setting offsets in metadata
 
@@ -402,7 +402,7 @@ metaBlock = 0
 for xMetaa in 1:3,yMetaa in 1:3, zMetaa in 1:3 
   metaBlock+=20
   for i in 1:14
-    metaData[2,2,2,getResOffsetsBeg()+metaBlock]=i*1000
+    metaData[2,2,2,getResOffsetsBeg()+i]=i*1000+metaBlock*15*1000
   end
 end
 
@@ -413,25 +413,67 @@ iterNumb = 1
 resList = allocateResultLists(1000,1000)
 inBlockLoopXZIterWithPadding = cld(32,10)
 numberToLooFor = 2
-function testProcessDataBlock(resList,inBlockLoopXZIterWithPadding  ,numberToLooFor,             shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim)
 resList = allocateResultLists(100000,100000)
-
-function testProcessDataBlock(resList               shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter)
-  krowa not manually meta but set manually list for work queue that block will iterate over
-  xMeta,yMeta,zMeta = 2,2,2
-  isMaskFull = true
-
+workQueaue[:,1] = [1,1,1,1] 
+workQueaue[:,2] = [3,3,3,1] 
+workQueaueCounter[1] = 2
+dilatationArrs= (mainArr,mainArr)
+referenceArrs=(refArr,refArr)
+shmemSumLengthMaxDiv4 = 5
+paddingStore = CUDA.zeros(UInt8, metaDataDims[1],metaDataDims[2],metaDataDims[3],32,32)
+function testProcessDataBlock(refArr,inBlockLoopXZIterWithPadding,paddingStore,shmemSumLengthMaxDiv4,referenceArrs,dilatationArrs,resList, metaData,metaDataDims,mainArrDims,isGold,iterNumb,mainArr,dataBdim,workQueaue,workQueaueCounter)
+  MainLoopKernel.@mainLoopKernelAllocations(dataBdim)
+  @ifXY 1 1 for i in 1:14
+    areToBeValidated[i]=true
+  end  
+  
   sync_threads()
-  xMeta,yMeta,zMeta = 3,3,3
 
+
+ 
+ #  @ifXY 1 1 "aaaaaaaaa  $(Int64(((dilatationArrs[1])[1] )))  \n"
+
+  # @iterateOverWorkQueue(workQueaueCounter,workQueaue
+  # ,shmemSumLengthMaxDiv4,begin     
+  # ProcessMainDataVerB.@executeIterPadding(dilatationArrs[shmemSum[shmemIndex*4+4]+1]
+  #     ,referenceArrs[shmemSum[shmemIndex*4+4]+1]
+  #     ,shmemSum[shmemIndex*4+1]#xMeta
+  #     ,shmemSum[shmemIndex*4+2]#yMeta
+  #     ,shmemSum[shmemIndex*4+3]#zMeta
+  #     ,shmemSum[shmemIndex*4+4]#isGold
+  #     ,iterationNumberShmem[1]#iterNumb
+  #     )
+
+  # end ) 
+ sync_grid(grid_handle)
+
+  #we get dilatation from block its padding will be analyzed later
+  @iterateOverWorkQueue(workQueaueCounter,workQueaue
+  ,shmemSumLengthMaxDiv4,begin 
+  ProcessMainDataVerB.@executeDataIter(mainArrDims 
+      ,dilatationArrs[shmemSum[shmemIndex*4+4]+1]
+      ,referenceArrs[shmemSum[shmemIndex*4+4]+1]
+      ,shmemSum[shmemIndex*4+1]#xMeta
+      ,shmemSum[shmemIndex*4+2]#yMeta
+      ,shmemSum[shmemIndex*4+3]#zMeta
+      ,shmemSum[shmemIndex*4+4]#isGold
+      ,iterationNumberShmem[1]#iterNumb
+  )
+
+  end ) 
+
+  sync_grid(grid_handle)
 
     return
 end
 
-@cuda threads=threads blocks=blocks testProcessDataBlock(workQueue,workQueueCounter,shmemPaddings,shmemblockData,resShmemblockData,metaData,metaDataDims,mainArrDims,isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr,dataBdim,workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter)
+@cuda threads=threads blocks=blocks shmem = get_shmemMainKernel(dataBdim) testProcessDataBlock(refArr,inBlockLoopXZIterWithPadding,paddingStore,shmemSumLengthMaxDiv4,referenceArrs,dilatationArrs,resList, metaData,metaDataDims,mainArrDims,isGold,iterNumb,mainArr,dataBdim,workQueaue,workQueaueCounter)
 
 #we need to test couple thing
 #1) does dilateted data correctly was written to correct spot in the mainArr 
+mainArr[1]
+referenceArrs[1][1,1,1]
+referenceArrs[2][1,1,1]
 
 afterDil = 0
 for bitPos in [1,2,4,5,6,31,32]

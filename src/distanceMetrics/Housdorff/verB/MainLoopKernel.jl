@@ -1,7 +1,7 @@
 module MainLoopKernel
 using CUDA, Logging,Main.CUDAGpuUtils, Main.ResultListUtils,Main.WorkQueueUtils,Main.ScanForDuplicates, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils
 using Main.MetadataAnalyzePass, Main.ScanForDuplicates
-export getSmallGPUForHousedorff,getBigGPUForHousedorffAfterBoolKernel,@loadDataAtTheBegOfDilatationStep,@prepareForNextDilation,@mainLoopKernel, @iterateOverWorkQueue,@mainLoop,@mainLoopKernelAllocations,@clearBeforeNextDilatation
+export @mainLoopKernelAllocations,getSmallGPUForHousedorff,getBigGPUForHousedorffAfterBoolKernel,@loadDataAtTheBegOfDilatationStep,@prepareForNextDilation,@mainLoopKernel, @iterateOverWorkQueue,@mainLoop,@mainLoopKernelAllocations,@clearBeforeNextDilatation
 
 
 """
@@ -42,11 +42,11 @@ macro mainLoopKernelAllocations(dataBdim)
 #needed to manage cooperative groups functions
 grid_handle = this_grid()
 
-shmemblockData = @cuDynamicSharedMem(UInt32,(dataBdim[1], dataBdim[2] ))
+shmemblockData = @cuDynamicSharedMem(UInt32,($dataBdim[1], $dataBdim[2] ))
 # holding values of results
-resShmemblockData = @cuDynamicSharedMem(UInt32,(dataBdim[1], dataBdim[2] ))
+resShmemblockData = @cuDynamicSharedMem(UInt32,($dataBdim[1], $dataBdim[2] ))
 # holding data about result 1)top, 2)bottom, 3)left 4)right , 5)anterior, 6)posterior ,  paddings
-shmemPaddings = @cuDynamicSharedMem(Bool,(  max(dataBdim[1], dataBdim[2]), max(dataBdim[1], dataBdim[2])   ,6 ))
+shmemPaddings = @cuDynamicSharedMem(Bool,(  max($dataBdim[1], $dataBdim[2]), max($dataBdim[1], $dataBdim[2])   ,6 ))
 
 
 #for storing sums for reductions
@@ -78,7 +78,7 @@ alreadyCoveredInQueues =@cuStaticSharedMem(UInt32,(14))
  #keeping information  weather we have not odd or even pass
  workCounterBiggerThan0 =  @cuStaticSharedMem(Bool,1) 
  #holding values of all work queue counters 
- workCountersInshmem= @cuStaticSharedMem(UInt16,8)
+ workCounterInshmem= @cuStaticSharedMem(UInt16,8)
 
  positionInMainWorkQueaue= @cuStaticSharedMem(UInt16,1)
  @ifXY 1 1 iterationNumberShmem[1]= 0
@@ -109,8 +109,7 @@ macro mainLoop()
     sync_threads()
     #now we should have all data needed to analyze padding from previous dilatation
     @iterateOverWorkQueue($workQueaueCounter,$workQueaue
-    ,shmemSumLengthMaxDiv4,begin 
-    
+    ,shmemSumLengthMaxDiv4,begin     
         @executeIterPadding(mainArrDims 
         ,dilatationArrs[shmemSum[shmemIndex*4+4]+1]
         ,referenceArrs[shmemSum[shmemIndex*4+4]+1]
@@ -120,6 +119,8 @@ macro mainLoop()
         ,shmemSum[shmemIndex*4+4]#isGold
         ,iterationNumberShmem[1]#iterNumb
         )
+
+    end ) 
    sync_grid(grid_handle)
 
     #we get dilatation from block its padding will be analyzed later
@@ -135,7 +136,7 @@ macro mainLoop()
         ,iterationNumberShmem[1]#iterNumb
     )
 
-    end ) 
+ 
     sync_grid(grid_handle)
 
 
@@ -162,11 +163,10 @@ macro iterateOverWorkQueue(workQueaueCounter,workQueaue
     # we will treat shmemSum as 1 dimensional array and write data from work queue
     #mod 1 - xMeta, mod 2 - uMeta, mod 3 - zMeta mod 4 - isGoldPass
     #first we need to  establish how many items in work queue will be analyzed by this block 
-    numbOfDataBlockPerThreadBlock = cld(workQueaueCounter[1],gridDimX() )
+   numbOfDataBlockPerThreadBlock = cld(workQueaueCounter[1],gridDimX() )
 
     #we need to stuck all of the blocks data into shared memory 4 entries for each block
     @unroll for outerIter in 0: fld((numbOfDataBlockPerThreadBlock*4),shmemSumLengthMaxDiv4)
-        # workQuueueLinearIndexOffset = ((((numbOfDataBlockPerThreadBlock)*4 ))*(blockIdxX()-1))+ (outerIter*shmemSumLengthMaxDiv4)
         workQuueueLinearIndexOffset = ((((numbOfDataBlockPerThreadBlock)*4 ))*(blockIdxX()-1))+ (outerIter*shmemSumLengthMaxDiv4)
         # now we load all needed data into shared memory
         @iterateLinearly cld(shmemSumLengthMaxDiv4,blockDimX()*blockDimY()) shmemSumLengthMaxDiv4 begin
@@ -188,11 +188,11 @@ macro iterateOverWorkQueue(workQueaueCounter,workQueaue
         for shmemIndex in 0:(fld(shmemSumLengthMaxDiv4,4)-1)
                 if( ((shmemIndex+1)*4 <=shmemSumLengthMaxDiv4 ) && shmemSum[shmemIndex*4+1]>0  ) #shmemSum[shmemIndex*4+1]>0
                 # checking is there any point in futher dilatations of this block
-                if((isGold==1 && goldToBeDilatated[1]) || (isGold==0 && segmToBeDilatated[1]) )
+                if((shmemSum[shmemIndex*4+4]==1 && goldToBeDilatated[1]) || (shmemSum[shmemIndex*4+4]==0 && segmToBeDilatated[1]) )
                     #finally all ready for dilatation step to be executed on this particular block
 
             
-                        $ex # left just for debugging purposes
+                        $ex 
                 end    
             end#if in range
         end# main functional loop for dilatation and validation  

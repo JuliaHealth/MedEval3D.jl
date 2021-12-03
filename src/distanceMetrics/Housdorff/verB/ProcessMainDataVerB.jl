@@ -1,16 +1,16 @@
 module ProcessMainDataVerB
-using CUDA, Logging,Main.CUDAGpuUtils,Main.WorkQueueUtils, Logging,StaticArrays,Main.MetaDataUtils, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils, Main.ResultListUtils
-export @dilatateHelper,getDir,@validateData, @executeDataIterWithPadding, @loadMainValues,setNextBlockAsIsToBeActivated,@paddingProcessCombined,calculateLoopsIter,@processMaskData, @paddingIter,@processPadding
+using CUDA, Main.BitWiseUtils,Logging,Main.CUDAGpuUtils,Main.WorkQueueUtils, Logging,StaticArrays,Main.MetaDataUtils, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils, Main.ResultListUtils
+export @loadToshmemPaddings,@executeIterPadding,@loadToshmemPaddings,@validatePaddingInfo,@dilatateHelper,getDir,@validateData, @executeDataIterWithPadding, @loadMainValues,setNextBlockAsIsToBeActivated,@paddingProcessCombined,calculateLoopsIter,@processMaskData, @paddingIter,@processPadding
 
 
                 
 """
  validates data is of our intrest               
 """                
-macro validateData(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr)
+macro validateData(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr)
     return esc(quote
    #first we will load data from target arr so we can be sure that we are not ovewriting sth already written by diffrent thread block
-   locArr = @inbounds($targetArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta])
+   locArr = @inbounds($mainArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta])
    # here we are anaylyzing only main part of the  data block paddings will be analyzed separately
    @unroll for bitIter in 1:32
        resShemVal = isBit1AtPos(@inbounds(resShmemblockData[threadIdxX(),threadIdxY()]), bitIter)
@@ -19,20 +19,23 @@ macro validateData(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr)
        isMaskFull= (resShemVal && isMaskFull)
     #    #so we have voxel that was not yet covered earlier, is covered now and is in refrence arr - so one where we establish is sth covered 
        if(resShemVal && !inTarget)
-           # we need reference array value to check weather we had covered anything new from other arrayin this iteration
-            if($refArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),($zMeta-1)*dataBdim[3]+ bitIter  ] == numberToLooFor)
-                @addResult(metaData
-                ,$xMeta,$yMeta ,$zMeta,resList
-                ,(($xMeta-1)*dataBdim[1]+ threadIdxX())
-                ,(($yMeta-1)*dataBdim[2]+ threadIdxY())
-                ,($zMeta-1)*dataBdim[3]+ bitIter
-                ,getDir(shmemblockData,bitIter,dataBdim)
-                ,$iterNumb
-                ,getIndexOfQueue(threadIdxX(),threadIdxY(),bitIter,dataBdim,(1-$isGold))
-                ,metaDataDims
-                ,mainArrDims
-                ,$isGold)
-            end
+       aa =  (($refArr)[(($xMeta-1)*dataBdim[1]+ threadIdxX()),1,1])==1
+        @ifXY 1 1 " refArr is $(aa)  \n"
+        #@ifXY 1 1 " refArr is 2 ??  $($refArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),($zMeta-1)*dataBdim[3]+ bitIter ] )  \n"
+        # we need reference array value to check weather we had covered anything new from other arrayin this iteration
+            # if($refArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),($zMeta-1)*dataBdim[3]+ bitIter ] == numberToLooFor)
+            # #     @addResult(metaData
+            # #     ,$xMeta,$yMeta ,$zMeta,resList
+            # #     ,(($xMeta-1)*dataBdim[1]+ threadIdxX())
+            # #     ,(($yMeta-1)*dataBdim[2]+ threadIdxY())
+            # #     ,($zMeta-1)*dataBdim[3]+ bitIter
+            # #     ,getDir(shmemblockData,bitIter,dataBdim)
+            # #     ,$iterNumb
+            # #     ,getIndexOfQueue(threadIdxX(),threadIdxY(),bitIter,dataBdim,(1-$isGold))
+            # #     ,metaDataDims
+            # #     ,mainArrDims
+            # #     ,$isGold)
+            # end
        end  
    end 
    
@@ -50,8 +53,9 @@ macro validateData(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr,targetArr)
                 
 macro loadMainValues(mainArr,xMeta,yMeta,zMeta)
     return esc(quote
-    # we already loaded locArr and shmemblockData in executeIterPadding
-
+    #load data
+    locArr = $mainArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta]
+    @inbounds shmemblockData[threadIdxX(),threadIdxY()] = locArr
     #now immidiately we can go with dilatation up and down and save it to res shmem we are not modyfing  locArr
     @inbounds resShmemblockData[threadIdxX(),threadIdxY()]=@bitDilatate(locArr)
     # now if we have values in first or last bit we need to modify appropriate spots in the shmemPaddings
@@ -156,7 +160,7 @@ macro executeDataIter(mainArrDims
   ########## check data aprat from padding
   #can be skipped if we have the block with already all results analyzed 
   if(areToBeValidated[14-$isGold])
-      @validateData($mainArrDims, $inBlockLoopX,$inBlockLoopY,$inBlockLoopZ,$mainArr,$refArr,$xMeta,$yMeta,$zMeta,$isGold,$iterNumb) 
+      @validateData($isGold,$xMeta,$yMeta,$zMeta,$iterNumb,$mainArr,$refArr) 
   end                  
   
   #now we need to establish are we full here; and whether neighbours are to be activated
@@ -180,45 +184,148 @@ then
 """
 macro executeIterPadding(mainArr,refArr,xMeta,yMeta,zMeta,isGold,iterNumb)
     return esc(quote
-    # we already gone through dilatation and metadata analysis so now we are analysing paddings from previous loop
-    #first we need to load data from paddings of surrounding blocks and  push it into shared memory
-    #yet we need to check weather in given direction there is some block so if we are on edge ?
 
-    #order of paddings for reference 1)top, 2)bottom, 3)left 4)right , 5)anterior, 6)posterior
-    
-    #for example here we look to the right  block so we are putting data in our local right padding from left padding of neighpbouring block
-    loadToshmemPaddings(xMeta,yMeta,zMeta, 1,0,0, 3, 4)
-
-    loadToshmemPaddings(xMeta,yMeta,zMeta, -1,0,0, 4, 3)
-    loadToshmemPaddings(xMeta,yMeta,zMeta, 0,1,0, 6, 5)
-    loadToshmemPaddings(xMeta,yMeta,zMeta, 0,-1,0, 5, 6)
-    loadToshmemPaddings(xMeta,yMeta,zMeta, 0,0,1, 2, 1)
-    loadToshmemPaddings(xMeta,yMeta,zMeta, 0,0,-1, 1, 2)
-    #so now we have data loaded from surrounding blocks about their paddings we may now modify accordingly current block
     #by construction one thread will neeed to load just one integer into its registers and to resShmemblockData
     locArr = $mainArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta]
     @inbounds shmemblockData[threadIdxX(),threadIdxY()] = locArr
+    # we already gone through dilatation and metadata analysis so now we are analysing paddings from previous loop
+    #first we need to load data from paddings of surrounding blocks and  push it into shared memory
+    #yet we need to check weather in given direction there is some block so if we are on edge ?
+    #order of paddings for reference 1)top, 2)bottom, 3)left 4)right , 5)anterior, 6)posterior
+    
+    #for example here we look to the right  block so we are putting data in our local right padding from left padding of neighpbouring block
+    @loadToshmemPaddings(xMeta,yMeta,zMeta, 1,0,0, 3, 4)
+
+    @loadToshmemPaddings($xMeta,$yMeta,$zMeta, -1,0,0, 4, 3)
+    @loadToshmemPaddings($xMeta,y$Meta,$zMeta, 0,1,0, 6, 5)
+    @loadToshmemPaddings($xMeta,$yMeta,$zMeta, 0,-1,0, 5, 6)
+    @loadToshmemPaddings($xMeta,$yMeta,$zMeta, 0,0,1, 2, 1)
+    @loadToshmemPaddings($xMeta,$yMeta,$zMeta, 0,0,-1, 1, 2)
+    #so now we have data loaded from surrounding blocks about their paddings we may now modify accordingly current block
+
     sync_threads()
     # now we have data loaded about what is already in dilatation array what was marked from paddings of neighbouring blocks
     # so we need to add dilatation and if needed result to result list 
+    
+    #top
+    @validatePaddingInfo(shmemPaddings[threadIdxX(),threadIdxY(),1]#shmemVal
+    ,threadIdxX()#xpos
+    ,threadIdxY()#ypos
+    ,1#zpos
+    ,$isGold,
+         6#dir
+         ,1#shmemPaddingLayer 
+         ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
+          )    
+    #bottom
+    @validatePaddingInfo(shmemPaddings[threadIdxX(),threadIdxY(),dataBdim[3]]#shmemVal
+    ,threadIdxX()#xpos
+    ,threadIdxY()#ypos
+    ,dataBdim[3]#zpos
+    ,$isGold,
+         5#dir
+         ,2#shmemPaddingLayer 
+         ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
+          )
+    sync_threads()      
+    #now anterior, posterior, left and right need to be evaluated only on one 
+    @unroll for bitPos in 1:32     
+        #left
+       @ifY 1 if(threadIdxX()<=threadIdxY()) 
+        @validatePaddingInfo(shmemPaddings[bitPos,threadIdxX(),3]#shmemVal
+        ,1#xpos
+        ,threadIdxX()#ypos
+        ,bitPos#zpos
+        ,$isGold,
+            4#dir
+            ,3#shmemPaddingLayer 
+            ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
+            )
+       end
+        #right
+        @ifY 2 if(threadIdxX()<=threadIdxY()) 
+             @validatePaddingInfo(shmemPaddings[bitPos,threadIdxX(),4]#shmemVal
+            ,dataBdim[1]#xpos
+            ,threadIdxX()#ypos
+            ,bitPos#zpos
+            ,$isGold,
+                5#dir
+                ,4#shmemPaddingLayer 
+                ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
+                )
+           end
 
 
+        #anterior
+        @ifY 3 begin @validatePaddingInfo(
+            shmemPaddings[threadIdxX(),bitPos,5]#shmemVal
+            ,threadIdxX()#xpos
+            ,threadIdxY()#ypos
+            ,dataBdim[3]#zpos
+            ,$isGold,
+                5#dir
+                ,5#shmemPaddingLayer 
+                ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
+                )
+           end
+        #posterior
+        @ifY 4 begin @validatePaddingInfo(shmemPaddings[threadIdxX(),bitPos,6]#shmemVal
+            ,threadIdxX()#xpos
+            ,threadIdxY()#ypos
+            ,dataBdim[3]#zpos
+            ,$isGold,
+                5#dir
+                ,6#shmemPaddingLayer 
+                ,$refArr ,$xMeta,$yMeta,$zMeta,$iterNumb           )
+           end
+
+    end#for bit pos     
+    sync_threads()
+
+
+    $mainArr[(($xMeta-1)*dataBdim[1]+ threadIdxX()),(($yMeta-1)*dataBdim[2]+ threadIdxY()),($zMeta)] =@inbounds(shmemblockData[threadIdxX(),threadIdxY()])
+    end)
+end#executeIterPadding
+
+
+
+"""
+helper macro for executeIterPadding - if the predicate is true (predicate check given spot in the shmemPaddings ) function executes
+xpos,ypos,zpos - current position in data block
+dir - direction from which we got this so for example in top padding we got it dilatated from top
+    top 6 
+    bottom 5  
+    left 2
+    right 1 
+    anterior 3
+    posterior 4
+ shmemVal -  boolean padding value of intrest  
+ shmemPaddingLayer - which layer it is reference below
+    1)top, 2)bottom, 3)left 4)right , 5)anterior, 6)posterior 
+"""
+macro validatePaddingInfo(shmemVal,xpos,ypos,zpos,isGold, dir,shmemPaddingLayer,refArr,xMeta,yMeta,zMeta,iterNumb )
+    return esc(quote
+    if($shmemVal)
+
+        @setBitTo1(shmemblockData[$xpos,$ypos],$zpos)
+        if($refArr[(($xMeta-1)*dataBdim[1]+ $xpos),(($yMeta-1)*dataBdim[2]+ $ypos),(($zMeta-1)*dataBdim[3]+ $zpos)] == numberToLooFor)
+            @addResult(metaData
+            ,$xMeta,$yMeta ,$zMeta,resList
+            ,(($xMeta-1)*dataBdim[1]+ $xpos)
+            ,(($yMeta-1)*dataBdim[2]+ $ypos)
+            ,(($zMeta-1)*dataBdim[3]+ $zpos)
+            ,$dir
+            ,$iterNumb
+            ,getIndexOfQueue($xpos,$ypos,$zpos,dataBdim,(1-$isGold))
+            ,metaDataDims
+            ,mainArrDims
+            ,$isGold)
+        end#if is in referenca array    
+    end#if true in padding    
+end)
+end
     
 
-
-    end)
-end#executeDataIterWithPadding
-
-"""
-# now we have data loaded about what is already in dilatation array what was marked from paddings of neighbouring blocks
-# so we need to add dilatation and if needed result to result list
-predicate - checks weather we have set bit in position we are intrested in 
-"""
-macro dilatateAndAddResFromPadding(predicate, )
-    return esc(quote
-
-    end)
-end
 
 
 """
@@ -230,16 +337,15 @@ helper function for executeIterPadding - we will check is next block in each dir
 macro loadToshmemPaddings(xMeta,yMeta,zMeta, xMetaChange,yMetaChange,zMetaChange, bitOfIntrest, shmemPaddingTargetNumb)
     return esc(quote
     #we need to be sure that such block exists
-    if( ($xMeta)+$xMetaChange<=metaDataDims[1]  && ($yMeta)+$yMetaChange>0 && ($yMeta)+$yMetaChange<=metaDataDims[2] && ($zMeta)+$zMetaChange>0 && ($zMeta)+$zMetaChange<=metaDataDims[3])
+    if( ((($xMeta)+$xMetaChange)<=metaDataDims[1]) && (($xMeta)+$xMetaChange>0)  && (($yMeta)+$yMetaChange>0) && ((($yMeta)+$yMetaChange)<=metaDataDims[2]) && (($zMeta)+$zMetaChange>0) && ((($zMeta)+$zMetaChange)<=metaDataDims[3]))
         @unroll for iterY in 1:inBlockLoopXZIterWithPadding
             if((threadIdxY()+iterY)<=dataBdim[1]  )
                 #so we are intrested only in given bit from neighbouring block
-                booll = isBit1AtPos(paddingStore[$xMeta+$xChange,$yMeta+$yChange,$zMeta+$zChange],bitOfIntrest)
-                shmemPaddings[threadIdxX(),(threadIdxY()+iterY),shmemPaddingTargetNumb ]=booll
+                booll = isBit1AtPos(paddingStore[($xMeta+$xMetaChange),($yMeta+$yMetaChange),($zMeta+$zMetaChange)],($bitOfIntrest))
+                shmemPaddings[threadIdxX(),(threadIdxY()+iterY),$shmemPaddingTargetNumb ]=booll
             end    
         end#for    
     end#if such block exists    
-    offsetIter
     end)
 end
 
@@ -248,58 +354,6 @@ end
 
 
 
-"""
-combines above function to make it more convinient to call
-"""
-macro paddingProcessCombined(loopX,loopY,maxXdim, maxYdim,a,b,c , xMetaChange,yMetaChange,zMetaChange, mainArr,refArr, dir,iterNumb,queueNumber,xMeta,yMeta,zMeta,isGold)
- 
-    for iterY in 1:inBlockLoopXZIterWithPadding
- 
-    #   function paddingProcessCombined(loopX,loopY,maxXdim, maxYdim,a,b,c , xMetaChange,yMetaChange,zMetaChange, mainArr,refArr, dir,iterNumb,queueNumber,xMeta,yMeta,zMeta,isGold,resShmem,dataBdim,metaData,resList,resListIndicies,maxResListIndex,metaDataDims )
-    return esc(quote
-    @paddingIter($loopX,$loopY,$maxXdim, $maxYdim, begin
-        if(resShmem[$a,$b,$c])
-                #CUDA.@cuprint "meta bounds checks $($xMeta+$xMetaChange>0) $($xMeta+$xMetaChange<=metaDataDims[1]) $($yMeta+$yMetaChange>0) $($yMeta+$yMetaChange<=metaDataDims[2])  $($zMeta+$zMetaChange>0) $($zMeta+$zMetaChange<=metaDataDims[3]) \n "
-                @inbounds isAnythingInPadding[$dir]=true# indicating that we have sth positive in this padding 
-                #below we do actual dilatation
-                if((($xMeta+1)+($xMetaChange)>0) && (($xMeta+1)+($xMetaChange))<=(metaDataDims[1])  && (($yMeta+1)+($yMetaChange)>0) && (($yMeta+1)+($yMetaChange)<=metaDataDims[2]) && (($zMeta+1)+($zMetaChange))>0 && (($zMeta+1)+($zMetaChange))<=metaDataDims[3]  )
-                    @inbounds $mainArr[($xMeta)*dataBdim[1]+$a,($yMeta)*dataBdim[2]+$b,($zMeta)*dataBdim[3]+$c]=true
-                    #checking is it marked as to be validates
-                    if(areToBeValidated[$queueNumber])
-                        #if we have true in reference array in analyzed spot
-                        if($refArr[($xMeta)*dataBdim[1]+$a,($yMeta)*dataBdim[2]+$b,($zMeta)*dataBdim[3]+$c])
-                            # aa = $a
-                            # bb= $b
-                            # cc = $c
-                            # if($queueNumber==1)
-                            #     CUDA.@cuprint "a $(aa) b $(bb) c $(cc) \n"    
-                            # end        
-
-                            #adding the result to the result list at correct spot - using metadata taken from metadata
-                            @addResult(metaData
-                            ,$xMeta+($xMetaChange)
-                            ,$yMeta+($yMetaChange)
-                            ,$zMeta+($zMetaChange)
-                            ,resList
-                            ,resListIndicies
-                            ,(($xMeta)*dataBdim[1]+$a)
-                            ,(($yMeta)*dataBdim[2]+$b)
-                            ,(($zMeta)*dataBdim[3]+$c)
-                            ,$dir
-                            ,$iterNumb
-                            ,$queueNumber
-                            ,metaDataDims
-                            ,mainArrDims
-                            ,$isGold    )
-                        end
-                    end
-                end
-            end
-
-
-    end)
-    end)#quote
-end
 
 
 """
@@ -314,43 +368,11 @@ metaDataDims - dimensions of metadata
 
 """
 function setNextBlockAsIsToBeActivated(isToBeActivated::Bool,xMetaChange,yMetaChange,zMetaChange,xMeta,yMeta,zMeta,isGold,  metaData, metaDataDims)
-   if(isToBeActivated && (xMeta)+xMetaChange<=metaDataDims[1]  && (yMeta)+yMetaChange>0 && (yMeta)+yMetaChange<=metaDataDims[2] && (zMeta)+zMetaChange>0 && (zMeta)+zMetaChange<=metaDataDims[3]) 
+   if(isToBeActivated && (xMeta)+xMetaChange<=metaDataDims[1]  && (xMeta)+xMetaChange>0 &&(yMeta)+yMetaChange>0 && (yMeta)+yMetaChange<=metaDataDims[2] && (zMeta)+zMetaChange>0 && (zMeta)+zMetaChange<=metaDataDims[3]) 
     metaData[(xMeta+1)+xMetaChange,(yMeta+1)+yMetaChange,(zMeta+1)+zMetaChange,getIsToBeActivatedInSegmNumb()-isGold  ]=1 
     end
 end
 
-"""
-executes paddingProcessCombined over all paddings 
-"""
-macro processPadding(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr)
-    return esc(quote
-         
-    
-         # #process top padding
-        @paddingProcessCombined(loopAZFixed,loopBZfixed,dataBdim[1], dataBdim[2], x,y,1 ,0,0,-1,  $mainArr,$refArr,5,$iterNumb, 12-$isGold,$xMeta,$yMeta,$zMeta,$isGold)
-       
-        # #process bottom padding
-        @paddingProcessCombined(loopAZFixed,loopBZfixed,dataBdim[1],dataBdim[2],x,y,dataBdim[3]+2,0,0,1,$mainArr,$refArr,6,$iterNumb,10-$isGold,$xMeta,$yMeta,$zMeta,$isGold)
-        # 
-    #process left padding
-         @paddingProcessCombined(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3],1,x,y , -1,0,0,  $mainArr,$refArr,1,$iterNumb, 4-$isGold,$xMeta,$yMeta,$zMeta,$isGold )
-       
-       
-         # #process rigth padding
-        @paddingProcessCombined(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3], dataBdim[1]+2,x,y , 1,0,0,  $mainArr,$refArr,2,$iterNumb, 2-$isGold,$xMeta,$yMeta,$zMeta,$isGold)
-       #process anterior padding
-        @paddingProcessCombined(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], x,dataBdim[2]+2,y , 0,1,0,  $mainArr,$refArr,4,$iterNumb, 6-$isGold,$xMeta,$yMeta,$zMeta,$isGold)
-
-        #process posterior padding
-        @paddingProcessCombined(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], x,1,y , 0,-1,0,  $mainArr,$refArr,3,$iterNumb, 8-$isGold,$xMeta,$yMeta,$zMeta,$isGold)
-        #checking res  shmem (we used part that is unused in  dilatation step) 
-        
-        sync_threads()
-        
-
-    end)
-
-end#processPadding
            
 
 
@@ -358,8 +380,92 @@ end#processPadding
 end#ProcessMainDataVerB
 
 
+# """
+# combines above function to make it more convinient to call
+# """
+# macro paddingProcessCombined(loopX,loopY,maxXdim, maxYdim,a,b,c , xMetaChange,yMetaChange,zMetaChange, mainArr,refArr, dir,iterNumb,queueNumber,xMeta,yMeta,zMeta,isGold)
+ 
+#     for iterY in 1:inBlockLoopXZIterWithPadding
+ 
+#     #   function paddingProcessCombined(loopX,loopY,maxXdim, maxYdim,a,b,c , xMetaChange,yMetaChange,zMetaChange, mainArr,refArr, dir,iterNumb,queueNumber,xMeta,yMeta,zMeta,isGold,resShmem,dataBdim,metaData,resList,resListIndicies,maxResListIndex,metaDataDims )
+#     return esc(quote
+#     @paddingIter($loopX,$loopY,$maxXdim, $maxYdim, begin
+#         if(resShmem[$a,$b,$c])
+#                 #CUDA.@cuprint "meta bounds checks $($xMeta+$xMetaChange>0) $($xMeta+$xMetaChange<=metaDataDims[1]) $($yMeta+$yMetaChange>0) $($yMeta+$yMetaChange<=metaDataDims[2])  $($zMeta+$zMetaChange>0) $($zMeta+$zMetaChange<=metaDataDims[3]) \n "
+#                 @inbounds isAnythingInPadding[$dir]=true# indicating that we have sth positive in this padding 
+#                 #below we do actual dilatation
+#                 if((($xMeta+1)+($xMetaChange)>0) && (($xMeta+1)+($xMetaChange))<=(metaDataDims[1])  && (($yMeta+1)+($yMetaChange)>0) && (($yMeta+1)+($yMetaChange)<=metaDataDims[2]) && (($zMeta+1)+($zMetaChange))>0 && (($zMeta+1)+($zMetaChange))<=metaDataDims[3]  )
+#                     @inbounds $mainArr[($xMeta)*dataBdim[1]+$a,($yMeta)*dataBdim[2]+$b,($zMeta)*dataBdim[3]+$c]=true
+#                     #checking is it marked as to be validates
+#                     if(areToBeValidated[$queueNumber])
+#                         #if we have true in reference array in analyzed spot
+#                         if($refArr[($xMeta)*dataBdim[1]+$a,($yMeta)*dataBdim[2]+$b,($zMeta)*dataBdim[3]+$c])
+#                             # aa = $a
+#                             # bb= $b
+#                             # cc = $c
+#                             # if($queueNumber==1)
+#                             #     CUDA.@cuprint "a $(aa) b $(bb) c $(cc) \n"    
+#                             # end        
+
+#                             #adding the result to the result list at correct spot - using metadata taken from metadata
+#                             @addResult(metaData
+#                             ,$xMeta+($xMetaChange)
+#                             ,$yMeta+($yMetaChange)
+#                             ,$zMeta+($zMetaChange)
+#                             ,resList
+#                             ,resListIndicies
+#                             ,(($xMeta)*dataBdim[1]+$a)
+#                             ,(($yMeta)*dataBdim[2]+$b)
+#                             ,(($zMeta)*dataBdim[3]+$c)
+#                             ,$dir
+#                             ,$iterNumb
+#                             ,$queueNumber
+#                             ,metaDataDims
+#                             ,mainArrDims
+#                             ,$isGold    )
+#                         end
+#                     end
+#                 end
+#             end
 
 
+#     end)
+#     end)#quote
+# end
+
+
+# """
+# executes paddingProcessCombined over all paddings 
+# """
+# macro processPadding(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr)
+#     return esc(quote
+         
+    
+#          # #process top padding
+#         @paddingProcessCombined(loopAZFixed,loopBZfixed,dataBdim[1], dataBdim[2], x,y,1 ,0,0,-1,  $mainArr,$refArr,5,$iterNumb, 12-$isGold,$xMeta,$yMeta,$zMeta,$isGold)
+       
+#         # #process bottom padding
+#         @paddingProcessCombined(loopAZFixed,loopBZfixed,dataBdim[1],dataBdim[2],x,y,dataBdim[3]+2,0,0,1,$mainArr,$refArr,6,$iterNumb,10-$isGold,$xMeta,$yMeta,$zMeta,$isGold)
+#         # 
+#     #process left padding
+#          @paddingProcessCombined(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3],1,x,y , -1,0,0,  $mainArr,$refArr,1,$iterNumb, 4-$isGold,$xMeta,$yMeta,$zMeta,$isGold )
+       
+       
+#          # #process rigth padding
+#         @paddingProcessCombined(loopAXFixed,loopBXfixed,dataBdim[2], dataBdim[3], dataBdim[1]+2,x,y , 1,0,0,  $mainArr,$refArr,2,$iterNumb, 2-$isGold,$xMeta,$yMeta,$zMeta,$isGold)
+#        #process anterior padding
+#         @paddingProcessCombined(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], x,dataBdim[2]+2,y , 0,1,0,  $mainArr,$refArr,4,$iterNumb, 6-$isGold,$xMeta,$yMeta,$zMeta,$isGold)
+
+#         #process posterior padding
+#         @paddingProcessCombined(loopAYFixed,loopBYfixed,dataBdim[1], dataBdim[3], x,1,y , 0,-1,0,  $mainArr,$refArr,3,$iterNumb, 8-$isGold,$xMeta,$yMeta,$zMeta,$isGold)
+#         #checking res  shmem (we used part that is unused in  dilatation step) 
+        
+#         sync_threads()
+        
+
+#     end)
+
+# end#processPadding
 
 
 # """
