@@ -13,7 +13,7 @@ macro validateData(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr)
    locArr = @inbounds($mainArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta])
    # here we are anaylyzing only main part of the  data block paddings will be analyzed separately
    @unroll for bitIter in 1:32
-       resShemVal = isBit1AtPos(@inbounds(resShmemblockData[threadIdxX(),threadIdxY()]), bitIter)
+       resShemVal = isBit1AtPos(@inbounds(shmemblockData[threadIdxX(),threadIdxY(),2]), bitIter)
        inSource = isBit1AtPos(locArr, bitIter)
        #later usefull to establish is mask full
        isMaskFull= (resShemVal && isMaskFull)
@@ -51,17 +51,21 @@ macro validateData(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr)
 macro loadMainValues(mainArr,xMeta,yMeta,zMeta)
     return esc(quote
     #load data
+    xm = $xMeta
+    ym = $yMeta
+    zm = $zMeta
     locArr = $mainArr[(($xMeta-1)*dataBdim[1]+ threadIdxX()),(($yMeta-1)*dataBdim[2]+ threadIdxY()),$zMeta]
-    @inbounds shmemblockData[threadIdxX(),threadIdxY()] = locArr
+    @inbounds shmemblockData[threadIdxX(),threadIdxY(),1] = locArr
+    
+
     #now immidiately we can go with dilatation up and down and save it to res shmem we are not modyfing  locArr
-    @inbounds resShmemblockData[threadIdxX(),threadIdxY()]=@bitDilatate(locArr)
+    @inbounds shmemblockData[threadIdxX(),threadIdxY(),2]=@bitDilatate(locArr)
+
     # now if we have values in first or last bit we need to modify appropriate spots in the shmemPaddings
-    # @inbounds shmemPaddings[threadIdxX(),threadIdxY(),1]=isBit1AtPos(locArr,1)#top
-    sync_threads()
     @inbounds shmemPaddings[threadIdxX(),threadIdxY(),2]=isBit1AtPos(locArr,dataBdim[3])#bottom
     @inbounds shmemPaddings[threadIdxX(),threadIdxY(),7]=isBit1AtPos(locArr,1)#top
     #now we will  do left - right dilatations howvewer we must be sure that we checked boundary conditions 
-    
+    sync_threads()
     #left
     @dilatateHelper((threadIdxX()==1), 3,bitPos,threadIdxY(),(-1), (0))
 
@@ -101,21 +105,26 @@ helper macro to iterate over the threads and given their position - checking edg
 """
 macro dilatateHelper(predicate, paddingPos, padingVariedA, padingVariedB,normalXChange, normalYchange)
     return esc(quote
-        if($predicate)
-            for bitPos in 1:32
+    # locBool = false
+
+
+  
+    if($predicate)
+        for bitPos in 1:32
                 shmemPaddings[$padingVariedA,$padingVariedB,$paddingPos]=isBit1AtPos(locArr,bitPos)
                 #we need to mark weather there is anything in padding so we will mark block as to be activates 
                 if(shmemPaddings[$padingVariedA,$padingVariedB,$paddingPos]) 
                     isAnythingInPadding[$paddingPos]= true 
                 end
-            end
-        else
-            xCh = $normalXChange
-            ych = $normalYchange
-          CUDA.@cuprint "  ress $(resShmemblockData[threadIdxX(),threadIdxY()]) after   $(@bitPassOnes(resShmemblockData[threadIdxX(),threadIdxY()],shmemblockData[threadIdxX()+($normalXChange),threadIdxY()+($normalYchange)] ))   idX $(threadIdxX())  xChange $(xCh) idY $(threadIdxY())  yCahnge $(ych)\n" 
-          
-          resShmemblockData[threadIdxX(),threadIdxY()]= @bitPassOnes(resShmemblockData[threadIdxX(),threadIdxY()],shmemblockData[threadIdxX()+($normalXChange),threadIdxY()+($normalYchange)]   )
+        end#for
+
+    else
+           
+
+        shmemblockData[threadIdxX(),threadIdxY(),2] = @bitPassOnes(shmemblockData[threadIdxX(),threadIdxY(),2],shmemblockData[threadIdxX()+($normalXChange),threadIdxY()+($normalYchange),1]   )
+
         end 
+
     end)#quote
 end
 
@@ -134,15 +143,15 @@ we will record first found true voxel from each of six directions
                 posterior 4
 """
 function getDir(shmemblockData,bitIter,dataBdim)::UInt8
-    return if((bitIter-1)>0 && isBit1AtPos(@inbounds(shmemblockData[threadIdxX(),threadIdxY()]), bitIter-1) ) 
+    return if((bitIter-1)>0 && isBit1AtPos(@inbounds(shmemblockData[threadIdxX(),threadIdxY(),1]), bitIter-1) ) 
                 6
-            elseif(((bitIter)<dataBdim[3]) && isBit1AtPos(@inbounds(shmemblockData[threadIdxX(),threadIdxY()]), bitIter+1) ) 
+            elseif(((bitIter)<dataBdim[3]) && isBit1AtPos(@inbounds(shmemblockData[threadIdxX(),threadIdxY(),1]), bitIter+1) ) 
                 5
-            elseif((threadIdxX()-1>0) && isBit1AtPos(@inbounds(shmemblockData[threadIdxX()-1,threadIdxY()]), bitIter) )
+            elseif((threadIdxX()-1>0) && isBit1AtPos(@inbounds(shmemblockData[threadIdxX()-1,threadIdxY(),1]), bitIter) )
                 2
-            elseif((threadIdxX()<dataBdim[1]) && isBit1AtPos(@inbounds(shmemblockData[threadIdxX()+1,threadIdxY()]), bitIter) )
+            elseif((threadIdxX()<dataBdim[1]) && isBit1AtPos(@inbounds(shmemblockData[threadIdxX()+1,threadIdxY(),1]), bitIter) )
                 1
-            elseif((threadIdxY()-1>0) && isBit1AtPos(@inbounds(shmemblockData[threadIdxX(),threadIdxY()-1]), bitIter) )
+            elseif((threadIdxY()-1>0) && isBit1AtPos(@inbounds(shmemblockData[threadIdxX(),threadIdxY()-1,1]), bitIter) )
                 3
             else 
                 4            
@@ -167,7 +176,7 @@ macro executeDataIter(mainArrDims
       @validateData($isGold,$xMeta,$yMeta,$zMeta,$iterNumb,$mainArr,$refArr) 
   end 
   #save all dilatations apart from padding ...                 
-  $mainArr[(($xMeta-1)*dataBdim[1]+ threadIdxX()),(($yMeta-1)*dataBdim[2]+ threadIdxY()),$zMeta] = @inbounds(resShmemblockData[threadIdxX(),threadIdxY()])
+  $mainArr[(($xMeta-1)*dataBdim[1]+ threadIdxX()),(($yMeta-1)*dataBdim[2]+ threadIdxY()),$zMeta] = @inbounds(shmemblockData[threadIdxX(),threadIdxY(),2])
   #now we need to establish are we full here; and whether neighbours are to be activated
   isMaskFull =syncThreadsAnd(isMaskFull)
   @ifXY 1 1 setNextBlockAsIsToBeActivated(isAnythingInPadding[1] ,-1,0,0,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
@@ -190,9 +199,9 @@ then
 macro executeIterPadding(mainArr,refArr,xMeta,yMeta,zMeta,isGold,iterNumb)
     return esc(quote
 
-    #by construction one thread will neeed to load just one integer into its registers and to resShmemblockData
+    #by construction one thread will neeed to load just one integer into its registers and to res
     locArr = $mainArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta]
-    @inbounds shmemblockData[threadIdxX(),threadIdxY()] = locArr
+    @inbounds shmemblockData[threadIdxX(),threadIdxY(),1] = locArr
     # we already gone through dilatation and metadata analysis so now we are analysing paddings from previous loop
     #first we need to load data from paddings of surrounding blocks and  push it into shared memory
     #yet we need to check weather in given direction there is some block so if we are on edge ?
@@ -223,73 +232,74 @@ macro executeIterPadding(mainArr,refArr,xMeta,yMeta,zMeta,isGold,iterNumb)
          ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
           )    
     #bottom
-    @validatePaddingInfo(shmemPaddings[threadIdxX(),threadIdxY(),dataBdim[3]]#shmemVal
-    ,threadIdxX()#xpos
-    ,threadIdxY()#ypos
-    ,dataBdim[3]#zpos
-    ,$isGold,
-         5#dir
-         ,2#shmemPaddingLayer 
-         ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
-          )
+    # @validatePaddingInfo(shmemPaddings[threadIdxX(),threadIdxY(),dataBdim[3]]#shmemVal
+    # ,threadIdxX()#xpos
+    # ,threadIdxY()#ypos
+    # ,dataBdim[3]#zpos
+    # ,$isGold,
+    #      5#dir
+    #      ,2#shmemPaddingLayer 
+    #      ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
+    #       )
     sync_threads()      
     #now anterior, posterior, left and right need to be evaluated only on one 
-    @unroll for bitPos in 1:32     
-        #left
-       @ifY 1 if(threadIdxX()<=threadIdxY()) 
-        @validatePaddingInfo(shmemPaddings[bitPos,threadIdxX(),3]#shmemVal
-        ,1#xpos
-        ,threadIdxX()#ypos
-        ,bitPos#zpos
-        ,$isGold,
-            4#dir
-            ,3#shmemPaddingLayer 
-            ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
-            )
-       end
-        #right
-        @ifY 2 if(threadIdxX()<=threadIdxY()) 
-             @validatePaddingInfo(shmemPaddings[bitPos,threadIdxX(),4]#shmemVal
-            ,dataBdim[1]#xpos
-            ,threadIdxX()#ypos
-            ,bitPos#zpos
-            ,$isGold,
-                5#dir
-                ,4#shmemPaddingLayer 
-                ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
-                )
-           end
+    # @unroll for bitPos in 1:32     
+    #     #left
+    #    @ifY 1 if(threadIdxX()<=threadIdxY()) 
+    #     @validatePaddingInfo(shmemPaddings[bitPos,threadIdxX(),3]#shmemVal
+    #     ,1#xpos
+    #     ,threadIdxX()#ypos
+    #     ,bitPos#zpos
+    #     ,$isGold,
+    #         4#dir
+    #         ,3#shmemPaddingLayer 
+    #         ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
+    #         )
+    #    end
+    #     #right
+    #     @ifY 2 if(threadIdxX()<=threadIdxY()) 
+    #          @validatePaddingInfo(shmemPaddings[bitPos,threadIdxX(),4]#shmemVal
+    #         ,dataBdim[1]#xpos
+    #         ,threadIdxX()#ypos
+    #         ,bitPos#zpos
+    #         ,$isGold,
+    #             5#dir
+    #             ,4#shmemPaddingLayer 
+    #             ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
+    #             )
+    #        end
 
 
-        #anterior
-        @ifY 3 begin @validatePaddingInfo(
-            shmemPaddings[threadIdxX(),bitPos,5]#shmemVal
-            ,threadIdxX()#xpos
-            ,threadIdxY()#ypos
-            ,dataBdim[3]#zpos
-            ,$isGold,
-                5#dir
-                ,5#shmemPaddingLayer 
-                ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
-                )
-           end
-        #posterior
-        @ifY 4 begin @validatePaddingInfo(shmemPaddings[threadIdxX(),bitPos,6]#shmemVal
-            ,threadIdxX()#xpos
-            ,threadIdxY()#ypos
-            ,dataBdim[3]#zpos
-            ,$isGold,
-                5#dir
-                ,6#shmemPaddingLayer 
-                ,$refArr ,$xMeta,$yMeta,$zMeta,$iterNumb           )
-           end
+    #     #anterior
+    #     @ifY 3 begin @validatePaddingInfo(
+    #         shmemPaddings[threadIdxX(),bitPos,5]#shmemVal
+    #         ,threadIdxX()#xpos
+    #         ,threadIdxY()#ypos
+    #         ,dataBdim[3]#zpos
+    #         ,$isGold,
+    #             5#dir
+    #             ,5#shmemPaddingLayer 
+    #             ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
+    #             )
+    #        end
+    #     #posterior
+    #     @ifY 4 begin @validatePaddingInfo(shmemPaddings[threadIdxX(),bitPos,6]#shmemVal
+    #         ,threadIdxX()#xpos
+    #         ,threadIdxY()#ypos
+    #         ,dataBdim[3]#zpos
+    #         ,$isGold,
+    #             5#dir
+    #             ,6#shmemPaddingLayer 
+    #             ,$refArr ,$xMeta,$yMeta,$zMeta,$iterNumb           )
+    #        end
 
-    end#for bit pos     
+    # end#for bit pos     
     sync_threads()
 
 
-    $mainArr[(($xMeta-1)*dataBdim[1]+ threadIdxX()),(($yMeta-1)*dataBdim[2]+ threadIdxY()),($zMeta)] =@inbounds(shmemblockData[threadIdxX(),threadIdxY()])
-    end)
+    # $mainArr[(($xMeta-1)*dataBdim[1]+ threadIdxX()),(($yMeta-1)*dataBdim[2]+ threadIdxY()),($zMeta)] =@inbounds(shmemblockData[threadIdxX(),threadIdxY(),1])
+    
+end)
 end#executeIterPadding
 
 
@@ -312,7 +322,7 @@ macro validatePaddingInfo(shmemVal,xpos,ypos,zpos,isGold, dir,shmemPaddingLayer,
     return esc(quote
     if($shmemVal)
 
-        @setBitTo1(shmemblockData[$xpos,$ypos],$zpos)
+        # @setBitTo1(shmemblockData[$xpos,$ypos,1],$zpos)
         if($refArr[(($xMeta-1)*dataBdim[1]+ $xpos),(($yMeta-1)*dataBdim[2]+ $ypos),(($zMeta-1)*dataBdim[3]+ $zpos)] == numberToLooFor)
             @addResult(metaData
             ,$xMeta,$yMeta ,$zMeta,resList

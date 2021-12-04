@@ -42,11 +42,12 @@ macro mainLoopKernelAllocations(dataBdim)
 #needed to manage cooperative groups functions
 grid_handle = this_grid()
 
-shmemblockData = @cuDynamicSharedMem(UInt32,($dataBdim[1], $dataBdim[2] ))
+shmemblockData = @cuDynamicSharedMem(UInt32,($dataBdim[1], $dataBdim[2] ,2))
 # holding values of results
-resShmemblockData = @cuDynamicSharedMem(UInt32,($dataBdim[1], $dataBdim[2] ))
+# resShmemblockData = @cuDynamicSharedMem(UInt32,($dataBdim[1], $dataBdim[2] ))
+
 # holding data about result  2)bottom, 3)left 4)right , 5)anterior, 6)posterior , 7) top,  paddings
-shmemPaddings = @cuDynamicSharedMem(Bool,(  max($dataBdim[1], $dataBdim[2]), max($dataBdim[1], $dataBdim[2])   ,7 ))
+shmemPaddings = @cuStaticSharedMem(Bool,( 32,32,7 ))
 
 
 #for storing sums for reductions

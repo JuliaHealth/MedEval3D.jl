@@ -417,7 +417,24 @@ numberToLooFor = 2
 resList = allocateResultLists(100000,100000)
 workQueaue[:,1] = [2,2,2,1] 
 workQueaue[:,2] = [3,3,3,1] 
-workQueaueCounter[1] = 2
+
+workQueaue[:,3] = [4,3,3,1] 
+workQueaue[:,4] = [2,3,3,1] 
+workQueaue[:,5] = [3,4,3,1] 
+workQueaue[:,6] = [3,2,3,1] 
+workQueaue[:,7] = [3,3,4,1] 
+workQueaue[:,8] = [3,3,2,1] 
+
+workQueaue[:,9] = [1,2,2,1] 
+workQueaue[:,10] = [3,2,2,1] 
+workQueaue[:,11] = [2,1,2,1] 
+workQueaue[:,12] = [2,3,2,1] 
+workQueaue[:,13] = [2,2,1,1] 
+workQueaue[:,14] = [2,2,3,1] 
+
+
+
+workQueaueCounter[1] = 14
 dilatationArrs= (mainArr,mainArr)
 referenceArrs=(refArr,refArr)
 shmemSumLengthMaxDiv4 = 20
@@ -452,20 +469,18 @@ function testProcessDataBlock(numberToLooFor,refArr,inBlockLoopXZIterWithPadding
   sync_grid(grid_handle)
 
  
-  # @iterateOverWorkQueue(workQueaueCounter,workQueaue
-  # ,shmemSumLengthMaxDiv4,begin
+  @iterateOverWorkQueue(workQueaueCounter,workQueaue
+  ,shmemSumLengthMaxDiv4,begin  
+  ProcessMainDataVerB.@executeIterPadding(dilatationArrs[shmemSum[shmemIndex*4+4]+1]
+      ,referenceArrs[shmemSum[shmemIndex*4+4]+1]
+      ,(shmemSum[shmemIndex*4+1])#xMeta
+      ,(shmemSum[shmemIndex*4+2])#yMeta
+      ,(shmemSum[shmemIndex*4+3])#zMeta
+      ,shmemSum[shmemIndex*4+4]#isGold
+      ,iterationNumberShmem[1]#iterNumb
+      )
 
-  
-  # ProcessMainDataVerB.@executeIterPadding(dilatationArrs[shmemSum[shmemIndex*4+4]+1]
-  #     ,referenceArrs[shmemSum[shmemIndex*4+4]+1]
-  #     ,(shmemSum[shmemIndex*4+1])#xMeta
-  #     ,(shmemSum[shmemIndex*4+2])#yMeta
-  #     ,(shmemSum[shmemIndex*4+3])#zMeta
-  #     ,shmemSum[shmemIndex*4+4]#isGold
-  #     ,iterationNumberShmem[1]#iterNumb
-  #     )
-
-  # end ) 
+  end ) 
 
 
     return
@@ -485,28 +500,40 @@ for bitPos in [1,2,4,5,6,31,32]
 end
 afterDil
 nn = mainArr[33,dataBdim[2]+1,2]
-zz= @bitDilatate(nn)
-rowOne==nn
-afterDil==zz
-
 isBit1AtPos(nn,32)
-
 mainArr[32,dataBdim[2]+1,2]
+
+# sum(resList)
 
 @test mainArr[33,dataBdim[2]+1,2]== afterDil
 @test mainArr[33,dataBdim[2]*2,2]== afterDil
 @test mainArr[64,dataBdim[2]+1,2]== afterDil
+
+Int64(mainArr[33,dataBdim[2]+1,2])
 
 rowOne = UInt32(0)
 @setBitTo(rowOne,1,true)
 @setBitTo(rowOne,5,true)
 @setBitTo(rowOne,32,true)
 
-for i in [-1,1] 
-  @test mainArr[33+i,dataBdim[2]+1,2]== rowOne
-  @test mainArr[33+i,dataBdim[2]*2,2]== rowOne
-  @test mainArr[64+i,dataBdim[2]+1,2]== rowOne
+aa = mainArr[33,dataBdim[2]+1,2]
+Int64(aa)
+for i in 1:32
+  if(isBit1AtPos(aa,i))
+    print("i $(i)  ")
+  end  
 end
+# sum(paddingStore)
+# if(xm ==2 && ym==2 && zm==2 && threadIdxX()==1 && threadIdxY()==1)     CUDA.@cuprint "7  locArr $(locArr) sourceShmem  $(shmemblockData[threadIdxX(),threadIdxY(),1]) res $(shmemblockData[threadIdxX(),threadIdxY(),2]) \n"     end
+
+
+  @test mainArr[33+1,dataBdim[2]+1,2]== rowOne
+  @test mainArr[33+1,dataBdim[2]*2,2]== rowOne
+  @test mainArr[64+1,dataBdim[2]+1,2]== rowOne
+
+  @test mainArr[33-1,dataBdim[2]+1,2]== rowOne
+  @test mainArr[33-1,dataBdim[2]*2,2]== rowOne
+  @test mainArr[64-1,dataBdim[2]+1,2]== rowOne
 
 for i in [-1,1] 
   @test mainArr[33,dataBdim[2]+1+i,2]== rowOne
