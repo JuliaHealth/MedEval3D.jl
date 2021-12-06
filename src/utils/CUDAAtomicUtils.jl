@@ -1,13 +1,14 @@
 
-module CUDAAtomicUtils
+#module CUDAAtomicUtils
 using CUDA 
+using CUDA: @atomic
 
-export atomicallyAddOne,atomicallyAddToSpot, atomicAdd, atomicMinSet, atomicMaxSet
+#export atomicallyAddOne,atomicallyAddToSpot, atomicAdd, atomicMinSet, atomicMaxSet
 """
 atomically add to given 1 length array 1
 """
 function atomicallyAddOne(arr) 
-   return  @inbounds @atomic arr[]+=1
+   return  @inbounds CUDA.@atomic arr[1]+=1
 end
 
 
@@ -16,14 +17,14 @@ atomically add given value to the coordinate (linear) of supplied array
 """
 function atomicallyAddToSpot( arr,coord,value)
 #    return CUDA.atomic_add!(pointer(arr, coord),typ(value))
-return  @inbounds @atomic arr[coord]+=value
+return  @inbounds CUDA.@atomic arr[coord]+=value
 end
 
 """
 adds atomically number to target and return old value
 """
 function atomicAdd(target, number)
-    return  @inbounds @atomic target[]+=number
+    return  @inbounds CUDA.@atomic target[1]+=number
 
 end
 
@@ -36,7 +37,7 @@ coord - coordinate of a pointer in array
 function atomicMinSet( arr,value,coord=1)
    
     #return CUDA.atomic_add!(pointer(arr, coord),typ(value))
-  return  @inbounds @atomic arr[coord]=min(arr[coord],value)
+  return  @inbounds CUDA.@atomic arr[coord]=min(arr[coord],value)
 end#atomicMinSet
 
 
@@ -44,7 +45,7 @@ end#atomicMinSet
 given array (or some pointer ...)  and value to set it will set target to maximum of targets value and supplied value  and return old value
 """
 function atomicMaxSet( arr,value,coord=1)
-    return @inbounds @atomic arr[coord]=max(arr[coord],value)
+    return @inbounds CUDA.@atomic arr[coord]=max(arr[coord],value)
 
 end#atomicMaxSet
 
@@ -52,4 +53,4 @@ end#atomicMaxSet
 
 
 
-end#module CUDAAtomicUtils
+# end#module CUDAAtomicUtils
