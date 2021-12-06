@@ -111,6 +111,12 @@ macro dilatateHelper(predicate, paddingPos, padingVariedA, padingVariedB,normalX
   
     if($predicate)
         for bitPos in 1:32
+                if(isBit1AtPos(locArr,bitPos))
+                    padvarA = $padingVariedA
+                    padVarB = $padingVariedB
+                    padPos = $paddingPos
+                    CUDA.@cuprint "save to shmem $(padvarA) padVarB $(padVarB)  padPos $(padPos) \n"
+                end    
                 shmemPaddings[$padingVariedA,$padingVariedB,$paddingPos]=isBit1AtPos(locArr,bitPos)
                 #we need to mark weather there is anything in padding so we will mark block as to be activates 
                 if(shmemPaddings[$padingVariedA,$padingVariedB,$paddingPos]) 
@@ -209,7 +215,6 @@ macro executeIterPadding(mainArr,refArr,xMeta,yMeta,zMeta,isGold,iterNumb)
     
     #for example here we look to the right  block so we are putting data in our local right padding from left padding of neighpbouring block
     @loadToshmemPaddings($xMeta,$yMeta,$zMeta, 1,0,0, 3, 4)
-
     @loadToshmemPaddings($xMeta,$yMeta,$zMeta, -1,0,0, 4, 3)
     @loadToshmemPaddings($xMeta,$yMeta,$zMeta, 0,1,0, 6, 5)
     @loadToshmemPaddings($xMeta,$yMeta,$zMeta, 0,-1,0, 5, 6)
@@ -232,72 +237,72 @@ macro executeIterPadding(mainArr,refArr,xMeta,yMeta,zMeta,isGold,iterNumb)
          ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
           )    
     #bottom
-    # @validatePaddingInfo(shmemPaddings[threadIdxX(),threadIdxY(),dataBdim[3]]#shmemVal
-    # ,threadIdxX()#xpos
-    # ,threadIdxY()#ypos
-    # ,dataBdim[3]#zpos
-    # ,$isGold,
-    #      5#dir
-    #      ,2#shmemPaddingLayer 
-    #      ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
-    #       )
+    @validatePaddingInfo(shmemPaddings[threadIdxX(),threadIdxY(),2]#shmemVal
+    ,threadIdxX()#xpos
+    ,threadIdxY()#ypos
+    ,dataBdim[3]#zpos
+    ,$isGold,
+         5#dir
+         ,2#shmemPaddingLayer 
+         ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
+          )
     sync_threads()      
     #now anterior, posterior, left and right need to be evaluated only on one 
-    # @unroll for bitPos in 1:32     
-    #     #left
-    #    @ifY 1 if(threadIdxX()<=threadIdxY()) 
-    #     @validatePaddingInfo(shmemPaddings[bitPos,threadIdxX(),3]#shmemVal
-    #     ,1#xpos
-    #     ,threadIdxX()#ypos
-    #     ,bitPos#zpos
-    #     ,$isGold,
-    #         4#dir
-    #         ,3#shmemPaddingLayer 
-    #         ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
-    #         )
-    #    end
-    #     #right
-    #     @ifY 2 if(threadIdxX()<=threadIdxY()) 
-    #          @validatePaddingInfo(shmemPaddings[bitPos,threadIdxX(),4]#shmemVal
-    #         ,dataBdim[1]#xpos
-    #         ,threadIdxX()#ypos
-    #         ,bitPos#zpos
-    #         ,$isGold,
-    #             5#dir
-    #             ,4#shmemPaddingLayer 
-    #             ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
-    #             )
-    #        end
+    @unroll for bitPos in 1:32     
+        #left
+       @ifY 1 if(threadIdxX()<=threadIdxY()) 
+        @validatePaddingInfo(shmemPaddings[bitPos,threadIdxX(),3]#shmemVal
+        ,1#xpos
+        ,threadIdxX()#ypos
+        ,bitPos#zpos
+        ,$isGold,
+            4#dir
+            ,3#shmemPaddingLayer 
+            ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
+            )
+       end
+        #right
+        @ifY 2 if(threadIdxX()<=threadIdxY()) 
+             @validatePaddingInfo(shmemPaddings[bitPos,threadIdxX(),4]#shmemVal
+            ,dataBdim[1]#xpos
+            ,threadIdxX()#ypos
+            ,bitPos#zpos
+            ,$isGold,
+                5#dir
+                ,4#shmemPaddingLayer 
+                ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
+                )
+           end
 
 
-    #     #anterior
-    #     @ifY 3 begin @validatePaddingInfo(
-    #         shmemPaddings[threadIdxX(),bitPos,5]#shmemVal
-    #         ,threadIdxX()#xpos
-    #         ,threadIdxY()#ypos
-    #         ,dataBdim[3]#zpos
-    #         ,$isGold,
-    #             5#dir
-    #             ,5#shmemPaddingLayer 
-    #             ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
-    #             )
-    #        end
-    #     #posterior
-    #     @ifY 4 begin @validatePaddingInfo(shmemPaddings[threadIdxX(),bitPos,6]#shmemVal
-    #         ,threadIdxX()#xpos
-    #         ,threadIdxY()#ypos
-    #         ,dataBdim[3]#zpos
-    #         ,$isGold,
-    #             5#dir
-    #             ,6#shmemPaddingLayer 
-    #             ,$refArr ,$xMeta,$yMeta,$zMeta,$iterNumb           )
-    #        end
+        #anterior
+        @ifY 3 begin @validatePaddingInfo(
+            shmemPaddings[threadIdxX(),bitPos,5]#shmemVal
+            ,threadIdxX()#xpos
+            ,threadIdxY()#ypos
+            ,dataBdim[3]#zpos
+            ,$isGold,
+                5#dir
+                ,5#shmemPaddingLayer 
+                ,$refArr,$xMeta,$yMeta,$zMeta,$iterNumb
+                )
+           end
+        #posterior
+        @ifY 4 begin @validatePaddingInfo(shmemPaddings[threadIdxX(),bitPos,6]#shmemVal
+            ,threadIdxX()#xpos
+            ,threadIdxY()#ypos
+            ,dataBdim[3]#zpos
+            ,$isGold,
+                5#dir
+                ,6#shmemPaddingLayer 
+                ,$refArr ,$xMeta,$yMeta,$zMeta,$iterNumb           )
+           end
 
-    # end#for bit pos     
+    end#for bit pos     
     sync_threads()
 
 
-    # $mainArr[(($xMeta-1)*dataBdim[1]+ threadIdxX()),(($yMeta-1)*dataBdim[2]+ threadIdxY()),($zMeta)] =@inbounds(shmemblockData[threadIdxX(),threadIdxY(),1])
+    $mainArr[(($xMeta-1)*dataBdim[1]+ threadIdxX()),(($yMeta-1)*dataBdim[2]+ threadIdxY()),($zMeta)] =@inbounds(shmemblockData[threadIdxX(),threadIdxY(),1])
     
 end)
 end#executeIterPadding
@@ -322,7 +327,14 @@ macro validatePaddingInfo(shmemVal,xpos,ypos,zpos,isGold, dir,shmemPaddingLayer,
     return esc(quote
     if($shmemVal)
 
-        # @setBitTo1(shmemblockData[$xpos,$ypos,1],$zpos)
+        @setBitTo1(shmemblockData[$xpos,$ypos,1],$zpos)
+
+        xp = (($xMeta-1)*dataBdim[1]+ $xpos)
+        yp = (($yMeta-1)*dataBdim[2]+ $ypos)
+        zp = (($zMeta-1)*dataBdim[3]+ $zpos)
+            CUDA.@cuprint "set bit to x $(xp)   \n"
+       
+       
         if($refArr[(($xMeta-1)*dataBdim[1]+ $xpos),(($yMeta-1)*dataBdim[2]+ $ypos),(($zMeta-1)*dataBdim[3]+ $zpos)] == numberToLooFor)
             @addResult(metaData
             ,$xMeta,$yMeta ,$zMeta,resList
@@ -363,6 +375,17 @@ macro loadToshmemPaddings(xMeta,yMeta,zMeta, xMetaChange,yMetaChange,zMetaChange
             if((threadIdxY()+iterY)<=dataBdim[1]  )
                 #so we are intrested only in given bit from neighbouring block
                 booll = isBit1AtPos(paddingStore[($xMeta+$xMetaChange),($yMeta+$yMetaChange),($zMeta+$zMetaChange)],($bitOfIntrest))
+                
+
+                if(booll)
+                    xm = (($xMeta)+$xMetaChange)
+                    ym = ($yMeta)+$yMetaChange
+                    zm = ($zMeta)+$zMetaChange
+                    bitt = $bitOfIntrest
+                    CUDA.@cuprint "in load xm $(xm) ym $(ym) zm $(zm) layer $(bitt) \n"
+                end    
+
+                
                 shmemPaddings[threadIdxX(),(threadIdxY()+iterY),$shmemPaddingTargetNumb ]=booll
             end    
         end#for    
