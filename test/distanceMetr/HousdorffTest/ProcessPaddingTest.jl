@@ -331,21 +331,14 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl"
 using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
 using Main.Housdorff,Main.ProcessMainDataVerB,Main.MainLoopKernel,Main.BitWiseUtils,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
 
-
-
-
-mainArr= CUDA.zeros(UInt32, 500,500,30)
-refArr= CUDA.zeros(UInt8, 500,500,1000)
+mainArr= CUDA.zeros(UInt32, 300,300,10)
+refArr= CUDA.zeros(UInt8, 300,300,320)
 numbToLooFor = 2
 dataBdim= (32,5,32)
-
 
 ############ some arbitrary data  meta 2,2,2 with some results to be set 
 xMeta,yMeta,zMeta = 2,2,2
 
-resShmemblockData= CUDA.zeros(UInt32, 32,10);
-shmemblockData= CUDA.zeros(UInt32, 32,10);
-shmemPaddings= CUDA.zeros(Bool, 32,32,6);
 
 threads=(dataBdim[1],dataBdim[2])
 rowOne = UInt32(0)
@@ -363,7 +356,6 @@ mainArr[64,dataBdim[2]*2,2]= rowOne
 mainArr[64,dataBdim[2]+1,2]= rowOne
 
 ################   here we will get a block that will become full after the dilatation meta 3,3,3
-xMeta,yMeta,zMeta = 4,4,4
 fullOnesTobecome = UInt32(0)
 for bitPos in 1:32
   if(isodd(bitPos))
@@ -384,8 +376,15 @@ refArr[33,dataBdim[2]+1,33]= 2
 refArr[33,dataBdim[2]*2,34]= 2
 refArr[64,dataBdim[2]+1,37]= 2
 refArr[64,dataBdim[2]+1,38]= 2
-refArr[64,dataBdim[2]+1,64]= 2
 
+
+refArr[33,dataBdim[2]*2,34]= 2 #from bottom 
+refArr[64,dataBdim[2]+1,63]= 2 #from top
+refArr[64-1,dataBdim[2]+1,64]= 2#from right
+refArr[64+1,dataBdim[2]+1,64]= 2#from left
+
+refArr[64,dataBdim[2]+2,64]= 2#from posterior
+refArr[64,dataBdim[2],64]= 2#from anterior
 
 ### configurations
 
@@ -398,14 +397,24 @@ workQueaue,workQueaueCounter= WorkQueueUtils.allocateWorkQueue( max(length(metaD
 metaData[2,2,2,2]=UInt32(1)
 #setting offsets in metadata
 
+twoTwoTwoOffset=0
+
+
 metaBlock = 0
 for xMetaa in 1:3,yMetaa in 1:3, zMetaa in 1:3 
   metaBlock+=20
+  if(xMetaa==2 && yMetaa==2 && zMetaa==2 )
+      twoTwoTwoOffset=metaBlock
+
+  end
+
   for i in 1:14
-    metaData[2,2,2,getResOffsetsBeg()+i]=i*1000+metaBlock*15*1000
+    metaData[xMetaa,yMetaa,zMetaa,getResOffsetsBeg()+i]=i*1000+metaBlock*15*1000
     metaData[(xMetaa),(yMetaa),(zMetaa),(getIsToBeAnalyzedNumb() +i)] =1
   end
 end
+
+
 
 
 isGold = 1
@@ -516,13 +525,13 @@ rowOne = UInt32(0)
 @setBitTo(rowOne,5,true)
 @setBitTo(rowOne,32,true)
 
-aa = mainArr[33,dataBdim[2]+1,2]
-Int64(aa)
-for i in 1:32
-  if(isBit1AtPos(aa,i))
-    print("i $(i)  ")
-  end  
-end
+# aa = mainArr[33,dataBdim[2]+1,2]
+# Int64(aa)
+# for i in 1:32
+#   if(isBit1AtPos(aa,i))
+#     print("i $(i)  ")
+#   end  
+# end
 # sum(paddingStore)
 # if(xm ==2 && ym==2 && zm==2 && threadIdxX()==1 && threadIdxY()==1)     CUDA.@cuprint "7  locArr $(locArr) sourceShmem  $(shmemblockData[threadIdxX(),threadIdxY(),1]) res $(shmemblockData[threadIdxX(),threadIdxY(),2]) \n"     end
 
@@ -589,32 +598,33 @@ function checkIsInResList(resList,x,y,z,dir)::Bool
   return false
 end  
 
-@test checkIsInResList(resList,x,y,z,dir)
-
-sum(resList)
-
-# refArr[33,11,33]= 2
-# refArr[33,20,34]= 2
-# refArr[64,11,37]= 2
-# refArr[64,11,38]= 2
-# refArr[64,11,64]= 2
-# for xx in ((3*32)+1):((4*32)), yy in ((3*10)+1):((4*10)), zz in ((3*32)+1):((4*32))
-#   refArr[xx,yy,zz]= 2
-# end
-# @setBitTo(rowOne,1,true)
-# @setBitTo(rowOne,5,true)
-# @setBitTo(rowOne,32,true)
-
-# mainArr[33,11,2]= rowOne
-# mainArr[33,20,2]= rowOne
-# mainArr[64,11,2]= rowOne
-# mainArr[64,11,2]= rowOne
-# mainArr[64,11,2]= rowOne
 
 
+shouldBeInResultSet = [
+  [33,dataBdim[2]*2,34,isGold,5,iterNumb]  #from bottom
+  ,[64,dataBdim[2]+1,63,isGold,6,iterNumb]  #from top
+  ,[64-1,dataBdim[2]+1,64,isGold,1,iterNumb]  #from right
+  ,[64+1,dataBdim[2]+1,64,isGold,2,iterNumb]  #from left
+  ,[64,dataBdim[2]+2,64,isGold,4,iterNumb]  #from posterior
+  ,[64,dataBdim[2],64,isGold,3,iterNumb]  #from anterior
+  ]
+
+  for entry in shouldBeInResultSet
+    @test checkIsInResList(resList,entry[1],entry[2],entry[3],entry[5])
+  end
 
 
+for xx in ((3*32)+1):((4*32)), yy in ((3*dataBdim[2])+1):((4*dataBdim[2])), zz in ((3*32)+1):((4*32))
+  if(iseven(zz))
+    #top is 6 and is checked before bottom
+    push!(shouldBeInResultSet,[xx,yy,zz,isGold,6,iterNumb] )
+  end  
+end
 
+
+for entry in shouldBeInResultSet
+  @test checkIsInResList(resList,entry[1],entry[2],entry[3],entry[5])
+end
 
 
 
@@ -622,18 +632,40 @@ sum(resList)
 #5 check weather result counters are set to correct numbers
 
 
-#6) are the results in correct spots - weahter they are related to the ques the should be ...
-#where offset will be 0 for block 2,2,2 and 20000 for 3,3,3
+# #6) are the results in correct spots - weahter they are related to the ques the should be ...
+# #where offset will be 0 for block 2,2,2 and 20000 for 3,3,3
 
   
-metaBlock = 0
-for xMetaa in 1:3,yMetaa in 1:3, zMetaa in 1:3 
-  metaBlock+=20
-  for i in 1:14
-    metaData[2,2,2,getResOffsetsBeg()+metaBlock]=i*1000
-  end
-end
+# metaBlock = 0
+# for xMetaa in 1:3,yMetaa in 1:3, zMetaa in 1:3 
+#   metaBlock+=20
+#   for i in 1:14
+#     metaData[2,2,2,getResOffsetsBeg()+metaBlock]=i*1000
+#   end
+# end
 
+
+# function getBegEnd(dir)::Bool
+#   for i in 1:14
+#     if(i == )
+#     beg = i*1000+twoTwoTwoOffset*15*1000
+#     endd = (i+1)*1000+twoTwoTwoOffset*15*1000
+#   end
+  
+# end
+
+# function checkIsInResListAndSpot(resList,x,y,z,dir)::Bool
+#   for i in 1:length(resList)
+#       if(resList[i,:]== [x,y,z,isGold,dir,iterNumb])
+#         return true
+#       end
+#   end  
+#   return false
+# end  
+
+# for entry in shouldBeInResultSet
+#   @test checkIsInResList(resList,entry[1],entry[2],entry[3],entry[5])
+# end
 
 
 
