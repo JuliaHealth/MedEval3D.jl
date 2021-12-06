@@ -627,7 +627,9 @@ for entry in shouldBeInResultSet
 end
 
 
+using CUDA
 
+mean(CUDA.ones(8))
 
 #5 check weather result counters are set to correct numbers
 
