@@ -1,9 +1,9 @@
 
-#module CUDAAtomicUtils
+module CUDAAtomicUtils
 using CUDA 
 using CUDA: @atomic
 
-#export atomicallyAddOne,atomicallyAddToSpot, atomicAdd, atomicMinSet, atomicMaxSet
+export atomicallyAddOne,atomicallyAddToSpot, atomicAdd, atomicMinSet, atomicMaxSet
 """
 atomically add to given 1 length array 1
 """
@@ -53,4 +53,4 @@ end#atomicMaxSet
 
 
 
-# end#module CUDAAtomicUtils
+ end#module CUDAAtomicUtils

@@ -53,7 +53,7 @@ creates empty metadata on the basis of the main array dimensions and data block 
 function allocateMetadata(arrDims,dataBDims)
     return CUDA.zeros(UInt32,cld(arrDims[1],dataBDims[1] ) 
             ,cld(arrDims[2],dataBDims[2] )
-            ,cld(arrDims[3],dataBDims[3])
+            ,arrDims[3]
             ,90 )
 end
 """

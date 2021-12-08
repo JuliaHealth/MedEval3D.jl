@@ -356,7 +356,6 @@ function getBigGPUForHousedorffAfterBoolKernel(metaData,minxRes,maxxRes,minyRes,
     
     return(newMeta
             ,goldArr  ,segmArr ,paddingStore
-
             ,resList,workQueue,workQueueCounter
     )
 end 

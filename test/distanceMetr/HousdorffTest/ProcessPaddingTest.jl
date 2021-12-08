@@ -386,6 +386,38 @@ refArr[64+1,dataBdim[2]+1,64]= 2#from left
 refArr[64,dataBdim[2]+2,64]= 2#from posterior
 refArr[64,dataBdim[2],64]= 2#from anterior
 
+
+#### single points to check dilatations
+mainArr[130,22,1]
+(dataBdim[1]*4)+2
+(dataBdim[2]*4)+2
+mainArr[(dataBdim[2]*4)+2 ,(dataBdim[2]*4)+2,1]
+#top 5,5,1
+roww = UInt32(0)
+@setBitTo(roww,1,true)
+mainArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+2,1]= roww
+#bottom 5,5,2
+roww = UInt32(0)
+@setBitTo(roww,32,true)
+mainArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+2,2]= roww
+#left 5,5,3
+roww = UInt32(0)
+@setBitTo(roww,5,true)
+mainArr[(dataBdim[1]*4)+1 ,(dataBdim[2]*4)+2,3]= roww
+#right 5,5,4
+roww = UInt32(0)
+@setBitTo(roww,5,true)
+mainArr[(dataBdim[1]*5) ,(dataBdim[2]*4)+2,4]= roww
+#anterior 5,5,5
+roww = UInt32(0)
+@setBitTo(roww,5,true)
+mainArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+1,5]= roww
+#posterior 5,5,6
+roww = UInt32(0)
+@setBitTo(roww,5,true)
+mainArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*5),6]= roww
+
+
 ### configurations
 
 mainArrDims= size(mainArr)
@@ -415,13 +447,22 @@ for xMetaa in 1:3,yMetaa in 1:3, zMetaa in 1:3
 end
 
 
+for xMetaa in 1:5,yMetaa in 1:5, zMetaa in 1:5 
+  for i in 1:14
+    metaData[(xMetaa),(yMetaa),(zMetaa),(getIsToBeAnalyzedNumb() +i)] =1
+  end
+end
+
+
+
+
 
 
 isGold = 1
 iterNumb = 1
 
 resList = allocateResultLists(1000,1000)
-inBlockLoopXZIterWithPadding = cld(32,10)
+inBlockLoopXZIterWithPadding = cld(32,dataBdim[2])
 numberToLooFor = 2
 resList = allocateResultLists(100000,100000)
 workQueaue[:,1] = [2,2,2,1] 
@@ -442,8 +483,16 @@ workQueaue[:,13] = [2,2,1,1]
 workQueaue[:,14] = [2,2,3,1] 
 
 
+workQueaue[:,15] = [5,5,1,1] 
+workQueaue[:,16] = [5,5,2,1] 
+workQueaue[:,17] = [5,5,3,1] 
+workQueaue[:,18] = [5,5,4,1] 
+workQueaue[:,19] = [5,5,5,1] 
+workQueaue[:,20] = [5,5,6,1] 
 
-workQueaueCounter[1] = 14
+
+
+workQueaueCounter[1] = 20
 dilatationArrs= (mainArr,mainArr)
 referenceArrs=(refArr,refArr)
 shmemSumLengthMaxDiv4 = 20
@@ -495,7 +544,7 @@ function testProcessDataBlock(numberToLooFor,refArr,inBlockLoopXZIterWithPadding
     return
 end
 
-@cuda threads=threads blocks=2 cooperative = true shmem = get_shmemMainKernel(dataBdim) testProcessDataBlock(numberToLooFor,refArr,inBlockLoopXZIterWithPadding,paddingStore,shmemSumLengthMaxDiv4,referenceArrs,dilatationArrs,resList, metaData,metaDataDims,mainArrDims,isGold,iterNumb,mainArr,dataBdim,workQueaue,workQueaueCounter)
+@cuda threads=threads blocks=1 cooperative = true shmem = get_shmemMainKernel(dataBdim) testProcessDataBlock(numberToLooFor,refArr,inBlockLoopXZIterWithPadding,paddingStore,shmemSumLengthMaxDiv4,referenceArrs,dilatationArrs,resList, metaData,metaDataDims,mainArrDims,isGold,iterNumb,mainArr,dataBdim,workQueaue,workQueaueCounter)
 
 #we need to test couple thing
 #1) does dilateted data correctly was written to correct spot in the mainArr 
@@ -512,6 +561,31 @@ nn = mainArr[33,dataBdim[2]+1,2]
 isBit1AtPos(nn,32)
 mainArr[32,dataBdim[2]+1,2]
 
+
+#top 5,5,1
+nn = paddingStore[5,5,1,2,2]
+@test isBit1AtPos(nn,7)
+#bottom 5,5,2
+nn = paddingStore[5,5,2  ,2,2]
+@test isBit1AtPos(nn,2)
+#left 5,5,3
+nn = paddingStore[5,5,3  ,5,2]
+@test isBit1AtPos(nn,3)
+#right 5,5,4
+nn = paddingStore[5,5,4  ,5,2]
+@test isBit1AtPos(nn,4)
+#anterior 5,5,5
+nn = paddingStore[5,5,5  ,2,5]
+@test isBit1AtPos(nn,5)
+#posterior 5,5,6
+nn = paddingStore[5,5,6  ,2,5]
+@test isBit1AtPos(nn,6)
+
+
+
+
+
+
 # sum(resList)
 
 @test mainArr[33,dataBdim[2]+1,2]== afterDil
@@ -526,12 +600,15 @@ rowOne = UInt32(0)
 @setBitTo(rowOne,32,true)
 
 # aa = mainArr[33,dataBdim[2]+1,2]
-# Int64(aa)
-# for i in 1:32
-#   if(isBit1AtPos(aa,i))
-#     print("i $(i)  ")
-#   end  
-# end
+aa= 126
+for i in 1:32
+  if(isBit1AtPos(aa,i))
+    print("i $(i)  ")
+  end  
+end
+
+isBit1AtPos(2147483665,dataBdim[3])
+
 # sum(paddingStore)
 # if(xm ==2 && ym==2 && zm==2 && threadIdxX()==1 && threadIdxY()==1)     CUDA.@cuprint "7  locArr $(locArr) sourceShmem  $(shmemblockData[threadIdxX(),threadIdxY(),1]) res $(shmemblockData[threadIdxX(),threadIdxY(),2]) \n"     end
 
@@ -558,6 +635,11 @@ end
 for xx in ((3*32)+1):((4*32)), yy in ((3*dataBdim[2])+1):((4*dataBdim[2]))
   @test mainArr[xx,yy,3]== fullOnes
 end
+
+
+uu = Array(paddingStore)[2,2,2,:,:]
+uu[1,1]
+Int64(sum(uu))
 
 
 #3) weather the information is block full has been properly set in the metadata the same is to be activated ...
