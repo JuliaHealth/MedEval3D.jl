@@ -388,17 +388,14 @@ refArr[64,dataBdim[2],64]= 2#from anterior
 
 
 #### single points to check dilatations
-mainArr[130,22,1]
-(dataBdim[1]*4)+2
-(dataBdim[2]*4)+2
-mainArr[(dataBdim[2]*4)+2 ,(dataBdim[2]*4)+2,1]
-#top 5,5,1
-roww = UInt32(0)
-@setBitTo(roww,1,true)
-mainArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+2,1]= roww
-#bottom 5,5,2
+
+#bottom 5,5,1
 roww = UInt32(0)
 @setBitTo(roww,32,true)
+mainArr[(dataBdim[1]*4)+4 ,(dataBdim[2]*4)+4,1]= roww
+#top 5,5,2
+roww = UInt32(0)
+@setBitTo(roww,1,true)
 mainArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+2,2]= roww
 #left 5,5,3
 roww = UInt32(0)
@@ -447,7 +444,7 @@ for xMetaa in 1:3,yMetaa in 1:3, zMetaa in 1:3
 end
 
 
-for xMetaa in 1:5,yMetaa in 1:5, zMetaa in 1:5 
+for xMetaa in 1:6,yMetaa in 1:6, zMetaa in 1:6 
   for i in 1:14
     metaData[(xMetaa),(yMetaa),(zMetaa),(getIsToBeAnalyzedNumb() +i)] =1
   end
@@ -562,12 +559,12 @@ isBit1AtPos(nn,32)
 mainArr[32,dataBdim[2]+1,2]
 
 
-#top 5,5,1
-nn = paddingStore[5,5,1,2,2]
-@test isBit1AtPos(nn,7)
-#bottom 5,5,2
-nn = paddingStore[5,5,2  ,2,2]
+#bottom 5,5,1
+nn = paddingStore[5,5,1,4,4]
 @test isBit1AtPos(nn,2)
+#top 5,5,2
+nn = paddingStore[5,5,2  ,2,2]
+@test isBit1AtPos(nn,7)
 #left 5,5,3
 nn = paddingStore[5,5,3  ,5,2]
 @test isBit1AtPos(nn,3)
@@ -580,6 +577,17 @@ nn = paddingStore[5,5,5  ,2,5]
 #posterior 5,5,6
 nn = paddingStore[5,5,6  ,2,5]
 @test isBit1AtPos(nn,6)
+
+###### now those single padding points is it couse dilatations
+#bottom - testing top of block below
+roww = UInt32(0)
+@setBitTo(roww,1,true)
+@test  mainArr[(dataBdim[1]*4)+4 ,(dataBdim[2]*4)+4,2]== roww
+#top - testing bottom of above
+roww = UInt32(0)
+@setBitTo(roww,32,true)
+@test  mainArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+2,1]== roww
+#
 
 
 

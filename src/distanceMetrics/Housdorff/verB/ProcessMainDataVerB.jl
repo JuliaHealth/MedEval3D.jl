@@ -70,17 +70,17 @@ macro loadMainValues(mainArr,xMeta,yMeta,zMeta)
     @inbounds shmemblockData[threadIdxX(),threadIdxY(),2]=@bitDilatate(shmemblockData[threadIdxX(),threadIdxY(),1])
 
 
-    idX = threadIdxX()
-    idY = (threadIdxY())
-    metX =    $xMeta
-    metY =   $yMeta
-    zm= $zMeta
-    x= (($xMeta-1)*dataBdim[1]+ threadIdxX())
-    y= (($yMeta-1)*dataBdim[2]+ threadIdxY())
-     if(metX==5 && metY==5  && zm==3 && idX==1 && idY==2)
-    # if(metX==2 && metY==2  && zm==2)# && idX==2 && idY==2)
-        CUDA.@cuprint "source to load  $(shmemblockData[threadIdxX(),threadIdxY(),1])  x $(x) y $(y) metX $(metX)  metY $(metY)  idX $(idX) idY$(idY) \n "
-    end   
+    # idX = threadIdxX()
+    # idY = (threadIdxY())
+    # metX =    $xMeta
+    # metY =   $yMeta
+    # zm= $zMeta
+    # x= (($xMeta-1)*dataBdim[1]+ threadIdxX())
+    # y= (($yMeta-1)*dataBdim[2]+ threadIdxY())
+    #  if(metX==5 && metY==5  && zm==3 && idX==1 && idY==2)
+    # # if(metX==2 && metY==2  && zm==2)# && idX==2 && idY==2)
+    #     CUDA.@cuprint "source to load  $(shmemblockData[threadIdxX(),threadIdxY(),1])  x $(x) y $(y) metX $(metX)  metY $(metY)  idX $(idX) idY$(idY) \n "
+    # end   
 
 
     # now if we have values in first or last bit we need to modify appropriate spots in the shmemPaddings
@@ -153,15 +153,15 @@ macro dilatateHelper(predicate, paddingPos, padingVariedA, padingVariedB,normalX
   
     if($predicate)
         for bitPos in 1:32
-            if(metX==5 && metY==5  && zm==3 && idX==1 && idY==2)
-                #if(isBit1AtPos(locArr,bitPos))
-                    padvarA = $padingVariedA
-                    padVarB = $padingVariedB
-                    padPos = $paddingPos
-                    CUDA.@cuprint "save to shmem bitPos $(bitPos) $(shmemblockData[threadIdxX(),threadIdxY(),1])  x $(x) y $(y) metX $(metX)  metY $(metY)  idX $(idX) idY$(idY)  padPos $(padPos)   is bit at pos $(isBit1AtPos(shmemblockData[threadIdxX(),threadIdxY(),1],bitPos))\n"
+            # if(metX==5 && metY==5  && zm==3 && idX==1 && idY==2)
+            #     #if(isBit1AtPos(locArr,bitPos))
+            #         padvarA = $padingVariedA
+            #         padVarB = $padingVariedB
+            #         padPos = $paddingPos
+            #         CUDA.@cuprint "save to shmem bitPos $(bitPos) $(shmemblockData[threadIdxX(),threadIdxY(),1])  x $(x) y $(y) metX $(metX)  metY $(metY)  idX $(idX) idY$(idY)  padPos $(padPos)   is bit at pos $(isBit1AtPos(shmemblockData[threadIdxX(),threadIdxY(),1],bitPos))\n"
                 
-                #end    
-            end
+            #     #end    
+            # end
                 shmemPaddings[$padingVariedA,$padingVariedB,$paddingPos]=isBit1AtPos(shmemblockData[threadIdxX(),threadIdxY(),1],bitPos)
                 #we need to mark weather there is anything in padding so we will mark block as to be activates 
                 if(shmemPaddings[$padingVariedA,$padingVariedB,$paddingPos]) 
@@ -270,7 +270,7 @@ macro executeIterPadding(mainArr,refArr,xMeta,yMeta,zMeta,isGold,iterNumb)
     @loadToshmemPaddings($xMeta,$yMeta,$zMeta, 0,1,0, 6, 5)
     @loadToshmemPaddings($xMeta,$yMeta,$zMeta, 0,-1,0, 5, 6)
     @loadToshmemPaddings($xMeta,$yMeta,$zMeta, 0,0,1, 2, 7)
-    @loadToshmemPaddings($xMeta,$yMeta,$zMeta, 0,0,-1, 1, 2)
+    @loadToshmemPaddings($xMeta,$yMeta,$zMeta, 0,0,-1, 7, 2)
     #so now we have data loaded from surrounding blocks about their paddings we may now modify accordingly current block
 
     sync_threads()
@@ -383,7 +383,7 @@ macro validatePaddingInfo(shmemVal,xpos,ypos,zpos,isGold, dir,shmemPaddingLayer,
         # xp = (($xMeta-1)*dataBdim[1]+ $xpos)
         # yp = (($yMeta-1)*dataBdim[2]+ $ypos)
         # zp = (($zMeta-1)*dataBdim[3]+ $zpos)
-        #     CUDA.@cuprint "set bit to x $(xp)   \n"
+        # CUDA.@cuprint "set bit to x $(xp)   \n"
        
        
         if($refArr[(($xMeta-1)*dataBdim[1]+ $xpos),(($yMeta-1)*dataBdim[2]+ $ypos),(($zMeta-1)*dataBdim[3]+ $zpos)] == numberToLooFor)
@@ -425,16 +425,17 @@ macro loadToshmemPaddings(xMeta,yMeta,zMeta, xMetaChange,yMetaChange,zMetaChange
         @unroll for iterY in 0:inBlockLoopXZIterWithPadding
             if((threadIdxY()+iterY*dataBdim[2])<=dataBdim[1]  )
                 #so we are intrested only in given bit from neighbouring block
-                booll = isBit1AtPos(paddingStore[($xMeta+$xMetaChange),($yMeta+$yMetaChange),($zMeta+$zMetaChange)],($bitOfIntrest))
+                booll = isBit1AtPos(paddingStore[($xMeta+$xMetaChange),($yMeta+$yMetaChange),($zMeta+$zMetaChange),threadIdxX(),(threadIdxY()+iterY*dataBdim[2])],($bitOfIntrest))
                 
 
-                # if(booll)
-                #     xm = (($xMeta)+$xMetaChange)
-                #     ym = ($yMeta)+$yMetaChange
-                #     zm = ($zMeta)+$zMetaChange
-                #     bitt = $bitOfIntrest
-                #     CUDA.@cuprint "in load xm $(xm) ym $(ym) zm $(zm) layer $(bitt) \n"
-                # end    
+                
+                    xm = (($xMeta)+$xMetaChange)
+                    ym = ($yMeta)+$yMetaChange
+                    zm = ($zMeta)+$zMetaChange
+                if(xm==5 && ym==5 && zm==1 && threadIdxX()==2)    
+                    bitt = $bitOfIntrest
+                    CUDA.@cuprint "in load xm $(xm) ym $(ym) zm $(zm) idx $(threadIdxX())  idY $(threadIdxY()+iterY*dataBdim[2])  layer $(bitt) bool $(booll) numb $(Int64(paddingStore[($xMeta+$xMetaChange),($yMeta+$yMetaChange),($zMeta+$zMetaChange),threadIdxX(),(threadIdxY()+iterY*dataBdim[2])])) \n"
+                end    
 
                 
                 shmemPaddings[threadIdxX(),(threadIdxY()+iterY*dataBdim[2]),$shmemPaddingTargetNumb ]=booll
