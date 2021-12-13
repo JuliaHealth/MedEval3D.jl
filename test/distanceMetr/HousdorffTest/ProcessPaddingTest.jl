@@ -387,6 +387,16 @@ refArr[64,dataBdim[2]+2,64]= 2#from posterior
 refArr[64,dataBdim[2],64]= 2#from anterior
 
 
+##single voxels dilatation set ref array 
+refArr[(dataBdim[1]*4)+4 ,(dataBdim[2]*4)+4,2*dataBdim[3]+1]=2
+refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+2,1*dataBdim[3]+32]=2
+refArr[(dataBdim[1]*4) ,(dataBdim[2]*4)+2,3*dataBdim[3]+5]=2
+refArr[(dataBdim[1]*5)+1 ,(dataBdim[2]*4)+2,4*dataBdim[3]+5]=2
+refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4),5*dataBdim[3]+5]=2 
+refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4),5*dataBdim[3]+5]=2 
+refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*5)+1,5*dataBdim[3]+5]=2 
+
+
 #### single points to check dilatations
 
 #bottom 5,5,1
@@ -405,11 +415,11 @@ mainArr[(dataBdim[1]*4)+1 ,(dataBdim[2]*4)+2,3]= roww
 roww = UInt32(0)
 @setBitTo(roww,5,true)
 mainArr[(dataBdim[1]*5) ,(dataBdim[2]*4)+2,4]= roww
-#anterior 5,5,5
+#posterior 5,5,5
 roww = UInt32(0)
 @setBitTo(roww,5,true)
 mainArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+1,5]= roww
-#posterior 5,5,6
+#anterior 5,5,6
 roww = UInt32(0)
 @setBitTo(roww,5,true)
 mainArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*5),6]= roww
@@ -487,7 +497,10 @@ workQueaue[:,18] = [5,5,4,1]
 workQueaue[:,19] = [5,5,5,1] 
 workQueaue[:,20] = [5,5,6,1] 
 
-
+workQueaue[:,21] = [4,5,3,1]
+workQueaue[:,22] = [6,5,4,1]
+workQueaue[:,23] = [5,4,5,1]
+workQueaue[:,24] = [5,6,6,1]
 
 workQueaueCounter[1] = 20
 dilatationArrs= (mainArr,mainArr)
@@ -587,11 +600,42 @@ roww = UInt32(0)
 roww = UInt32(0)
 @setBitTo(roww,32,true)
 @test  mainArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+2,1]== roww
-#
+#left 5,5,3 - testing right of one to the Left
+roww = UInt32(0)
+@setBitTo(roww,5,true)
+@test  mainArr[(dataBdim[1]*4) ,(dataBdim[2]*4)+2,3]== roww
+##right 5,5,4- testing left of block to the right
+roww = UInt32(0)
+@setBitTo(roww,5,true)
+@test  mainArr[(dataBdim[1]*5)+1 ,(dataBdim[2]*4)+2,4]== roww
 
+#posterior 5,5,5 - testring anterior of the  block to the back
+roww = UInt32(0)
+@setBitTo(roww,5,true)
+@test mainArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4),5]== roww
+#anterior 5,6,6 - testring posterior of the  block to the front
+roww = UInt32(0)
+@setBitTo(roww,6,true)
+@test mainArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*5)+1,5]== roww
 
+########## checking results of those single voxels...
 
+function checkIsInResList(resList,x,y,z,dir)::Bool
+  for i in 1:length(resList)
+      if(resList[i,:]== [x,y,z,isGold,dir,iterNumb])
+        return true
+      end
+  end  
+  return false
+end  
 
+@test checkIsInResList(resList,(dataBdim[1]*4)+4 ,(dataBdim[2]*4)+4,2*dataBdim[3]+1, 6 )
+@test checkIsInResList(resList,(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+2,1*dataBdim[3]+32, 5 )
+@test checkIsInResList(resList,(dataBdim[1]*4) ,(dataBdim[2]*4)+2,3*dataBdim[3]+5, 2 )
+
+@test checkIsInResList(resList,(dataBdim[1]*5)+1 ,(dataBdim[2]*4)+2,4*dataBdim[3]+5, 1 )
+@test checkIsInResList(resList,(dataBdim[1]*4)+2 ,(dataBdim[2]*4),5*dataBdim[3]+5, 4)
+@test checkIsInResList(resList,(dataBdim[1]*4)+2 ,(dataBdim[2]*5)+1,5*dataBdim[3]+5, 3 )
 
 
 # sum(resList)
