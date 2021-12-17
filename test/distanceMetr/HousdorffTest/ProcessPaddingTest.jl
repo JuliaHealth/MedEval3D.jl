@@ -358,9 +358,9 @@ mainArr[64,dataBdim[2]+1,2]= rowOne
 ################   here we will get a block that will become full after the dilatation meta 3,3,3
 fullOnesTobecome = UInt32(0)
 for bitPos in 1:32
-  if(isodd(bitPos))
+ if(isodd(bitPos))
     @setBitTo(fullOnesTobecome,bitPos,true)
-  end
+ end
 end
 for xx in ((2*32)+1):((3*32)), yy in ((2*dataBdim[2])+1):((3*dataBdim[2]))
   mainArr[xx,yy,3]= fullOnesTobecome
@@ -368,33 +368,31 @@ end
 
 mainArr[100,16,3]
 
-for xx in ((3*32)+1):((4*32)), yy in ((3*dataBdim[2])+1):((4*dataBdim[2])), zz in ((3*32)+1):((4*32))
-  refArr[xx,yy,zz]= 2
-end
+# for xx in ((3*32)+1):((4*32)), yy in ((3*dataBdim[2])+1):((4*dataBdim[2])), zz in ((3*32)+1):((4*32))
+#   refArr[xx,yy,zz]= 2
+# end
 
-refArr[33,dataBdim[2]+1,33]= 2
-refArr[33,dataBdim[2]*2,34]= 2
-refArr[64,dataBdim[2]+1,37]= 2
-refArr[64,dataBdim[2]+1,38]= 2
+refArr[(dataBdim[1])+1 ,(dataBdim[2])+1,dataBdim[3]+2]=2 #from top
+refArr[(dataBdim[1])+1 ,(dataBdim[2])+1,dataBdim[3]+4]=2 #from bottom
+
+refArr[(dataBdim[1]*2)-1 ,(dataBdim[2])+1, dataBdim[3]+5]=2 #from right
+refArr[(dataBdim[1])+2 ,(dataBdim[2])+1,dataBdim[3]+5]=2 #from left
+
+refArr[(dataBdim[1])*2 ,(dataBdim[2]*2)-1,dataBdim[3]+5]=2 #from anterior
+refArr[(dataBdim[1])+1 ,(dataBdim[2])+2,dataBdim[3]+5]=2 #from posterior
 
 
-refArr[33,dataBdim[2]*2,34]= 2 #from bottom 
-refArr[64,dataBdim[2]+1,63]= 2 #from top
-refArr[64-1,dataBdim[2]+1,64]= 2#from right
-refArr[64+1,dataBdim[2]+1,64]= 2#from left
 
-refArr[64,dataBdim[2]+2,64]= 2#from posterior
-refArr[64,dataBdim[2],64]= 2#from anterior
+
 
 
 ##single voxels dilatation set ref array 
-refArr[(dataBdim[1]*4)+4 ,(dataBdim[2]*4)+4,(2-1)*dataBdim[3]+1]=2
-refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+2,(1-1)*dataBdim[3]+32]=2
-refArr[(dataBdim[1]*4) ,(dataBdim[2]*4)+2,(3-1)*dataBdim[3]+5]=2
-refArr[(dataBdim[1]*5)+1 ,(dataBdim[2]*4)+2,(4-1)*dataBdim[3]+5]=2
-refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4),(5-1)*dataBdim[3]+5]=2 
-refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4),(5-1)*dataBdim[3]+5]=2 
-refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*5)+1,(5-1)*dataBdim[3]+5]=2 
+refArr[(dataBdim[1]*4)+4 ,(dataBdim[2]*4)+4,(2-1)*dataBdim[3]+1]=2 #from top
+refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+2,(1-1)*dataBdim[3]+32]=2 #from bottom
+refArr[(dataBdim[1]*4) ,(dataBdim[2]*4)+2,(3-1)*dataBdim[3]+5]=2 #from right
+refArr[(dataBdim[1]*5)+1 ,(dataBdim[2]*4)+2,(4-1)*dataBdim[3]+5]=2 #from left
+refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4),(5-1)*dataBdim[3]+5]=2 #from anterior
+refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*5)+1,(6-1)*dataBdim[3]+5]=2 #from posterior
 
 (dataBdim[1]*4)+4
 (dataBdim[2]*4)+4
@@ -454,7 +452,7 @@ for xMetaa in 1:6,yMetaa in 1:6, zMetaa in 1:6
   end
 
   for i in 1:14
-    metaData[xMetaa,yMetaa,zMetaa,getResOffsetsBeg()+i]=i*100+metaBlock*15*100
+    metaData[xMetaa,yMetaa,zMetaa,getResOffsetsBeg()+i]=i*10+metaBlock*15*10
     metaData[(xMetaa),(yMetaa),(zMetaa),(getIsToBeAnalyzedNumb() +i)] =1
   end
 end
@@ -476,7 +474,7 @@ iterNumb = 1
 
 inBlockLoopXZIterWithPadding = cld(32,dataBdim[2])
 numberToLooFor = 2
-resList = allocateResultLists(10000,10000)
+resList = allocateResultLists(1000000,1000000)
 workQueaue[:,1] = [2,2,2,1] 
 workQueaue[:,2] = [3,3,3,1] 
 
@@ -630,36 +628,47 @@ roww = UInt32(0)
 ########## checking results of those single voxels...
 
 function checkIsInResList(resList,x,y,z,dir)::Bool
-  for i in 1:length(resList)
-      if(resList[i,:]== [x,y,z,isGold,dir,iterNumb])
+  println("looking for x $(x) y $(y) z $(z) dir $(dir)   [$(x),$(y),$(z),1,$(dir),0] ")
+  for i in 1:size(resList)[1]
+      if(resList[i,1]== x  && resList[i,2]== y && resList[i,3]== z && resList[i,5]== dir  )
         return true
       end
   end  
   return false
 end  
-cpuResList = Array(resList)
+cpuResList = Int64.(Array(resList))
 
+cpuResList[261011,:]
 
 filtered= []
-for i in 1:length(cpuResList[:,1])
+for i in 1:size(resList)[1]
   if(cpuResList[i,1]>0)  
     push!(filtered,Int64.(cpuResList[i,:]) )
   end  
 end
 filtered
 
-Int64.(Array(resList)[1,:])
-@test checkIsInResList(cpuResList,(dataBdim[1]*4)+4 ,(dataBdim[2]*4)+4,2*dataBdim[3]+1, 6 )
-@test checkIsInResList(cpuResList,(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+2,1*dataBdim[3]+32, 5 )
-@test checkIsInResList(cpuResList,(dataBdim[1]*4) ,(dataBdim[2]*4)+2,3*dataBdim[3]+5, 2 )
+[130, 22, 32, 1, 5, 0]==[130,22,32,1,5,0]
 
-@test checkIsInResList(cpuResList,(dataBdim[1]*5)+1 ,(dataBdim[2]*4)+2,4*dataBdim[3]+5, 1 )
-@test checkIsInResList(cpuResList,(dataBdim[1]*4)+2 ,(dataBdim[2]*4),5*dataBdim[3]+5, 4)
-@test checkIsInResList(cpuResList,(dataBdim[1]*4)+2 ,(dataBdim[2]*5)+1,5*dataBdim[3]+5, 3 )
+#looking for [161,22,101,1,2,0] got 
+
+Int64.(Array(resList)[1,:])
+@test checkIsInResList(cpuResList,(dataBdim[1]*4)+4 ,(dataBdim[2]*4)+4,(2-1)*dataBdim[3]+1, 6 )
+@test checkIsInResList(cpuResList,(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+2,(1-1)*dataBdim[3]+32, 5 )
+@test checkIsInResList(cpuResList,(dataBdim[1]*4) ,(dataBdim[2]*4)+2,(3-1)*dataBdim[3]+5, 1 )
+
+# @test checkIsInResList(cpuResList,(dataBdim[1]*5)+1 ,(dataBdim[2]*4)+2,(4-1)*dataBdim[3]+5, 2 )
+@test checkIsInResList(cpuResList,(dataBdim[1]*4)+2 ,(dataBdim[2]*4),(5-1)*dataBdim[3]+5, 3)
+@test checkIsInResList(cpuResList,(dataBdim[1]*4)+2 ,(dataBdim[2]*5)+1,(6-1)*dataBdim[3]+5, 4 )
 
 
 # sum(resList)
 
+afterDil = UInt32(0)
+for bitPos in [1,2,4,5,6,31,32]
+    @setBitTo(afterDil,bitPos,true)
+end
+afterDil
 @test mainArr[33,dataBdim[2]+1,2]== afterDil
 @test mainArr[33,dataBdim[2]*2,2]== afterDil
 @test mainArr[64,dataBdim[2]+1,2]== afterDil
@@ -671,18 +680,6 @@ rowOne = UInt32(0)
 @setBitTo(rowOne,5,true)
 @setBitTo(rowOne,32,true)
 
-# aa = mainArr[33,dataBdim[2]+1,2]
-aa= 16
-for i in 1:32
-  if(isBit1AtPos(aa,i))
-    print("i $(i)  ")
-  end  
-end
-
-isBit1AtPos(2147483665,dataBdim[3])
-
-# sum(paddingStore)
-# if(xm ==2 && ym==2 && zm==2 && threadIdxX()==1 && threadIdxY()==1)     CUDA.@cuprint "7  locArr $(locArr) sourceShmem  $(shmemblockData[threadIdxX(),threadIdxY(),1]) res $(shmemblockData[threadIdxX(),threadIdxY(),2]) \n"     end
 
 
   @test mainArr[33+1,dataBdim[2]+1,2]== rowOne
@@ -718,72 +715,56 @@ Int64(sum(uu))
  @test metaData[2,2,2,getFullInGoldNumb()]==0
  @test metaData[3,3,3,getFullInGoldNumb()]==1
 
- @test metaData[2,2,2,getActiveGoldNumb()]==1
-
- @test metaData[2,2,2,getIsToBeActivatedInGoldNumb()]==1
-
-for i in [-1,1] 
-  @test metaData[2+i,2,2,getIsToBeActivatedInGoldNumb()]==1
-  @test metaData[2+i,2,2,getIsToBeActivatedInGoldNumb()]==1
-  @test metaData[2+i,2,2,getIsToBeActivatedInGoldNumb()]==1
-end
-
-for i in [-1,1] 
-  @test metaData[2,2+i,2,getIsToBeActivatedInGoldNumb()]==1
-  @test metaData[2,2+i,2,getIsToBeActivatedInGoldNumb()]==1
-  @test metaData[2,2+i,2,getIsToBeActivatedInGoldNumb()]==1
-end
+ @test metaData[3,3,2,getIsToBeActivatedInGoldNumb()]==1
+ @test metaData[3,3,4,getIsToBeActivatedInGoldNumb()]==1
+ @test metaData[3,2,3,getIsToBeActivatedInGoldNumb()]==1
+ @test metaData[3,4,3,getIsToBeActivatedInGoldNumb()]==1
+ @test metaData[2,3,3,getIsToBeActivatedInGoldNumb()]==1
+ @test metaData[4,3,3,getIsToBeActivatedInGoldNumb()]==1
 
 
-for i in [-1,1] 
-  @test metaData[2,2,2+i,getIsToBeActivatedInGoldNumb()]==1
-  @test metaData[2,2,2+i,getIsToBeActivatedInGoldNumb()]==1
-  @test metaData[2,2,2+i,getIsToBeActivatedInGoldNumb()]==1
-end
-
-
+ 
 #4)wheather in results  we have entries that should be present there so correct x,y,z and dir 
-function checkIsInResList(resList,x,y,z,dir)::Bool
-  for i in 1:length(resList)
-      if(resList[i,:]== [x,y,z,isGold,dir,iterNumb])
-        return true
-      end
-  end  
-  return false
-end  
+
+@test checkIsInResList(cpuResList,(dataBdim[1])+1 ,(dataBdim[2])+1,dataBdim[3]+2,6)
+@test checkIsInResList(cpuResList,(dataBdim[1])+1 ,(dataBdim[2])+1,dataBdim[3]+4,5)
+@test checkIsInResList(cpuResList,(dataBdim[1]*2)-1 ,(dataBdim[2])+1, dataBdim[3]+5,1)
+@test checkIsInResList(cpuResList,(dataBdim[1])+2 ,(dataBdim[2])+1,dataBdim[3]+5,2)
+@test checkIsInResList(cpuResList,(dataBdim[1])*2 ,(dataBdim[2]*2)-1,dataBdim[3]+5,3)
+@test checkIsInResList(cpuResList,(dataBdim[1])+1 ,(dataBdim[2])+2,dataBdim[3]+5,4)
 
 
-
-shouldBeInResultSet = [
-  [33,dataBdim[2]*2,34,isGold,5,iterNumb]  #from bottom
-  ,[64,dataBdim[2]+1,63,isGold,6,iterNumb]  #from top
-  ,[64-1,dataBdim[2]+1,64,isGold,1,iterNumb]  #from right
-  ,[64+1,dataBdim[2]+1,64,isGold,2,iterNumb]  #from left
-  ,[64,dataBdim[2]+2,64,isGold,4,iterNumb]  #from posterior
-  ,[64,dataBdim[2],64,isGold,3,iterNumb]  #from anterior
-  ]
-
-  for entry in shouldBeInResultSet
-    @test checkIsInResList(resList,entry[1],entry[2],entry[3],entry[5])
-  end
+# for xx in ((3*32)+1):((4*32)), yy in ((3*dataBdim[2])+1):((4*dataBdim[2])), zz in ((3*32)+1):((4*32))
+#   if(iseven(zz))
+#     #top is 6 and is checked before bottom
+#     push!(shouldBeInResultSet,[xx,yy,zz,isGold,6,iterNumb] )
+#   end  
+# end
 
 
-for xx in ((3*32)+1):((4*32)), yy in ((3*dataBdim[2])+1):((4*dataBdim[2])), zz in ((3*32)+1):((4*32))
-  if(iseven(zz))
-    #top is 6 and is checked before bottom
-    push!(shouldBeInResultSet,[xx,yy,zz,isGold,6,iterNumb] )
-  end  
-end
+# for entry in shouldBeInResultSet
+#   @test checkIsInResList(resList,entry[1],entry[2],entry[3],entry[5])
+# end
 
 
-for entry in shouldBeInResultSet
-  @test checkIsInResList(resList,entry[1],entry[2],entry[3],entry[5])
-end
+# using CUDA
+
+# mean(CUDA.ones(8))
 
 
-using CUDA
+# # aa = mainArr[33,dataBdim[2]+1,2]
+# aa= 16
+# for i in 1:32
+#   if(isBit1AtPos(aa,i))
+#     print("i $(i)  ")
+#   end  
+# end
 
-mean(CUDA.ones(8))
+# isBit1AtPos(2147483665,dataBdim[3])
+
+# sum(paddingStore)
+# if(xm ==2 && ym==2 && zm==2 && threadIdxX()==1 && threadIdxY()==1)     CUDA.@cuprint "7  locArr $(locArr) sourceShmem  $(shmemblockData[threadIdxX(),threadIdxY(),1]) res $(shmemblockData[threadIdxX(),threadIdxY(),2]) \n"     end
+
 
 #5 check weather result counters are set to correct numbers
 

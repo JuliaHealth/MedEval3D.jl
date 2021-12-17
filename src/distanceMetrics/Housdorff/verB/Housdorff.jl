@@ -104,7 +104,7 @@ function get_shmemMainKernel(dataBdim)
     shmemPaddings= sizeof(Bool)*(  max(dataBdim[1], dataBdim[2]))*(  max(dataBdim[1], dataBdim[2]))*6
     shmemSum= sizeof(UInt32)*36*14
     areToBeValidated= sizeof(Bool)*14
-    isAnythingInPadding= cld(6,8)
+    isAnythingInPadding= sizeof(Bool)*7
     alreadyCoveredInQueues= sizeof(UInt32)*14
     someBools = sizeof(Bool)*4
     someInt16 = sizeof(UInt16)*3

@@ -23,7 +23,7 @@ macro clearBeforeNextDilatation( clearIterResShmemLoop,clearIterSourceShmemLoop,
     # @iterateLinearly clearIterSourceShmemLoop 34*20*34  sourceShmem[i]=false
 
     @ifY 1 if(threadIdxX()<15) areToBeValidated[threadIdxX()]=false end 
-    @ifY 2 if(threadIdxX()<7) isAnythingInPadding[threadIdxX()]=false end 
+    @ifY 2 if(threadIdxX()<8) isAnythingInPadding[threadIdxX()]=false end 
    
 
 end)#quote
@@ -55,13 +55,13 @@ shmemSum =  @cuStaticSharedMem(UInt32,(36,14)) # we need this additional spots
 #used to load from metadata information are ques to be validated 
 areToBeValidated =  @cuStaticSharedMem(Bool, (14)) 
 # used to mark wheather there is any true in paddings
-isAnythingInPadding =  @cuStaticSharedMem(Bool, (6))
+isAnythingInPadding =  @cuStaticSharedMem(Bool, (7))
 # used to accumulate counts from of fp's and fn's already covered in dilatation steps
 alreadyCoveredInQueues =@cuStaticSharedMem(UInt32,(14))
  
  #coordinates of data in main array
  #we will use this to establish weather we should mark  the data block as empty or full ...
- isMaskFull= false
+ isMaskFull= true
  #here we will store in registers data uploaded from mask for later verification wheather we should send it or not
  locArr= Int32(0)
  offsetIter = UInt8(0)
