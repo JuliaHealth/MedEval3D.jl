@@ -42,18 +42,18 @@ mainArrDims - dimensions of main array
 
 # linearIndex = 
   resListPos = ($metaData[($xMeta+1),($yMeta+1),($zMeta+1), (getResOffsetsBeg() +$queueNumber) ]+atomicallyAddToSpot( metaData,(($xMeta+1) + ($yMeta)*$metaDataDims[1] + ($zMeta)*$metaDataDims[1]*$metaDataDims[2] + (getNewCountersBeg()+$queueNumber-1)*$metaDataDims[1]*$metaDataDims[2]*$metaDataDims[3]),UInt32(1) ))+1
-# qn = $queueNumber
-# xm = $xMeta
-# ym = $yMeta
-# zm = $zMeta
-# xx = $x
-# yy= $y
-# zz=$z
-# dd= $dir
-# if(qn==1)
-#  CUDA.@cuprint "\n resListPos $(resListPos) queueNumber $(qn)  xMeta $(xm) yMeta $(ym)  zMeta $(zm) x $(xx) y $(yy) z $(zz) linearIndex $(linearIndex) dd $(dd)   \n "
-# end
-@inbounds $resList[ resListPos, 1]=$x 
+qn = $queueNumber
+xm = $xMeta
+ym = $yMeta
+zm = $zMeta
+xx = $x
+yy= $y
+zz=$z
+dd= $dir
+
+ CUDA.@cuprint "\n resListPos $(resListPos) queueNumber $(qn)  xMeta $(xm) yMeta $(ym)  zMeta $(zm) x $(xx) y $(yy) z $(zz)   \n "
+
+ @inbounds $resList[ resListPos, 1]=$x 
 @inbounds $resList[ resListPos, 2]=$y 
 @inbounds $resList[ resListPos, 3]=$z 
 @inbounds $resList[ resListPos, 4]= $isGold

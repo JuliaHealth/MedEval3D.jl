@@ -388,15 +388,21 @@ refArr[64,dataBdim[2],64]= 2#from anterior
 
 
 ##single voxels dilatation set ref array 
-refArr[(dataBdim[1]*4)+4 ,(dataBdim[2]*4)+4,2*dataBdim[3]+1]=2
-refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+2,1*dataBdim[3]+32]=2
-refArr[(dataBdim[1]*4) ,(dataBdim[2]*4)+2,3*dataBdim[3]+5]=2
-refArr[(dataBdim[1]*5)+1 ,(dataBdim[2]*4)+2,4*dataBdim[3]+5]=2
-refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4),5*dataBdim[3]+5]=2 
-refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4),5*dataBdim[3]+5]=2 
-refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*5)+1,5*dataBdim[3]+5]=2 
+refArr[(dataBdim[1]*4)+4 ,(dataBdim[2]*4)+4,(2-1)*dataBdim[3]+1]=2
+refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+2,(1-1)*dataBdim[3]+32]=2
+refArr[(dataBdim[1]*4) ,(dataBdim[2]*4)+2,(3-1)*dataBdim[3]+5]=2
+refArr[(dataBdim[1]*5)+1 ,(dataBdim[2]*4)+2,(4-1)*dataBdim[3]+5]=2
+refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4),(5-1)*dataBdim[3]+5]=2 
+refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4),(5-1)*dataBdim[3]+5]=2 
+refArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*5)+1,(5-1)*dataBdim[3]+5]=2 
 
+(dataBdim[1]*4)+4
+(dataBdim[2]*4)+4
+(2-1)*dataBdim[3]+1
 
+(dataBdim[1]*4)+2
+(dataBdim[2]*4)+2
+1*dataBdim[3]+32
 #### single points to check dilatations
 
 #bottom 5,5,1
@@ -440,7 +446,7 @@ twoTwoTwoOffset=0
 
 
 metaBlock = 0
-for xMetaa in 1:3,yMetaa in 1:3, zMetaa in 1:3 
+for xMetaa in 1:6,yMetaa in 1:6, zMetaa in 1:6 
   metaBlock+=20
   if(xMetaa==2 && yMetaa==2 && zMetaa==2 )
       twoTwoTwoOffset=metaBlock
@@ -448,7 +454,7 @@ for xMetaa in 1:3,yMetaa in 1:3, zMetaa in 1:3
   end
 
   for i in 1:14
-    metaData[xMetaa,yMetaa,zMetaa,getResOffsetsBeg()+i]=i*1000+metaBlock*15*1000
+    metaData[xMetaa,yMetaa,zMetaa,getResOffsetsBeg()+i]=i*100+metaBlock*15*100
     metaData[(xMetaa),(yMetaa),(zMetaa),(getIsToBeAnalyzedNumb() +i)] =1
   end
 end
@@ -468,10 +474,9 @@ end
 isGold = 1
 iterNumb = 1
 
-resList = allocateResultLists(1000,1000)
 inBlockLoopXZIterWithPadding = cld(32,dataBdim[2])
 numberToLooFor = 2
-resList = allocateResultLists(100000,100000)
+resList = allocateResultLists(10000,10000)
 workQueaue[:,1] = [2,2,2,1] 
 workQueaue[:,2] = [3,3,3,1] 
 
@@ -502,7 +507,7 @@ workQueaue[:,22] = [6,5,4,1]
 workQueaue[:,23] = [5,4,5,1]
 workQueaue[:,24] = [5,6,6,1]
 
-workQueaueCounter[1] = 20
+workQueaueCounter[1] = 24
 dilatationArrs= (mainArr,mainArr)
 referenceArrs=(refArr,refArr)
 shmemSumLengthMaxDiv4 = 20
@@ -584,17 +589,19 @@ nn = paddingStore[5,5,3  ,5,2]
 #right 5,5,4
 nn = paddingStore[5,5,4  ,5,2]
 @test isBit1AtPos(nn,4)
-#anterior 5,5,5
+#posterior 5,5,5
 nn = paddingStore[5,5,5  ,2,5]
-@test isBit1AtPos(nn,5)
-#posterior 5,5,6
-nn = paddingStore[5,5,6  ,2,5]
 @test isBit1AtPos(nn,6)
+#anterior 5,5,6
+nn = paddingStore[5,5,6  ,2,5]
+@test isBit1AtPos(nn,5)
 
 ###### now those single padding points is it couse dilatations
 #bottom - testing top of block below
 roww = UInt32(0)
 @setBitTo(roww,1,true)
+# filter(it->it>0, Int64.(mainArr[(dataBdim[1]*4)+4 ,(dataBdim[2]*4)+4,:]))
+
 @test  mainArr[(dataBdim[1]*4)+4 ,(dataBdim[2]*4)+4,2]== roww
 #top - testing bottom of above
 roww = UInt32(0)
@@ -609,14 +616,16 @@ roww = UInt32(0)
 @setBitTo(roww,5,true)
 @test  mainArr[(dataBdim[1]*5)+1 ,(dataBdim[2]*4)+2,4]== roww
 
+
+
 #posterior 5,5,5 - testring anterior of the  block to the back
 roww = UInt32(0)
 @setBitTo(roww,5,true)
 @test mainArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*4),5]== roww
 #anterior 5,6,6 - testring posterior of the  block to the front
 roww = UInt32(0)
-@setBitTo(roww,6,true)
-@test mainArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*5)+1,5]== roww
+@setBitTo(roww,5,true)
+@test mainArr[(dataBdim[1]*4)+2 ,(dataBdim[2]*5)+1,6]== roww
 
 ########## checking results of those single voxels...
 
@@ -628,14 +637,25 @@ function checkIsInResList(resList,x,y,z,dir)::Bool
   end  
   return false
 end  
+cpuResList = Array(resList)
 
-@test checkIsInResList(resList,(dataBdim[1]*4)+4 ,(dataBdim[2]*4)+4,2*dataBdim[3]+1, 6 )
-@test checkIsInResList(resList,(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+2,1*dataBdim[3]+32, 5 )
-@test checkIsInResList(resList,(dataBdim[1]*4) ,(dataBdim[2]*4)+2,3*dataBdim[3]+5, 2 )
 
-@test checkIsInResList(resList,(dataBdim[1]*5)+1 ,(dataBdim[2]*4)+2,4*dataBdim[3]+5, 1 )
-@test checkIsInResList(resList,(dataBdim[1]*4)+2 ,(dataBdim[2]*4),5*dataBdim[3]+5, 4)
-@test checkIsInResList(resList,(dataBdim[1]*4)+2 ,(dataBdim[2]*5)+1,5*dataBdim[3]+5, 3 )
+filtered= []
+for i in 1:length(cpuResList[:,1])
+  if(cpuResList[i,1]>0)  
+    push!(filtered,Int64.(cpuResList[i,:]) )
+  end  
+end
+filtered
+
+Int64.(Array(resList)[1,:])
+@test checkIsInResList(cpuResList,(dataBdim[1]*4)+4 ,(dataBdim[2]*4)+4,2*dataBdim[3]+1, 6 )
+@test checkIsInResList(cpuResList,(dataBdim[1]*4)+2 ,(dataBdim[2]*4)+2,1*dataBdim[3]+32, 5 )
+@test checkIsInResList(cpuResList,(dataBdim[1]*4) ,(dataBdim[2]*4)+2,3*dataBdim[3]+5, 2 )
+
+@test checkIsInResList(cpuResList,(dataBdim[1]*5)+1 ,(dataBdim[2]*4)+2,4*dataBdim[3]+5, 1 )
+@test checkIsInResList(cpuResList,(dataBdim[1]*4)+2 ,(dataBdim[2]*4),5*dataBdim[3]+5, 4)
+@test checkIsInResList(cpuResList,(dataBdim[1]*4)+2 ,(dataBdim[2]*5)+1,5*dataBdim[3]+5, 3 )
 
 
 # sum(resList)
@@ -652,7 +672,7 @@ rowOne = UInt32(0)
 @setBitTo(rowOne,32,true)
 
 # aa = mainArr[33,dataBdim[2]+1,2]
-aa= 126
+aa= 16
 for i in 1:32
   if(isBit1AtPos(aa,i))
     print("i $(i)  ")
