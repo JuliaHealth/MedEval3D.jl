@@ -32,7 +32,7 @@ function calculateLoopsIter(dataBdim,threadsXdim,threadsYdim,metaDataDims,blocks
     loopdataDimMainX = fld(dataBdim[1], threadsXdim)
     loopdataDimMainY = fld(dataBdim[2], threadsYdim)
     loopdataDimMainZ =dataBdim[2]
-    inBlockLoopX,inBlockLoopY,inBlockLoopZ= (fld(dataBdim[1] ,threadsXdim),fld(dataBdim[2] ,threadsYdim),dataBdim[3]    );
+    inBlockLoopX,inBlockLoopY,inBlockLoopZ= (0,fld(dataBdim[2] ,threadsYdim),dataBdim[3]);
     metaDataLength= metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
     
     loopMeta= fld(metaDataLength,blocks )
@@ -166,7 +166,8 @@ macro iterDataBlockZdeepest(mainArrDims,dataBlockDims,loopXdim ,loopYdim,loopZdi
     ,isFullBoundaryCheckX =true
     , isFullBoundaryCheckY=true
     , isFullBoundaryCheckZ=true
-    ,additionalActionBeforeZ=  :(xpos= xdim * blockDimX()+threadIdxX() ;ypos= (ydim * blockDimY())+threadIdxY() ;zpos=(zdim+1))
+    ,additionalActionBeforeX=  :(xpos= xdim * blockDimX()+threadIdxX() ;ypos= (ydim * blockDimY())+threadIdxY())
+    ,additionalActionBeforeZ=  :(zpos=(zdim+1))
     ,additionalActionAfterX=additionalActionAfterX
     , ex = ex)  
     return esc(:( $mainExp))

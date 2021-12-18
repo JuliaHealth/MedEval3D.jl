@@ -1,7 +1,7 @@
 module MainLoopKernel
 using CUDA, Logging,Main.CUDAGpuUtils, Main.ResultListUtils,Main.WorkQueueUtils,Main.ScanForDuplicates, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils
 using Main.MetadataAnalyzePass, Main.ScanForDuplicates
-export @mainLoopKernelAllocations,getSmallGPUForHousedorff,getBigGPUForHousedorffAfterBoolKernel,@loadDataAtTheBegOfDilatationStep,@prepareForNextDilation,@mainLoopKernel, @iterateOverWorkQueue,@mainLoop,@mainLoopKernelAllocations,@clearBeforeNextDilatation
+export mainKernelLoad,@mainLoopKernelAllocations,getSmallGPUForHousedorff,getBigGPUForHousedorffAfterBoolKernel,@loadDataAtTheBegOfDilatationStep,@prepareForNextDilation,@mainLoopKernel, @iterateOverWorkQueue,@mainLoop,@mainLoopKernelAllocations,@clearBeforeNextDilatation
 
 
 """
@@ -64,7 +64,7 @@ alreadyCoveredInQueues =@cuStaticSharedMem(UInt32,(14))
  isMaskFull= true
  #here we will store in registers data uploaded from mask for later verification wheather we should send it or not
  locArr= Int32(0)
- offsetIter = UInt8(0)
+ offsetIter = UInt32(0)
 #  localOffset= UInt32(0)
  #boolean usefull in the iterating over private part of work queue 
  isAnyBiggerThanZero =  @cuStaticSharedMem(Bool,1)
@@ -332,20 +332,25 @@ end
 
 """
 allocate after prepare bool kernel had finished execution
-return metaData,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,resList,workQueueEEE
-,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter
-,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter
-,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter
-,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter
+return metaData,reducedGoldA,reducedSegmA,reducedGoldB,reducedSegmB,resList,workQueue,,workQueuecounter
 """
 function getBigGPUForHousedorffAfterBoolKernel(metaData,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp,reducedGoldA,reducedSegmA,dataBdim)
     ###we return only subset of boolean arrays that we are intrested in 
     # println( "zzz fp[1] $(fp[1])  fn[1] $(fn[1]) \n")
-    resList = allocateResultLists(fp[1],fn[1])
+    # resList = allocateResultLists(fp[1],fn[1])
+    resList = allocateResultLists(1000,1000)
     ###we need to return subset of metadata that we are intrested in 
-    goldArr= reducedGoldA[minxRes[1]*dataBdim[1]:maxxRes[1]*dataBdim[1],minyRes[1]*dataBdim[2]:maxyRes[1]*dataBdim[2],minzRes[1]:maxzRes[1]]
-    segmArr = reducedSegmA[minxRes[1]*dataBdim[1]:maxxRes[1]*dataBdim[1],minyRes[1]*dataBdim[2]:maxyRes[1]*dataBdim[2],minzRes[1]:maxzRes[1]]
-    newMeta = metaData[minxRes[1]:maxxRes[1],minyRes[1]:maxyRes[1],minzRes[1]:maxzRes[1]   ]
+    goldArr= reducedGoldA[Int64(minxRes[1]*dataBdim[1]):Int64(maxxRes[1]*dataBdim[1])
+            ,Int64(minyRes[1]*dataBdim[2]):Int64(maxyRes[1]*dataBdim[2])
+            ,Int64(minzRes[1]):Int64(maxzRes[1])
+            ]
+    segmArr = reducedSegmA[Int64(minxRes[1]*dataBdim[1]):Int64(maxxRes[1]*dataBdim[1])
+                ,Int64(minyRes[1]*dataBdim[2]):Int64(maxyRes[1]*dataBdim[2])
+                ,Int64(minzRes[1]):Int64(maxzRes[1])
+                ]
+    # CUDA.unsafe_free!(reducedGoldA)
+    # CUDA.unsafe_free!(reducedSegmA)
+    newMeta = metaData[Int64(minxRes[1]):Int64(maxxRes[1]),Int64(minyRes[1]):Int64(maxyRes[1]),Int64(minzRes[1]):Int64(maxzRes[1])   ]
     workQueue,workQueueCounter= WorkQueueUtils.allocateWorkQueue( max(length(newMeta),1) )
     metaSize = size(newMeta)
     #here we need to define data structure that will hold all data about paddings
