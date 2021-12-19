@@ -210,7 +210,7 @@ macro getBoolCubeKernel()
                                 #we set all bits so we do not need to reset 
                                 @setBitTo(offsetIter,zpos,boolGold)
 
-                                @setBitTo((shmemblockData[xpos,ypos]),zpos,boolGold)
+                                # @setBitTo((shmemblockData[xpos,ypos]),zpos,boolGold)
                                 #we need to also collect data about how many fp and fn we have in main part and borders
                                 #important in case of corners we will first analyze z and y dims and z dim on last resort only !
   
@@ -243,18 +243,18 @@ macro getBoolCubeKernel()
                  @uploadMinMaxesToShmem()   
 
 
-
+                 offsetIter=0       
                  #in order to reduce used shared memory we are setting values of output array separately
                  @iterDataBlockZdeepest(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,xMeta,yMeta,zMeta
                  ,begin 
                     #if((segmGPU[x,y,z]==numberToLooFor)) @setBitTo1(offsetIter,zpos) end   
-                                # @setBitTo(offsetIter,zpos,(segmGPU[x,y,z]==numberToLooFor))
+                      @setBitTo(offsetIter,zpos,(segmGPU[x,y,z]==numberToLooFor))
                        #we set all bits so we do not need to reset 
-                    @setBitTo(shmemblockData[xpos,ypos],zpos,(segmGPU[x,y,z]==numberToLooFor))
+                    #@setBitTo(shmemblockData[xpos,ypos],zpos,(segmGPU[x,y,z]==numberToLooFor))
                 end,begin 
                 #here we iterated over all z dimension so shmemblockData[xpos,ypos] is ready to be uploaded to global memory
-                if(shmemblockData[xpos,ypos]>0)  
-                    @inbounds reducedSegmA[x,y,(zMeta+1)]=shmemblockData[xpos,ypos]
+                if(offsetIter>0)  
+                    @inbounds reducedSegmA[x,y,(zMeta+1)]=offsetIter
                 end
                 end)     
                 sync_threads()            

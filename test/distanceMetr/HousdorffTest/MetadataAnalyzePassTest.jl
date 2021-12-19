@@ -10,16 +10,21 @@ using Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.Wor
 singleVal = CUDA.zeros(14)
 
 threads=(32,5)
-# blocks =2
-# mainArrDims= (5,5,5)
-# dataBdim = (2,2,2)
-blocks =8
-mainArrDims= (516,523,421)
-dataBdim = (43,21,17)
+blocks =1
+mainArrDims= (5,5,5)
+dataBdim = (2,2,2)
+# blocks =8
+# mainArrDims= (516,523,421)
+# dataBdim = (43,21,17)
 metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
 #metaData = view(MetaDataUtils.allocateMetadata(mainArrDims,dataBdim),1:9,2:3,4:6,: );
 metaDataDims=size(metaData)
 loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength = calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
+
+metaSize = size(metaData)
+metaDataLength= metaSize[1]*metaSize[2]*metaSize[3] 
+loopWarpMeta= cld(metaDataLength,(blocks*threads[1] ))
+
 
 function metaDataWarpIterKernel(singleVal,metaDataDims,loopWarpMeta,metaDataLength)
 
@@ -30,7 +35,7 @@ function metaDataWarpIterKernel(singleVal,metaDataDims,loopWarpMeta,metaDataLeng
       #if(linIdexMeta>7000) 
       #@ifY 1 CUDA.@cuprint "linIdexMeta $(linIdexMeta) offset = $(((blockIdxX()-1)*loopWarpMeta*blockDimX()))  xMeta $(xMeta)  yMeta $(yMeta)  zMeta $(zMeta) isInRange $(isInRange) id  idX $(blockIdxX()) \n"   
       #end  
-    # @ifXY 1 1    CUDA.@cuprint "linIndex $(linIndex)"
+      CUDA.@cuprint "linIdexMeta $(linIdexMeta) xMeta $(xMeta) yMeta $(yMeta) zMeta $(zMeta) isInRange $(isInRange)\n "
     #CUDA.@cuprint "linIndex $(linIndex) \n "
 end)
     
@@ -39,11 +44,10 @@ end
 @cuda threads=threads blocks=blocks  metaDataWarpIterKernel(singleVal,metaDataDims,loopWarpMeta,metaDataLength)
 @test singleVal[1]==metaDataDims[1]*metaDataDims[2]*metaDataDims[3]
 
-
-
-
-
-
+singleVal[1]
+loopWarpMeta
+metaDataLength
+metaDataDims
 
 
 

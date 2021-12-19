@@ -51,7 +51,7 @@ shmemPaddings = @cuStaticSharedMem(Bool,( 32,32,7 ))
 
 
 #for storing sums for reductions
-shmemSum =  @cuStaticSharedMem(UInt32,(36,14)) # we need this additional spots
+shmemSum =  @cuStaticSharedMem(UInt32,(36,16)) # we need this additional spots
 #used to load from metadata information are ques to be validated 
 areToBeValidated =  @cuStaticSharedMem(Bool, (14)) 
 # used to mark wheather there is any true in paddings
@@ -215,7 +215,7 @@ macro mainLoopKernel()
     
     @loadDataAtTheBegOfDilatationStep()
 
-    # sync_grid(grid_handle)   
+    sync_grid(grid_handle)   
    #we check first wheather next dilatation step should be done or not we also establish some shared memory variables to know wheather both passes should continue or just one
     # checking weather we already finished so we need to check    
     # - is amount of results related to gold mask dilatations is equal to false positives or given percent of them
@@ -348,11 +348,16 @@ function getBigGPUForHousedorffAfterBoolKernel(metaData,minxRes,maxxRes,minyRes,
                 ,Int64(minyRes[1]*dataBdim[2]):Int64(maxyRes[1]*dataBdim[2])
                 ,Int64(minzRes[1]):Int64(maxzRes[1])
                 ]
+    
     # CUDA.unsafe_free!(reducedGoldA)
+    
     # CUDA.unsafe_free!(reducedSegmA)
-    newMeta = metaData[Int64(minxRes[1]):Int64(maxxRes[1]),Int64(minyRes[1]):Int64(maxyRes[1]),Int64(minzRes[1]):Int64(maxzRes[1])   ]
+    newMeta = metaData[Int64(minxRes[1]):Int64(maxxRes[1]),Int64(minyRes[1]):Int64(maxyRes[1]),Int64(minzRes[1]):Int64(maxzRes[1]),:   ]
     workQueue,workQueueCounter= WorkQueueUtils.allocateWorkQueue( max(length(newMeta),1) )
     metaSize = size(newMeta)
+
+
+
     #here we need to define data structure that will hold all data about paddings
     # it will be composed of 32x32 blocks of UInt8 where first 6 bits will represent paddings 
     # number of such blocks will be the same as innersingleDataBlockPass

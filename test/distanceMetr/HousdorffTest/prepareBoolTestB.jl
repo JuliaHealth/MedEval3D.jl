@@ -133,8 +133,8 @@ Int64(reducedGoldA[3,18,1])
 
  mainArrDims= (60,60,60);
 
- mainArrCPU= zeros(Int32,mainArrDims);
- refArrCPU = zeros(Int32,mainArrDims);
+ mainArrCPU= zeros(UInt8,mainArrDims);
+ refArrCPU = zeros(UInt8,mainArrDims);
  ##### we will create two planes 20 units apart from each 
 mainArrCPU[10:50,10:50,10].= 1;
 refArrCPU[10:50,10:50,30].= 1;
@@ -153,16 +153,10 @@ refArrCPU[10:50,10:50,30].= 1;
      golddd = CuArray(mainArrCPU);
      segmmm= CuArray(refArrCPU);
 
-     function locForKernelB(goldGPU,segmGPU,mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,loopXinPlane,loopYinPlane,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,numberToLooFor,inBlockLoopXZIterWithPadding,shmemblockDataLoop,shmemblockDataLenght,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength)
-
-       @getBoolCubeKernel()
-
-     return
- end
- minxRes[1]
 
 
-     @cuda shmem=shmemSizeBool threads=threadsBoolKern blocks=blocksBoolKern locForKernelB(golddd,segmmm,mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,loopXinPlane,loopYinPlane,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,numberToLooFor,inBlockLoopXZIterWithPadding,shmemblockDataLoop,shmemblockDataLenght,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength)
+
+     @cuda shmem=shmemSizeBool threads=threadsBoolKern blocks=blocksBoolKern boolKernelLoad(golddd,segmmm,boolKernelArgs...)
      Int64(sum(mainArrCPU))
      Int64(fn[])
      @test Int64(fn[])==Int64(sum(mainArrCPU))

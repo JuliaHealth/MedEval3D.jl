@@ -38,7 +38,15 @@ also we need to be sure that we appended to the correct work queue based on the 
 """
 macro appendToWorkQueue(metaX,metaY,metaZ,isGold ) 
     return esc(quote 
-    @appendToWorkQueueBasic(workQueue,workQueuecounter, $metaX,$metaY,$metaZ,$isGold )
+    old =  atomicallyAddOne(workQueueCounter)+1
+    #  CUDA.@cuprint " ooo old $(old) metaX $($metaX) metaY $($metaY) metaZ $($metaZ) isGold $($isGold)  \n"
+
+    workQueue[1,old]= $metaX
+    workQueue[2,old]= UInt16($metaY)
+    workQueue[3,old]= UInt16($metaZ)
+    workQueue[4,old]= UInt16($isGold)
+    
+    #@appendToWorkQueueBasic(workQueue,workQueuecounter, $metaX,$metaY,$metaZ,$isGold )
 
         # if(iseven($metaX) && iseven($metaY) && iseven($metaZ) )
         #     @appendToWorkQueueBasic(workQueueEEE,workQueueEEEcounter, $metaX,$metaY,$metaZ,$isGold )

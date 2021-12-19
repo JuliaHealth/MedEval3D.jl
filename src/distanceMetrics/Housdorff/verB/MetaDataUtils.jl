@@ -53,7 +53,7 @@ creates empty metadata on the basis of the main array dimensions and data block 
 function allocateMetadata(arrDims,dataBDims)
     return CUDA.zeros(UInt32,cld(arrDims[1],dataBDims[1] ) 
             ,cld(arrDims[2],dataBDims[2] )
-            ,arrDims[3]
+            ,cld(arrDims[2],dataBDims[3] )
             ,90 )
 end
 """
@@ -94,6 +94,9 @@ function getNewCountersBeg()::UInt32 return  74 end
 making access to the metaData Easier
 we assume that linIdexMeta, xMeta, zMeta,yMeta are available
 """
+    # nn = $numb
+    # CUDA.@cuprint("xMeta $(xMeta+1) yMeta $(yMeta+1)  zMeta $(zMeta+1) numb $(nn) \n  ")
+
 macro accMeta(numb)
     return esc(quote
         metaData[xMeta+1,yMeta+1,zMeta+1,$numb]

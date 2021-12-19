@@ -82,7 +82,7 @@ function mainKernelLoad(referenceArrs,dilatationArrs, mainArrDims,dataBdim
     ,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY
     ,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop
     ,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength, fn,fp,resList)
-  #  @mainLoopKernel()
+    @mainLoopKernel()
     return
 end
 
@@ -92,7 +92,7 @@ function get_shmemMainKernel(dataBdim)
     shmemblockData= sizeof(UInt32)*dataBdim[1]* dataBdim[2]
     resShmemblockData= sizeof(UInt32)*dataBdim[1]* dataBdim[2]
     shmemPaddings= sizeof(Bool)*(  max(dataBdim[1], dataBdim[2]))*(  max(dataBdim[1], dataBdim[2]))*6
-    shmemSum= sizeof(UInt32)*36*14
+    shmemSum= sizeof(UInt32)*36*16
     areToBeValidated= sizeof(Bool)*14
     isAnythingInPadding= sizeof(Bool)*7
     alreadyCoveredInQueues= sizeof(UInt32)*14

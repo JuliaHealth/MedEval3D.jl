@@ -50,6 +50,7 @@ macro metaDataWarpIter(metaDataDims,loopWarpMeta,metaDataLength,ex)
         xMeta= rem(linIdexMeta,$metaDataDims[1])
         zMeta= fld((linIdexMeta),$metaDataDims[1]*$metaDataDims[2])
         yMeta= fld((linIdexMeta-((zMeta*$metaDataDims[1]*$metaDataDims[2] ) + xMeta )),$metaDataDims[1])
+        # zMeta= fld(zMeta,32)
       $ex
     end 
 
@@ -92,14 +93,15 @@ macro loadCounters()
             end   
            end
         end#for
-        
-        #now in order to get offsets we need to atomially access the resOffsetCounter - we add to them total fp or fn cout so next blocks will not overwrite the 
-        #area that is scheduled for this particular metadata block
+
+        # now in order to get offsets we need to atomially access the resOffsetCounter - we add to them total fp or fn cout so next blocks will not overwrite the 
+        # area that is scheduled for this particular metadata block
         # we need to supply linear coordinate for atomicallyAddToSpot
         @exOnWarp 15 begin 
             if(isInRange)
-            count = @accMeta(getBeginingOfFpFNcounts()+ 16)
-                if(count>0)     
+            count = @accMeta(getBeginingOfFpFNcounts()+ 15)
+                if(count>0)
+                    shmemPaddings[threadIdxX()]= true     
                     shmemSum[threadIdxX(),15]= atomicAdd(globalFpResOffsetCounter,  ceil(count*1.5)  )+1
                 else
                     shmemSum[threadIdxX(),15]= 0
@@ -110,9 +112,10 @@ macro loadCounters()
 
         @exOnWarp 16 begin 
             if(isInRange) 
-            count = @accMeta(getBeginingOfFpFNcounts()+ 17)
+            count = @accMeta(getBeginingOfFpFNcounts()+ 16)
                 if(count>0)     
                     shmemSum[threadIdxX(),16]= atomicAdd(globalFnResOffsetCounter,  ceil( count*1.5 )  )+1
+                    shmemPaddings[threadIdxX()+32]= true  
                 else
                     shmemSum[threadIdxX(),16]= 0
                 end    
@@ -135,25 +138,31 @@ end #loadCounters
  """
  macro analyzeMetadataFirstPass()
          return esc(quote
+         #clear shmem paddings
+        @ifY 1 shmemPaddings[threadIdxX()]=false
+        @ifY 2 shmemPaddings[threadIdxX()+32]=false
+        sync_threads()
          # we need to iterate over all metadata blocks with checks so the blocks can not be  outside the area of intrest defined by  minX, minY,minZ and maxX,maxY,maxZ
          @metaDataWarpIter(metaDataDims,loopWarpMeta,metaDataLength,begin
              #now we upload all data related to amount of data that is of our intrest 
              #as we need to perform basically the same work across all warps - instead on specializing threads in warp we will execute the same fynction across all warps
              # so warp will execute the same function just with varying data as it should be 
-
-           @loadCounters() 
+            # if(isInRange)
+            #   CUDA.@cuprint "xMeta $(xMeta) yMeta $(yMeta) zMeta $(zMeta) isInRange $(isInRange) linIdexMeta $(linIdexMeta) metaDataDims $(metaDataDims) loopWarpMeta $(loopWarpMeta) metaDataLength $(metaDataLength) \n "
+            # end
+            @loadCounters() 
 
             sync_threads()
 
-            #  ######  we need to establish is block is active at the first pass block is active simply  when total count of fp and fn is greater than 0 
-            # #we are adding 1 to meta y z becouse those are 0 based ...           
-
-            @ifY 1 if(shmemSum[threadIdxX(),15]>0 && isInRange) begin  
-                @appendToWorkQueue(metaX+1,metaY+1,metaZ+1,0 )  
+             ######  we need to establish is block is active at the first pass block is active simply  when total count of fp and fn is greater than 0 
+            #we are adding 1 to meta y z becouse those are 0 based ...           
+  
+            @ifY 1 if(shmemPaddings[threadIdxX()+32] && isInRange) begin  
+                @appendToWorkQueue((xMeta+1),(yMeta+1),(zMeta+1),0 )  
                 end   
             end     
-            @ifY 2 if(shmemSum[threadIdxX(),16]>0 && isInRange) begin 
-                 @appendToWorkQueue(metaX+1,metaY+1,metaZ+1,1 )  
+            @ifY 2 if(shmemPaddings[threadIdxX()] && isInRange) begin 
+                 @appendToWorkQueue((xMeta+1),(yMeta+1),(zMeta+1),1 )  
                     end  
                 end      
             

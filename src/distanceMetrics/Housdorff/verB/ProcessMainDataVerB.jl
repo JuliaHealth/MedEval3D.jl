@@ -55,16 +55,16 @@ macro validateData(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr)
 macro loadMainValues(mainArr,xMeta,yMeta,zMeta)
     return esc(quote
     #load data
-    xm = $xMeta
-    ym = $yMeta
-    zm = $zMeta
+    # xm = $xMeta
+    # ym = $yMeta
+    # zm = $zMeta
     @inbounds shmemblockData[threadIdxX(),threadIdxY(),1] = $mainArr[(($xMeta-1)*dataBdim[1]+ threadIdxX()),(($yMeta-1)*dataBdim[2]+ threadIdxY()),$zMeta]
     #clear padding
     for iterY in 0:inBlockLoopXZIterWithPadding
         if((threadIdxY()+iterY*dataBdim[2])<=dataBdim[1]  )
             #we are reusing offsetIter
             offsetIter=0
-            for bitPos in 2:7
+            for bitPos in 1:7
                 shmemPaddings[threadIdxX(),(threadIdxY()+iterY*dataBdim[2]),bitPos ]=false
             end
         end
@@ -378,17 +378,17 @@ dir - direction from which we got this so for example in top padding we got it d
 """
 macro validatePaddingInfo(shmemVal,xpos,ypos,zpos,isGold, dir,shmemPaddingLayer,refArr,xMeta,yMeta,zMeta,iterNumb )
     return esc(quote
-    shmm = $shmemVal
-    xp = (($xMeta-1)*dataBdim[1]+ $xpos)
-    yp = (($yMeta-1)*dataBdim[2]+ $ypos)
-    zp = (($zMeta-1)*dataBdim[3]+ $zpos)
-    bitPP = $zpos
-    xPP = threadIdxX()
-    smhmemPadLay = $shmemPaddingLayer
-    if(($xMeta)==6 && ($yMeta)==5  && ($zMeta)==6)  
-       #@ifXY 1 1  CUDA.@cuprint  "aaa  $(shmemPaddings[5,2,4])   " 
-        CUDA.@cuprint "in validate bitPP $(bitPP) xPP $(xPP) shmm $(shmm) smhmemPadLay $(smhmemPadLay)\n"
-    end  
+    # shmm = $shmemVal
+    # xp = (($xMeta-1)*dataBdim[1]+ $xpos)
+    # yp = (($yMeta-1)*dataBdim[2]+ $ypos)
+    # zp = (($zMeta-1)*dataBdim[3]+ $zpos)
+    # bitPP = $zpos
+    # xPP = threadIdxX()
+    # smhmemPadLay = $shmemPaddingLayer
+    # if(($xMeta)==6 && ($yMeta)==5  && ($zMeta)==6)  
+    #    #@ifXY 1 1  CUDA.@cuprint  "aaa  $(shmemPaddings[5,2,4])   " 
+    #     CUDA.@cuprint "in validate bitPP $(bitPP) xPP $(xPP) shmm $(shmm) smhmemPadLay $(smhmemPadLay)\n"
+    # end  
 
     if($shmemVal)
 
