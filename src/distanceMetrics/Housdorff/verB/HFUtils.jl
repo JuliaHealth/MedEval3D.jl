@@ -42,7 +42,7 @@ function calculateLoopsIter(dataBdim,threadsXdim,threadsYdim,metaDataDims,blocks
     clearIterResShmemLoop= fld(resShmemTotalLength,threadsXdim*threadsYdim)
     clearIterSourceShmemLoop= fld(sourceShmemTotalLength,threadsXdim*threadsYdim)
 
-    shmemblockDataLenght = 37*32
+    shmemblockDataLenght = threadsXdim*threadsYdim*2
     shmemblockDataLoop = fld(shmemblockDataLenght,threadsXdim*threadsYdim)
     
     inBlockLoopXZIterWithPadding= fld(32,threadsYdim)

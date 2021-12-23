@@ -193,7 +193,7 @@ workQueaue= WorkQueueUtils.allocateWorkQueue(fpTotal,fnTotal)
 
 metaData[2,2,2,2]=UInt32(1)
 
-workQueaueCounter= CUDA.zeros(UInt32,1)
+workQueueCounter= CUDA.zeros(UInt32,1)
 
 shmemSum =  CUDA.zeros(Float32,35,16) # we need this additional 33th an 34th 35th spots
 
@@ -208,17 +208,17 @@ for j in 1:2
 end  
 inBlockLoopXZIterWithPadding,shmemblockDataLoop,shmemblockDataLenght,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength=calculateLoopsIter(dataBdim,threads[1],threads[2],metaDataDims,blocks)
 
-function analyzeMetadataFirstPassKernel(loopWarpMeta,metaDataLength,workQueaue,workQueaueCounter,metaData,metaDataDims,loopXMeta,loopYZMeta,globalFpResOffsetCounter, globalFnResOffsetCounter)
+function analyzeMetadataFirstPassKernel(loopWarpMeta,metaDataLength,workQueaue,workQueueCounter,metaData,metaDataDims,loopXMeta,loopYZMeta,globalFpResOffsetCounter, globalFnResOffsetCounter)
   shmemSum =  @cuStaticSharedMem(Float32,(35,16)) # we need this additional 33th an 34th spots
   MetadataAnalyzePass.@analyzeMetadataFirstPass()
     
     return
 end
-@cuda threads=threads blocks=blocks analyzeMetadataFirstPassKernel(loopWarpMeta,metaDataLength,workQueaue,workQueaueCounter,metaData,metaDataDims,loopXMeta,loopYZMeta,globalFpResOffsetCounter, globalFnResOffsetCounter)
+@cuda threads=threads blocks=blocks analyzeMetadataFirstPassKernel(loopWarpMeta,metaDataLength,workQueaue,workQueueCounter,metaData,metaDataDims,loopXMeta,loopYZMeta,globalFpResOffsetCounter, globalFnResOffsetCounter)
 
 
 # @test length(filter(it-> it>0,Array(workQueaue[:,3])))== 4
-@test workQueaueCounter[1]== 4
+@test workQueueCounter[1]== 4
 
 @test metaData[1,1,1,1]==1
 @test metaData[1,1,1,2]==1
@@ -282,7 +282,7 @@ globalFpResOffsetCounter= CUDA.zeros(UInt32,1)
 globalFnResOffsetCounter= CUDA.zeros(UInt32,1)
 shmemSum =  CUDA.zeros(Float32,35,16) # we need this additional 33th an 34th 35th spots
 workQueaue= WorkQueueUtils.allocateWorkQueue(100,100)
-workQueaueCounter= CUDA.zeros(UInt32,1)
+workQueueCounter= CUDA.zeros(UInt32,1)
 # simulating diffrent scenario that should lead to active or inactive 
 # blocks and so they should be pushed to work queue or not...
 loopXMeta= fld(metaDataDims[1],threads[1])
@@ -324,7 +324,7 @@ inBlockLoopXZIterWithPadding,shmemblockDataLoop,shmemblockDataLenght,loopAXFixed
 
 #as we have counters we check in shmem are they correct
 
-function checkIsToBeActive(shmemblockDataLoop, shmemblockDataLenght,loopWarpMeta,metaDataLength,dataBdim,workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
+function checkIsToBeActive(shmemblockDataLoop, shmemblockDataLenght,loopWarpMeta,metaDataLength,dataBdim,workQueueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
  
   shmemSum =  @cuStaticSharedMem(Float32,(36,16)) # we need this additional 33th an 34th spots
   shmemblockData = @cuStaticSharedMem(UInt32,(37, 32))
@@ -349,10 +349,10 @@ function checkIsToBeActive(shmemblockDataLoop, shmemblockDataLenght,loopWarpMeta
     
     return
 end
-@cuda threads=threads blocks=blocks checkIsToBeActive(shmemblockDataLoop, shmemblockDataLenght,loopWarpMeta,metaDataLength,dataBdim,workQueaueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
+@cuda threads=threads blocks=blocks checkIsToBeActive(shmemblockDataLoop, shmemblockDataLenght,loopWarpMeta,metaDataLength,dataBdim,workQueueCounter,workQueaue,metaData,metaDataDims,loopXMeta,loopYZMeta,shmemSum,globalFpResOffsetCounter, globalFnResOffsetCounter)
 workQueaue[1,:]
 Int64(sum(workQueaue))
-Int64(workQueaueCounter[1])
+Int64(workQueueCounter[1])
 ss = 0
 for i in 1:length(workQueaue)
   if( workQueaue[i,1]>0 )

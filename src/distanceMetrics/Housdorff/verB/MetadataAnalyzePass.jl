@@ -141,6 +141,7 @@ end #loadCounters
          #clear shmem paddings
         @ifY 1 shmemPaddings[threadIdxX()]=false
         @ifY 2 shmemPaddings[threadIdxX()+32]=false
+        @ifXY 3 3 workCounterLocalInShmem[1]=0
         sync_threads()
          # we need to iterate over all metadata blocks with checks so the blocks can not be  outside the area of intrest defined by  minX, minY,minZ and maxX,maxY,maxZ
          @metaDataWarpIter(metaDataDims,loopWarpMeta,metaDataLength,begin
@@ -158,18 +159,21 @@ end #loadCounters
             #we are adding 1 to meta y z becouse those are 0 based ...           
   
             @ifY 1 if(shmemPaddings[threadIdxX()+32] && isInRange) begin  
-                @appendToWorkQueue((xMeta+1),(yMeta+1),(zMeta+1),0 )  
+                @appendToLocalWorkQueue((xMeta+1),(yMeta+1),(zMeta+1),0 )  
                 end   
             end     
             @ifY 2 if(shmemPaddings[threadIdxX()] && isInRange) begin 
-                 @appendToWorkQueue((xMeta+1),(yMeta+1),(zMeta+1),1 )  
+                 @appendToLocalWorkQueue((xMeta+1),(yMeta+1),(zMeta+1),1 )  
                     end  
                 end      
-            
+
+
+
             @exOnWarp 3 if((shmemSum[threadIdxX(),15]) >0 && isInRange) setBlockasCurrentlyActiveInSegm(metaData, xMeta+1,yMeta+1,zMeta+1)    end 
             @exOnWarp 4 if((shmemSum[threadIdxX(),16]) >0 && isInRange) setBlockasCurrentlyActiveInGold(metaData, xMeta+1,yMeta+1,zMeta+1)     end 
  
- 
+
+
             #####3set offsets
              #now we will calculate and set the result queue offsets for each offset we need to synchronize warps in order to have unique offsets 
              #we can not parallalize it more as we need to sequentially set offsets             
@@ -197,11 +201,24 @@ end #loadCounters
                 end#for
             end#if
         end
- 
- 
+
+        #so now we need to make sure that we have enough space left in the shmemblockData for work queue elements 
+        sync_threads()
+        if(workCounterLocalInShmem[1]+32>= shmemblockDataLenght)
+            @appendToGlobalWorkQueue()
+            sync_threads()
+            @ifXY 1 1 workCounterLocalInShmem[1]=0
+            sync_threads()
+        end    
+
          end)# outer loop expession  )
          # probably we do not need to clear as we assign not adding values ...
          #clearSharedMemWarpLong(shmemSum, UInt8(14), Float32(0.0))
+  
+         sync_threads()
+         @appendToGlobalWorkQueue()
+        #  @ifXY 1 1 CUDA.@cuprint "  aaaa workQueueCounter[1] $(workQueueCounter[1]) \n"
+
         end )
  end      
 """
@@ -209,13 +226,13 @@ establish is the  block  is active full or be activated, and we are saving this 
 """
 macro checkIsActiveOrFullOr()
     return esc(quote
-        @exOnWarp 30 if(isInRange) shmemblockData[(threadIdxX())] = UInt32(@accMeta(getFullInGoldNumb() )) end#  isBlockFulliInGold(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 31 if(isInRange)   shmemblockData[(threadIdxX())+33] = UInt32(@accMeta(getIsToBeActivatedInGoldNumb() )) end # isBlockToBeActivatediInGold(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 32 if(isInRange)  shmemblockData[(threadIdxX())+33*2] =UInt32( @accMeta(getActiveGoldNumb() )) end # isBlockCurrentlyActiveiInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 30 if(isInRange) shmemPaddings[(threadIdxX())] = @accMeta(getFullInGoldNumb() ) end#  isBlockFulliInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 31 if(isInRange)   shmemPaddings[(threadIdxX())+33] = @accMeta(getIsToBeActivatedInGoldNumb() ) end # isBlockToBeActivatediInGold(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 32 if(isInRange)  shmemPaddings[(threadIdxX())+33*2] = @accMeta(getActiveGoldNumb() ) end # isBlockCurrentlyActiveiInGold(metaData, xMeta,yMeta+1,zMeta+1)
        
-        @exOnWarp 33 if(isInRange) shmemblockData[(threadIdxX())+33*3] =UInt32( @accMeta(getFullInSegmNumb())) end # isBlockFullInSegm(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 34 if(isInRange) shmemblockData[(threadIdxX())+33*4] =UInt32( @accMeta(getIsToBeActivatedInSegmNumb() )) end # isBlockToBeActivatedInSegm(metaData, xMeta,yMeta+1,zMeta+1)
-        @exOnWarp 35 if(isInRange) shmemblockData[(threadIdxX())+33*5] = UInt32(@accMeta(getActiveSegmNumb())) end # isBlockCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 33 if(isInRange) shmemPaddings[(threadIdxX())+33*3] =@accMeta(getFullInSegmNumb()) end # isBlockFullInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 34 if(isInRange) shmemPaddings[(threadIdxX())+33*4] = @accMeta(getIsToBeActivatedInSegmNumb() ) end # isBlockToBeActivatedInSegm(metaData, xMeta,yMeta+1,zMeta+1)
+        @exOnWarp 35 if(isInRange) shmemPaddings[(threadIdxX())+33*5] = @accMeta(getActiveSegmNumb()) end # isBlockCurrentlyActiveInSegm(metaData, xMeta,yMeta+1,zMeta+1)
 end)#quote
 end#checkIsActiveOrFullOr
 
@@ -225,13 +242,20 @@ given data in sourceShmem loaded by checkIsActiveOrFullOr() we will  mark the bl
 """
 macro setIsToBeActive()
     return esc(quote
-        @exOnWarp 1 if(!(shmemblockData[(threadIdxX())] ==1) && ((shmemblockData[(threadIdxX())+33] ==1) ||  (shmemblockData[(threadIdxX())+33*2])==1) &&isInRange  )  
-                        @setMeta(getActiveGoldNumb(),1)
-                        @appendToWorkQueue(metaX+1,metaY+1,metaZ+1,1 )  
+    # CUDA.@cuprint " a $(!(shmemPaddings[(threadIdxX())])) b $(((shmemPaddings[(threadIdxX())+33]))) c $(shmemPaddings[(threadIdxX())+33*2])) \n"
+    
+    #if(isInRange) CUDA.@cuprint " a $(!(shmemPaddings[(threadIdxX())])) b $(((shmemPaddings[(threadIdxX())+33]))) c $(shmemPaddings[(threadIdxX())+33*2])) \n" end
+        
+        @exOnWarp 1 if((!(shmemPaddings[(threadIdxX())]) && ((shmemPaddings[(threadIdxX())+33]) ||  (shmemPaddings[(threadIdxX())+33*2]))) &&isInRange  )  
+                # CUDA.@cuprint "set meta other pass \n  "        
+                @setMeta(getActiveGoldNumb(),1)
+                        @appendToLocalWorkQueue(xMeta+1,yMeta+1,zMeta+1,1 )  
                     end
-        @exOnWarp 2 if(!(shmemblockData[(threadIdxX())+33*3]==1)  && ((shmemblockData[(threadIdxX())+33*4]==1)  ||  (shmemblockData[(threadIdxX())+33*5])==1) &&isInRange ) 
-                        @setMeta(getActiveSegmNumb(),1)
-                        @appendToWorkQueue(metaX+1,metaY+1,metaZ+1,0 )  
+        @exOnWarp 2 if((!(shmemPaddings[(threadIdxX())+33*3])  && ((shmemPaddings[(threadIdxX())+33*4])  ||  (shmemPaddings[(threadIdxX())+33*5]))) &&isInRange ) 
+                    # CUDA.@cuprint "set meta other pass \n  "        
+            
+                    @setMeta(getActiveSegmNumb(),1)
+                        @appendToLocalWorkQueue(xMeta+1,yMeta+1,zMeta+1,0 )  
                     end
     end)#quote
 
@@ -254,10 +278,21 @@ end
     """
     macro setMEtaDataOtherPasses(locArr,offsetIter,iterThrougWarNumb)
         return esc(quote
+        #clear 
         $locArr=0
         $offsetIter=0
         isMaskFull=false
-        @metaDataWarpIter(metaDataDims,loopWarpMeta,metaDataLength, begin
+    for iterY in 0:inBlockLoopXZIterWithPadding
+        if((threadIdxY()+iterY*dataBdim[2])<=dataBdim[1]  )
+            #we are reusing offsetIter
+            for bitPos in 1:7
+                shmemPaddings[threadIdxX(),(threadIdxY()+iterY*dataBdim[2]),bitPos ]=false
+            end
+        end
+    end   
+    sync_threads()
+
+        @metaDataWarpIter(metaDataDims,loopWarpMeta,metaDataLength,begin
         isMaskOkForProcessing=false
             #first we will check is block full active or be activated and we will set later on this basis what blocks should be put to work queue
              @checkIsActiveOrFullOr() 
@@ -270,47 +305,46 @@ end
 
 
 
-            #we set information that block should be activated in gold  and segm
+        # #     #we set information that block should be activated in gold  and segm
              @setIsToBeActive() 
+            #just to be sure that we will have enough space for workque items
+             sync_threads()
+             if(workCounterLocalInShmem[1]+32>= shmemblockDataLenght)
+                 @appendToGlobalWorkQueue()
+                 sync_threads()
+                 @ifXY 1 1 workCounterLocalInShmem[1]=0
+                 sync_threads()
+             end    
 
         end    )
         sync_threads()
 
         #now we add to the global variables all of the fps and fns after corrections for duplicates
         @ifXY 1 1 begin 
-            # if(xMeta==1 && yMeta==0 && zMeta==0)
-            #     CUDA.@cuprint """  valuee fp $(alreadyCoveredInQueues[1]+ alreadyCoveredInQueues[3]+ alreadyCoveredInQueues[5]+ alreadyCoveredInQueues[7]+ alreadyCoveredInQueues[9]+ alreadyCoveredInQueues[11]+ alreadyCoveredInQueues[13]) 
-            #     alreadyCoveredInQueues[1] $(alreadyCoveredInQueues[1]) alreadyCoveredInQueues[3] $(alreadyCoveredInQueues[3]) alreadyCoveredInQueues[5] $(alreadyCoveredInQueues[5]) alreadyCoveredInQueues[7] $(alreadyCoveredInQueues[7]) alreadyCoveredInQueues[9] $(alreadyCoveredInQueues[9]) alreadyCoveredInQueues[11] $(alreadyCoveredInQueues[11]) alreadyCoveredInQueues[13] $(alreadyCoveredInQueues[13]) 
-                
-            #     \n"""
-            # end  
             atomicAdd(globalCurrentFpCount, alreadyCoveredInQueues[1]+ alreadyCoveredInQueues[3]+ alreadyCoveredInQueues[5]+ alreadyCoveredInQueues[7]+ alreadyCoveredInQueues[9]+ alreadyCoveredInQueues[11]+ alreadyCoveredInQueues[13]) 
         end
             @ifXY 2 1 atomicAdd(globalCurrentFnCount, alreadyCoveredInQueues[2]+ alreadyCoveredInQueues[4]+ alreadyCoveredInQueues[6]+ alreadyCoveredInQueues[8]+ alreadyCoveredInQueues[10]+ alreadyCoveredInQueues[12]+ alreadyCoveredInQueues[14]) 
 
-
             sync_threads()
     
-
-
-            @metaDataWarpIter(metaDataDims,loopWarpMeta,metaDataLength, begin
+            @metaDataWarpIter(metaDataDims,loopWarpMeta,metaDataLength,begin
             #now we need to set old caounters to the value of new counters so at next dilatation we will count only new values ...
             for i in 1:14
-                @exOnWarp (i+37) @setMeta((getOldCountersBeg() +i),@accMeta(getNewCountersBeg() +i))
+                if(isInRange)
+                  @exOnWarp (i+37) @setMeta((getOldCountersBeg() +i),@accMeta(getNewCountersBeg() +i))
+                end    
             end  
             end)   
-             ########clear   
+            #  ########clear   
              for i in 1:14
                 @exOnWarp (i+23) shmemSum[threadIdxX(),i]= 0
              end
-             @iterateLinearly shmemblockDataLoop shmemblockDataLenght shmemblockData[i]=0
-
-
+            # @iterateLinearly shmemblockDataLoop shmemblockDataLenght shmemblockData[i]=0
+            @appendToGlobalWorkQueue()
             $locArr=0
             $offsetIter=0
-            sync_threads()
 
-        end )
+         end )
     end
 
 

@@ -1,6 +1,6 @@
 module ProcessMainDataVerB
 using CUDA, Main.BitWiseUtils,Logging,Main.CUDAGpuUtils,Main.WorkQueueUtils, Logging,StaticArrays,Main.MetaDataUtils, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils, Main.ResultListUtils
-export @loadToshmemPaddings,@executeIterPadding,@loadToshmemPaddings,@validatePaddingInfo,@dilatateHelper,getDir,@validateData, @executeDataIterWithPadding, @loadMainValues,setNextBlockAsIsToBeActivated,@paddingProcessCombined,calculateLoopsIter,@processMaskData, @paddingIter,@processPadding
+export passOnesInner, @executeDataIter,@loadToshmemPaddings,@executeIterPadding,@loadToshmemPaddings,@validatePaddingInfo,@dilatateHelper,getDir,@validateData, @executeDataIterWithPadding, @loadMainValues,setNextBlockAsIsToBeActivated,@paddingProcessCombined,calculateLoopsIter,@processMaskData, @paddingIter,@processPadding
 
 
                 
@@ -55,49 +55,33 @@ macro validateData(isGold,xMeta,yMeta,zMeta,iterNumb,mainArr,refArr)
 macro loadMainValues(mainArr,xMeta,yMeta,zMeta)
     return esc(quote
     #load data
-    # xm = $xMeta
-    # ym = $yMeta
-    # zm = $zMeta
+
     @inbounds shmemblockData[threadIdxX(),threadIdxY(),1] = $mainArr[(($xMeta-1)*dataBdim[1]+ threadIdxX()),(($yMeta-1)*dataBdim[2]+ threadIdxY()),$zMeta]
     #clear padding
     for iterY in 0:inBlockLoopXZIterWithPadding
         if((threadIdxY()+iterY*dataBdim[2])<=dataBdim[1]  )
-            #we are reusing offsetIter
-            offsetIter=0
             for bitPos in 1:7
-                shmemPaddings[threadIdxX(),(threadIdxY()+iterY*dataBdim[2]),bitPos ]=false
+                @inbounds shmemPaddings[threadIdxX(),(threadIdxY()+iterY*dataBdim[2]),bitPos ]=false
             end
         end
     end             
     sync_threads()
-    #now immidiately we can go with dilatation up and down and save it to res shmem we are not modyfing  locArr
-    @inbounds shmemblockData[threadIdxX(),threadIdxY(),2]=@bitDilatate(shmemblockData[threadIdxX(),threadIdxY(),1])
+    # #now immidiately we can go with dilatation up and down and save it to res shmem we are not modyfing  locArr
+    @inbounds shmemblockData[threadIdxX(),threadIdxY(),2]= (@bitDilatate(shmemblockData[threadIdxX(),threadIdxY(),1]))
 
-
-    # idX = threadIdxX()
-    # idY = (threadIdxY())
-    # metX =    $xMeta
-    # metY =   $yMeta
-    # zm= $zMeta
-    # x= (($xMeta-1)*dataBdim[1]+ threadIdxX())
-    # y= (($yMeta-1)*dataBdim[2]+ threadIdxY())
-    #  if(metX==5 && metY==5  && zm==3 && idX==1 && idY==2)
-    # # if(metX==2 && metY==2  && zm==2)# && idX==2 && idY==2)
-    #     CUDA.@cuprint "source to load  $(shmemblockData[threadIdxX(),threadIdxY(),1])  x $(x) y $(y) metX $(metX)  metY $(metY)  idX $(idX) idY$(idY) \n "
-    # end   
 
 
     # now if we have values in first or last bit we need to modify appropriate spots in the shmemPaddings
     locBool = isBit1AtPos(shmemblockData[threadIdxX(),threadIdxY(),1],dataBdim[3])#bottom
     if(locBool)
-        isAnythingInPadding[2]= true 
+        @inbounds isAnythingInPadding[2]= true 
     end    
     @inbounds shmemPaddings[threadIdxX(),threadIdxY(),2]=locBool
 
     locBool = isBit1AtPos(shmemblockData[threadIdxX(),threadIdxY(),1],1)#top
     @inbounds shmemPaddings[threadIdxX(),threadIdxY(),7]= locBool   
     if(locBool)
-        isAnythingInPadding[7]= true 
+        @inbounds isAnythingInPadding[7]= true 
     end   
 
     #now we will  do left - right dilatations howvewer we must be sure that we checked boundary conditions 
@@ -121,14 +105,6 @@ macro loadMainValues(mainArr,xMeta,yMeta,zMeta)
             #we are reusing offsetIter
             offsetIter=0
             for bitPos in 2:7
-
-                # idX = threadIdxX()
-                # idY = (threadIdxY()+iterY*dataBdim[2])
-                # if(idX==1 && idY==1)
-                #     CUDA.@cuprint "bittt $(bitPos)  isTrue    $(shmemPaddings[threadIdxX(),(threadIdxY()+iterY*dataBdim[2]),bitPos ]) \n"
-                # end    
-
-
                 offsetIter=  @setBitTo(offsetIter,bitPos, shmemPaddings[threadIdxX(),(threadIdxY()+iterY*dataBdim[2]),bitPos ])
             end
 
@@ -157,30 +133,37 @@ macro dilatateHelper(predicate, paddingPos, padingVariedA, padingVariedB,normalX
     if($predicate)
         for bitPos in 1:32
 
-                shmemPaddings[$padingVariedA,$padingVariedB,$paddingPos]=isBit1AtPos(shmemblockData[threadIdxX(),threadIdxY(),1],bitPos)
+           @inbounds shmemPaddings[$padingVariedA,$padingVariedB,$paddingPos]=isBit1AtPos(shmemblockData[threadIdxX(),threadIdxY(),1],bitPos) 
                 #we need to mark weather there is anything in padding so we will mark block as to be activates 
                 if(shmemPaddings[$padingVariedA,$padingVariedB,$paddingPos]) 
-                    # if(metX==2 && metY==2 && idX==1 && idY==1 && zm==2)
-                    #     padvarA = $padingVariedA
-                    #     padVarB = $padingVariedB
-                    #     padPos = $paddingPos
-                    #     CUDA.@cuprint "shmem pos 2 padvarA $(padvarA)  padVarB $(padVarB) padPos $(padPos) \n"   
-                    # end   
-                    
-                    isAnythingInPadding[$paddingPos]= true 
+                    @inbounds isAnythingInPadding[$paddingPos]= true 
                 end
         end#for
 
-    else
-           
+     else
+        
+    #    @inbounds shmemblockData[threadIdxX(),threadIdxY(),2] = 1 #@bitPassOnes(shmemblockData[threadIdxX(),threadIdxY(),2], shmemblockData[threadIdxX()+($normalXChange),threadIdxY()+($normalYchange),1])
+    #  @inbounds shmemblockData[threadIdxX(),threadIdxY(),2] = shmemblockData[threadIdxX(),threadIdxY(),2] | shmemblockData[threadIdxX()+($normalXChange),threadIdxY()+($normalYchange),1]
+    #  @inbounds shmemblockData[threadIdxX(),threadIdxY(),2] = shmemblockData[threadIdxX(),threadIdxY(),2] | shmemblockData[threadIdxX(),threadIdxY(),1]
 
-        shmemblockData[threadIdxX(),threadIdxY(),2] = @bitPassOnes(shmemblockData[threadIdxX(),threadIdxY(),2],shmemblockData[threadIdxX()+($normalXChange),threadIdxY()+($normalYchange),1]   )
+    @inbounds shmemblockData[threadIdxX(),threadIdxY(),2] = @bitPassOnes(shmemblockData[threadIdxX(),threadIdxY(),2],shmemblockData[threadIdxX()+($normalXChange),threadIdxY()+($normalYchange),1]   )
+end 
 
-        end 
 
     end)#quote
 end
 
+# """
+# Helper for bit operation
+# """
+# function passOnesInner(a::UInt32,b::UInt32,shmemblockData)
+#     return esc(quote
+#     if(a!=1 || b!=0)
+#         c= @bitPassOnes a b
+#         @inbounds shmemblockData[threadIdxX(),threadIdxY(),2] = c
+#     end    
+#     end)
+# end
 
 
 
@@ -229,8 +212,8 @@ macro executeDataIter(mainArrDims
   if(areToBeValidated[14-$isGold])
       @validateData($isGold,$xMeta,$yMeta,$zMeta,$iterNumb,$mainArr,$refArr) 
   end 
-  #save all dilatations apart from padding ...                 
-  $mainArr[(($xMeta-1)*dataBdim[1]+ threadIdxX()),(($yMeta-1)*dataBdim[2]+ threadIdxY()),$zMeta] = @inbounds(shmemblockData[threadIdxX(),threadIdxY(),2])
+#   #save all dilatations apart from padding ...                 
+@inbounds $mainArr[(($xMeta-1)*dataBdim[1]+ threadIdxX()),(($yMeta-1)*dataBdim[2]+ threadIdxY()),$zMeta] = @inbounds(shmemblockData[threadIdxX(),threadIdxY(),2])
   #now we need to establish are we full here; and whether neighbours are to be activated
   isMaskFull =syncThreadsAnd(isMaskFull)
   @ifXY 1 1 setNextBlockAsIsToBeActivated(isAnythingInPadding[3] ,-1,0,0,$xMeta,$yMeta,$zMeta,$isGold,  metaData, metaDataDims)
@@ -253,9 +236,12 @@ then
 macro executeIterPadding(mainArr,refArr,xMeta,yMeta,zMeta,isGold,iterNumb)
     return esc(quote
 
-    #by construction one thread will neeed to load just one integer into its registers and to res
-    @inbounds shmemblockData[threadIdxX(),threadIdxY(),1] = $mainArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta]
-    # we already gone through dilatation and metadata analysis so now we are analysing paddings from previous loop
+    # #by construction one thread will neeed to load just one integer into its registers and to res
+    # @inbounds 
+    @inbounds shmemblockData[threadIdxX(),threadIdxY(),1] =  @inbounds $mainArr[($xMeta-1)*dataBdim[1]+ threadIdxX(),($yMeta-1)*dataBdim[2]+ threadIdxY(),$zMeta]
+    
+    
+
     #first we need to load data from paddings of surrounding blocks and  push it into shared memory
     #yet we need to check weather in given direction there is some block so if we are on edge ?
     #order of paddings for reference 1)top, 2)bottom, 3)left 4)right , 5)anterior, 6)posterior
@@ -355,7 +341,7 @@ macro executeIterPadding(mainArr,refArr,xMeta,yMeta,zMeta,isGold,iterNumb)
     sync_threads()
 
 
-    $mainArr[(($xMeta-1)*dataBdim[1]+ threadIdxX()),(($yMeta-1)*dataBdim[2]+ threadIdxY()),($zMeta)] =@inbounds(shmemblockData[threadIdxX(),threadIdxY(),1])
+    @inbounds $mainArr[(($xMeta-1)*dataBdim[1]+ threadIdxX()),(($yMeta-1)*dataBdim[2]+ threadIdxY()),($zMeta)] = @inbounds  shmemblockData[threadIdxX(),threadIdxY(),1]
     
 end)
 end#executeIterPadding
@@ -457,7 +443,7 @@ macro loadToshmemPaddings(xMeta,yMeta,zMeta, xMetaChange,yMetaChange,zMetaChange
                 #     bitt = $bitOfIntrest
                 #     CUDA.@cuprint "in load xm $(xm) ym $(ym) zm $(zm) idx $(threadIdxX())  idY $(threadIdxY()+iterY*dataBdim[2])  layer $(bitt) bool $(booll) targetNumb $(targetNumb) numb $(numb)) \n"
                 # end                   
-                shmemPaddings[threadIdxX(),(threadIdxY()+iterY*dataBdim[2]),$shmemPaddingTargetNumb ]=booll
+                @inbounds  shmemPaddings[threadIdxX(),(threadIdxY()+iterY*dataBdim[2]),$shmemPaddingTargetNumb ]=booll
             end    
         end#for    
     end#if such block exists    
@@ -484,7 +470,7 @@ metaDataDims - dimensions of metadata
 """
 function setNextBlockAsIsToBeActivated(isToBeActivated::Bool,xMetaChange,yMetaChange,zMetaChange,xMeta,yMeta,zMeta,isGold,  metaData, metaDataDims)
    if(isToBeActivated && (xMeta)+xMetaChange<=metaDataDims[1]  && (xMeta)+xMetaChange>0 &&(yMeta)+yMetaChange>0 && (yMeta)+yMetaChange<=metaDataDims[2] && (zMeta)+zMetaChange>0 && (zMeta)+zMetaChange<=metaDataDims[3]) 
-    metaData[(xMeta+1)+xMetaChange,(yMeta+1)+yMetaChange,(zMeta+1)+zMetaChange,getIsToBeActivatedInSegmNumb()-isGold  ]=1 
+   @inbounds metaData[(xMeta+1)+xMetaChange,(yMeta+1)+yMetaChange,(zMeta+1)+zMetaChange,getIsToBeActivatedInSegmNumb()-isGold  ]=1 
     end
 end
 

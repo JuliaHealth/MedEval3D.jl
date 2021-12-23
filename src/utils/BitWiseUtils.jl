@@ -4,7 +4,7 @@ makes some bitwise operations easier
 
 module BitWiseUtils
 
-export @setBitTo1, @setBitTo , isBit1AtPos, @bitDilatate,@bitPassOnes
+export @setBitTo1, @setBitTo , isBit1AtPos, @bitDilatate,@bitPassOnes,bitPassOnesUINt
 """
 sets given bit of supplied number to 1
 """
@@ -57,6 +57,12 @@ macro bitPassOnes(source,target)
          (($target)|($source))
     end)#quote
 end
+
+
+function bitPassOnesUINt(source::UInt32,target::UInt32) ::UInt32
+    return ((target)|(source))
+end
+
 
 
 end#BitWiseUtils

@@ -13,7 +13,7 @@
     refArrCPU = zeros(UInt8,mainArrDims);
     ##### we will create two planes 20 units apart from each 
     mainArrCPU[10:50,10:50,10].= 1;
-    refArrCPU[10:50,10:50,70].= 1;
+    refArrCPU[10:50,10:50,80].= 1;
     # mainArrCPU[10:12,10:12,10].= 1;
     # refArrCPU[10:12,10:12,30].= 1;
 
@@ -26,7 +26,6 @@
     numberToLooFor=1
     boolKernelArgs, mainKernelArgs,threadsBoolKern,blocksBoolKern ,threadsMainKern,blocksMainKern ,shmemSizeBool,shmemSizeMain=    preparehousedorfKernel(goldGPU,segmGPU,robustnessPercent,numberToLooFor)
     mainArrDims,dataBdim,metaData,metaDataDims,reducedGoldA,reducedSegmA,loopXinPlane,loopYinPlane,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp ,numberToLooFor,inBlockLoopXZIterWithPadding,shmemblockDataLoop,shmemblockDataLenght,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength=boolKernelArgs
-
 
    
    
@@ -65,7 +64,7 @@ size(reducedSegmA)
 size(metaData)
     #now time to get data structures dependent on bool kernel like for example loading subsections of meta data, creating work queue ...
     #some arrays needs to be instantiated only after we know the number of the false and true positives
- referenceArrs,dilatationArrs, mainArrDims,dataBdim,numberToLooFor,metaDataDims,metaDataNull,iterThrougWarNumb,robustnessPercent,shmemSumLengthMaxDiv4,globalFpResOffsetCounter,globalFnResOffsetCounter    ,workQueaueCounter,globalIterationNumber,globalCurrentFnCount,globalCurrentFpCount    ,globalIterationNumb,workQueue,workQueueCounter,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed    ,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop    ,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength, fn,fp,resList= mainKernelArgs
+ referenceArrs,dilatationArrs, mainArrDims,dataBdim,numberToLooFor,metaDataDims,metaDataNull,iterThrougWarNumb,robustnessPercent,shmemSumLengthMaxDiv4,globalFpResOffsetCounter,globalFnResOffsetCounter    ,globalIterationNumber,globalCurrentFnCount,globalCurrentFpCount    ,globalIterationNumb,workQueue,workQueueCounter,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed    ,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop    ,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength, fn,fp,resList,inBlockLoopXZIterWithPadding,paddingStore,shmemblockDataLenght,shmemblockDataLoop= mainKernelArgs
         size(metaData)
 
     metaData,reducedGoldA  ,reducedSegmA ,paddingStore,resList,workQueue,workQueueCounter= getBigGPUForHousedorffAfterBoolKernel(metaData,minxRes,maxxRes,minyRes,maxyRes,minzRes,maxzRes,fn,fp,reducedGoldA,reducedSegmA,dataBdim)
@@ -76,26 +75,49 @@ size(metaData)
     metaDataLength= metaDataDims[1]*metaDataDims[2]*metaDataDims[3] 
     loopMeta= fld(metaDataLength,blocksMainKern )
     loopWarpMeta= cld(metaDataLength,(blocksMainKern*threadsMainKern[1] ))
-  
+
     dilatationArrs= (reducedGoldA,reducedSegmA)
     #reverse order as when dilatating gold we want to establish do we cover segm voxels
     referenceArrs=(golddd,segmmm )
-
+    shmemblockDataLenght = threadsMainKern[1]*threadsMainKern[2]*2
+    shmemblockDataLoop = fld(shmemblockDataLenght,threadsMainKern[1]*threadsMainKern[2])
     
+using  BenchmarkTools
+    BenchmarkTools.DEFAULT_PARAMETERS.samples = 2
+    BenchmarkTools.DEFAULT_PARAMETERS.seconds =600
+    BenchmarkTools.DEFAULT_PARAMETERS.gcsample = true
+    
+
     #main calculations
-    @cuda threads=threadsMainKern blocks=blocksMainKern shmem=shmemSizeMain cooperative=true mainKernelLoad( referenceArrs,dilatationArrs, mainArrDims,dataBdim
+
+    @benchmark CUDA.@sync @cuda threads=threadsMainKern blocks=blocksMainKern shmem=shmemSizeMain cooperative=true mainKernelLoad( referenceArrs,dilatationArrs, mainArrDims,dataBdim
     ,numberToLooFor,metaDataDims,metaData,iterThrougWarNumb,robustnessPercent
     ,shmemSumLengthMaxDiv4,globalFpResOffsetCounter,globalFnResOffsetCounter
-    ,workQueaueCounter,globalIterationNumber,globalCurrentFnCount,globalCurrentFpCount
+    ,globalIterationNumber,globalCurrentFnCount,globalCurrentFpCount
     ,globalIterationNumb,workQueue,workQueueCounter
     ,loopAXFixed,loopBXfixed,loopAYFixed,loopBYfixed,loopAZFixed,loopBZfixed
     ,loopdataDimMainX,loopdataDimMainY,loopdataDimMainZ,inBlockLoopX,inBlockLoopY
     ,inBlockLoopZ,metaDataLength,loopMeta,loopWarpMeta,clearIterResShmemLoop
-    ,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength, fn,fp,resList)
-  
+    ,clearIterSourceShmemLoop,resShmemTotalLength,sourceShmemTotalLength, fn,fp,resList,inBlockLoopXZIterWithPadding,paddingStore,shmemblockDataLenght,shmemblockDataLoop)
+    
+
 
     globalIterationNumb[1]
 
     Int64(workQueueCounter[1])
     Int64.(workQueue)
 
+
+#     (threadIdxX())+(innerWarpNumb+21)*33
+#     32+(16+21)*33
+# dataBdim[1]* dataBdim[2]*2
+
+
+
+resList
+
+for i in 1:16
+    # println(" i $(i)  $((Int64(metaData[2,2,2, (getOldCountersBeg()+1)])))")
+    println(" i $(i)  $((Int64(metaData[2,2,2, (getNewCountersBeg()+1)])))")
+end
+mainArrDims

@@ -13,7 +13,8 @@ using Main.CUDAAtomicUtils
 
 result = CUDA.zeros(1)
 function testAddAtomicKernel(result)
-    atomicallyAddOne(result)
+    old = atomicallyAddOne(result)
+    CUDA.@cuprint " old $(old)"
     return
 end
 @cuda threads=32 blocks=1 testAddAtomicKernel(result)
@@ -32,7 +33,9 @@ end
 
 resultB = CUDA.zeros(3)
 function testAddAtomicKernelB(resultB)
-    atomicallyAddToSpot(resultB,2,1)
+    old = atomicallyAddToSpot(resultB,2,1)
+    CUDA.@cuprint " old $(old)"
+
     # CUDA.atomic_add!(pointer(resultB, 2), Float32(1))
     
     return

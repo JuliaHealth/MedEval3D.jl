@@ -1,6 +1,6 @@
 module WorkQueueUtils
 using  Main.BitWiseUtils,CUDA, Logging,Main.CUDAGpuUtils, Main.ResultListUtils,Main.WorkQueueUtils, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils, Main.BitWiseUtils
-export allocateWorkQueue,appendToWorkQueue,@appendToWorkQueueBasic,@appendToWorkQueue
+export allocateWorkQueue,appendToWorkQueue,@appendToWorkQueueBasic,@appendToLocalWorkQueue,@appendToGlobalWorkQueue
 """
 allocate memory for  work queues
     entries means
@@ -18,17 +18,7 @@ function allocateWorkQueue(metaDataLength)
     queueSize = cld(metaDataLength*2,8)+2#*2 becouse of gold and segm pass divided by 8 becouse we have 8 work queues
     return (  CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(UInt16,(1)) )
     
-    # workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter
-    # ,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter
-    # ,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter
-    # ,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter
-    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
-    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
-    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
-    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
-    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
-    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
-    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1))     
+
     
 end
 
@@ -36,51 +26,58 @@ end
 atomically append the block linear index and information is it gold or other pass 
 also we need to be sure that we appended to the correct work queue based on the properties of the xMeta,yMeta,zMeta - so are they even, odd ...
 """
-macro appendToWorkQueue(metaX,metaY,metaZ,isGold ) 
+macro appendToLocalWorkQueue(metaX,metaY,metaZ,isGold ) 
     return esc(quote 
-    old =  atomicallyAddOne(workQueueCounter)+1
-    #  CUDA.@cuprint " ooo old $(old) metaX $($metaX) metaY $($metaY) metaZ $($metaZ) isGold $($isGold)  \n"
+    old =  atomicallyAddOne(workCounterLocalInShmem)
+      #CUDA.@cuprint " ooo old $(old) metaX $($metaX) metaY $($metaY) metaZ $($metaZ) isGold $($isGold) workCounterLocalInShmem[1] $(workCounterLocalInShmem[1]) \n"
+    @inbounds shmemblockData[old*4+1]= $metaX
+    @inbounds shmemblockData[old*4+2]= $metaY
+    @inbounds shmemblockData[old*4+3]= $metaZ
+    @inbounds shmemblockData[old*4+4]= $isGold
 
-    workQueue[1,old]= $metaX
-    workQueue[2,old]= UInt16($metaY)
-    workQueue[3,old]= UInt16($metaZ)
-    workQueue[4,old]= UInt16($isGold)
-    
-    #@appendToWorkQueueBasic(workQueue,workQueuecounter, $metaX,$metaY,$metaZ,$isGold )
+    # workQueue[1,old]= $metaX
+    # workQueue[2,old]= UInt16($metaY)
+    # workQueue[3,old]= UInt16($metaZ)
+    # workQueue[4,old]= UInt16($isGold)
 
-        # if(iseven($metaX) && iseven($metaY) && iseven($metaZ) )
-        #     @appendToWorkQueueBasic(workQueueEEE,workQueueEEEcounter, $metaX,$metaY,$metaZ,$isGold )
-        # elseif(iseven($metaX) && isodd($metaY) && iseven($metaZ))    
-        #     @appendToWorkQueueBasic(workQueueEOE,workQueueEOEcounter, $metaX,$metaY,$metaZ,$isGold )
-        # elseif(iseven($metaX) && iseven($metaY) && isodd($metaZ))    
-        #     @appendToWorkQueueBasic(workQueueEEO,workQueueEEOcounter, $metaX,$metaY,$metaZ,$isGold )
-        # elseif(isodd($metaX) && iseven($metaY) && iseven($metaZ))    
-        #     @appendToWorkQueueBasic(workQueueOEE,workQueueOEEcounter, $metaX,$metaY,$metaZ,$isGold )
-        # elseif(isodd($metaX) && isodd($metaY) && iseven($metaZ))    
-        #     @appendToWorkQueueBasic(workQueueOOE,workQueueOOEcounter, $metaX,$metaY,$metaZ,$isGold )
-        # elseif(iseven($metaX) && isodd($metaY) && isodd($metaZ))    
-        #     @appendToWorkQueueBasic(workQueueEOO,workQueueEOOcounter, $metaX,$metaY,$metaZ,$isGold )
-        # elseif(isodd($metaX) && iseven($metaY) && isodd($metaZ))    
-        #     @appendToWorkQueueBasic(workQueueOEO,workQueueOEOcounter, $metaX,$metaY,$metaZ,$isGold )  
-        # elseif(isodd($metaX) && isodd($metaY) && isodd($metaZ))    
-        #     @appendToWorkQueueBasic(workQueueOOO,workQueueOOOcounter, $metaX,$metaY,$metaZ,$isGold )
-        # end
 
     end)#qote 
 end#appendToWorkQueue
 
-
-macro appendToWorkQueueBasic(workQueaue,workQueauecounter, metaX,metaY,metaZ,isGold ) 
+"""
+the function above is block private now we need to load the work queaue into main work queue
+    and additionally atomically add to general work queue counter
+"""
+macro appendToGlobalWorkQueue() 
     return esc(quote 
-    old =  atomicallyAddOne($workQueauecounter)+1
-    # CUDA.@cuprint " ooo old $(old) metaX $($metaX) metaY $($metaY) metaZ $($metaZ) isGold $($isGold) workQueaue $(length($workQueaue)) \n"
+    if(workCounterLocalInShmem[1]>0)
+        #old is a spot where we should start adding new entries
+        sync_threads()
+        @ifXY 1 1 workCounterHelper[1] =  atomicallyAddToSpot(workQueueCounter,1,workCounterLocalInShmem[1])-workCounterLocalInShmem[1]
+        sync_threads()
+        # @ifXY 1 1 CUDA.@cuprint "appendToGlobalWorkQueue old $(old)  workCounterLocalInShmem[1] $(workCounterLocalInShmem[1]) \n "
+        #we multiply it by 4 so each thread will have potentially only one data entry to do 
+        @iterateLinearlyCheckAll(cld(workCounterLocalInShmem[1]*4,blockDimX()*blockDimY()),workCounterLocalInShmem[1]*4,begin   
+            @inbounds workQueue[(workCounterHelper[1])*4+i] =  shmemblockData[i]
+        end)
+    end
 
-    $workQueaue[1,old]= $metaX
-    $workQueaue[2,old]= UInt16($metaY)
-    $workQueaue[3,old]= UInt16($metaZ)
-    $workQueaue[4,old]= UInt16($isGold)
-    end)#qote 
+end)#qote 
 end#appendToWorkQueue
+
+
+
+# macro appendToWorkQueueBasic(workQueaue,workQueauecounter, metaX,metaY,metaZ,isGold ) 
+#     return esc(quote 
+#     old =  atomicallyAddOne($workQueauecounter)+1
+#     # CUDA.@cuprint " ooo old $(old) metaX $($metaX) metaY $($metaY) metaZ $($metaZ) isGold $($isGold) workQueaue $(length($workQueaue)) \n"
+
+#     $workQueaue[1,old]= $metaX
+#     $workQueaue[2,old]= UInt16($metaY)
+#     $workQueaue[3,old]= UInt16($metaZ)
+#     $workQueaue[4,old]= UInt16($isGold)
+#     end)#qote 
+# end#appendToWorkQueue
 
 end#WorkQueueUtils
 
@@ -169,3 +166,38 @@ end#WorkQueueUtils
 
 
 # evens
+
+
+
+
+    #@appendToWorkQueueBasic(workQueue,workQueuecounter, $metaX,$metaY,$metaZ,$isGold )
+
+        # if(iseven($metaX) && iseven($metaY) && iseven($metaZ) )
+        #     @appendToWorkQueueBasic(workQueueEEE,workQueueEEEcounter, $metaX,$metaY,$metaZ,$isGold )
+        # elseif(iseven($metaX) && isodd($metaY) && iseven($metaZ))    
+        #     @appendToWorkQueueBasic(workQueueEOE,workQueueEOEcounter, $metaX,$metaY,$metaZ,$isGold )
+        # elseif(iseven($metaX) && iseven($metaY) && isodd($metaZ))    
+        #     @appendToWorkQueueBasic(workQueueEEO,workQueueEEOcounter, $metaX,$metaY,$metaZ,$isGold )
+        # elseif(isodd($metaX) && iseven($metaY) && iseven($metaZ))    
+        #     @appendToWorkQueueBasic(workQueueOEE,workQueueOEEcounter, $metaX,$metaY,$metaZ,$isGold )
+        # elseif(isodd($metaX) && isodd($metaY) && iseven($metaZ))    
+        #     @appendToWorkQueueBasic(workQueueOOE,workQueueOOEcounter, $metaX,$metaY,$metaZ,$isGold )
+        # elseif(iseven($metaX) && isodd($metaY) && isodd($metaZ))    
+        #     @appendToWorkQueueBasic(workQueueEOO,workQueueEOOcounter, $metaX,$metaY,$metaZ,$isGold )
+        # elseif(isodd($metaX) && iseven($metaY) && isodd($metaZ))    
+        #     @appendToWorkQueueBasic(workQueueOEO,workQueueOEOcounter, $metaX,$metaY,$metaZ,$isGold )  
+        # elseif(isodd($metaX) && isodd($metaY) && isodd($metaZ))    
+        #     @appendToWorkQueueBasic(workQueueOOO,workQueueOOOcounter, $metaX,$metaY,$metaZ,$isGold )
+        # end
+
+            # workQueueEEE,workQueueEEEcounter,workQueueEEO,workQueueEEOcounter
+    # ,workQueueEOE,workQueueEOEcounter,workQueueOEE,workQueueOEEcounter
+    # ,workQueueOOE,workQueueOOEcounter,workQueueEOO,workQueueEOOcounter
+    # ,workQueueOEO,workQueueOEOcounter,workQueueOOO,workQueueOOOcounter
+    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1)) 
+    # ,CUDA.zeros(UInt16,4,(queueSize)),CUDA.zeros(Int16,(1))     

@@ -8,7 +8,7 @@ export atomicallyAddOne,atomicallyAddToSpot, atomicAdd, atomicMinSet, atomicMaxS
 atomically add to given 1 length array 1
 """
 function atomicallyAddOne(arr) 
-   return  @inbounds CUDA.@atomic arr[1]+=1
+   return  CUDA.@atomic arr[1]+=1
 end
 
 
@@ -17,14 +17,14 @@ atomically add given value to the coordinate (linear) of supplied array
 """
 function atomicallyAddToSpot( arr,coord,value)
 #    return CUDA.atomic_add!(pointer(arr, coord),typ(value))
-return  @inbounds CUDA.@atomic arr[coord]+=value
+return  CUDA.@atomic arr[coord]+=value
 end
 
 """
 adds atomically number to target and return old value
 """
 function atomicAdd(target, number)
-    return  @inbounds CUDA.@atomic target[1]+=number
+    return  CUDA.@atomic target[1]+=number
 
 end
 
