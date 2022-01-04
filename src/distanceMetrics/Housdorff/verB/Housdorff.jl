@@ -89,8 +89,10 @@ end
 
 function get_shmemMainKernel(dataBdim)
     
-    shmemblockData= sizeof(UInt32)*dataBdim[1]* dataBdim[2]
-    resShmemblockData= sizeof(UInt32)*dataBdim[1]* dataBdim[2]
+    shmemblockData= sizeof(UInt32)*32*32
+    # shmemblockData= sizeof(UInt32)*dataBdim[1]* dataBdim[2]
+    resShmemblockData= sizeof(UInt32)*32*32
+    # resShmemblockData= sizeof(UInt32)*dataBdim[1]* dataBdim[2]
     shmemPaddings= sizeof(Bool)*(  max(dataBdim[1], dataBdim[2]))*(  max(dataBdim[1], dataBdim[2]))*6
     shmemSum= sizeof(UInt32)*36*16
     areToBeValidated= sizeof(Bool)*14

@@ -4,7 +4,7 @@ makes some bitwise operations easier
 
 module BitWiseUtils
 
-export @setBitTo1, @setBitTo , isBit1AtPos, @bitDilatate,@bitPassOnes,bitPassOnesUINt
+export @bitDilatate,bitPassOnesUINt,bitDilatateUINt,@setBitTo1, @setBitTo , @setBitTo1UINt32, isBit1AtPos, bitDilatate,@bitPassOnes,bitPassOnesUINt
 """
 sets given bit of supplied number to 1
 """
@@ -14,6 +14,15 @@ macro setBitTo1(numb,pos)
     end)
   
 end#setBitTo1
+
+
+macro setBitTo1UINt32(numb,pos)
+    return esc(quote
+        $numb|= UInt32(1) << ($pos-1)
+    end)
+  
+end#setBitTo1
+
 """
 set bit of number numb in position pos to value val
 """
@@ -41,10 +50,31 @@ Given 1 0 0 0 1 0 0 0 ... Set target integer into 1 1 0 1 1 1 0 0 ...
 
 https://stackoverflow.com/questions/70134566/bit-wise-dilatation
 """
+function bitDilatate(x::UInt32,locArr::UInt32)::UInt32
+        locArr = x
+        if(isBit1AtPos(locArr,1))
+            @setBitTo1UINt32(x,2)
+        end     
+        for i in 2:31
+            if(isBit1AtPos(locArr,i))
+                @setBitTo1UINt32(x,i+1)
+                @setBitTo1UINt32(x,i-1)
+            end                
+        end    
+        if(isBit1AtPos(locArr,32))
+            @setBitTo1UINt32(x,31)
+        end
+        return x
+end
 macro bitDilatate(x)
     return esc(quote
-      (($x )>> 1) | ($x) | (($x) << 1)
+    reinterpret(UInt32,( Int32( (($x )>> 1) | ($x) | (($x) << 1))))
     end)#quote
+end
+
+
+function bitDilatateUINt(x::UInt32)::UInt32
+    return ((x )>> 1) | (x) | ((x) << 1)
 end
 
 """
@@ -54,13 +84,19 @@ Given 32 bit integers x  and y  i would like to set bits of x to 1 if in corre
 """
 macro bitPassOnes(source,target)
     return esc(quote
-         (($target)|($source))
+    reinterpret(UInt32,( Int32( (($target)|($source)) )))
     end)#quote
 end
 
 
 function bitPassOnesUINt(source::UInt32,target::UInt32) ::UInt32
-    return ((target)|(source))
+    for i in 15:20
+        if(isBit1AtPos(source,i))
+            @setBitTo1UINt32(target,i)
+        end  
+    end
+    return reinterpret(UInt32,( UInt32(target )))
+    # return ((target)|(source))
 end
 
 

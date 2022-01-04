@@ -1,6 +1,6 @@
 module MainLoopKernel
 using CUDA, Logging,Main.CUDAGpuUtils, Main.ResultListUtils,Main.WorkQueueUtils,Main.ScanForDuplicates, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils
-using Main.MetadataAnalyzePass, Main.ScanForDuplicates, Main.ProcessMainDataVerB
+using Main.BitWiseUtils,Main.MetadataAnalyzePass, Main.ScanForDuplicates, Main.ProcessMainDataVerB
 export mainKernelLoad,@mainLoopKernelAllocations,getSmallGPUForHousedorff,getBigGPUForHousedorffAfterBoolKernel,@loadDataAtTheBegOfDilatationStep,@mainLoopKernel, @iterateOverWorkQueue,@mainLoop,@mainLoopKernelAllocations,@clearBeforeNextDilatation
 
 
@@ -44,6 +44,7 @@ macro mainLoopKernelAllocations(dataBdim)
 grid_handle = this_grid()
 
 shmemblockData = @cuDynamicSharedMem(UInt32,($dataBdim[1], $dataBdim[2] ,2))
+#shmemblockData = @cuStaticSharedMem(Int32,(32, 32 ,2))
 # holding values of results
 # resShmemblockData = @cuDynamicSharedMem(UInt32,($dataBdim[1], $dataBdim[2] ))
 
@@ -64,7 +65,7 @@ alreadyCoveredInQueues =@cuStaticSharedMem(UInt32,(14))
  #we will use this to establish weather we should mark  the data block as empty or full ...
  isMaskFull= true
  #here we will store in registers data uploaded from mask for later verification wheather we should send it or not
- locArr= Int32(0)
+#  locArr= UInt32(0)
  offsetIter = UInt32(0)
 #  localOffset= UInt32(0)
  #boolean usefull in the iterating over private part of work queue 

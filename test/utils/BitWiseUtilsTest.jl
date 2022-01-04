@@ -5,8 +5,8 @@
     using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
     using Main.BitWiseUtils,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
 
-numb = 0
-pos = 2
+numb = UInt32(0)
+pos = UInt32(2)
 @test !isBit1AtPos(numb,pos)
 
 @setBitTo1(numb,pos)
@@ -15,8 +15,8 @@ pos = 2
 @test !isBit1AtPos(numb,pos-1)
 @test !isBit1AtPos(numb,pos+1)
 
-numb = 0
-pos = 2
+numb = UInt32(0)
+pos = UInt32(2)
 
 @setBitTo(numb,pos,true)
 @test isBit1AtPos(numb,pos)
@@ -29,11 +29,13 @@ numbs=[2]
 
 
 ##### bitDilatate
-numb = 0
-@setBitTo(numb,1,true)
-@setBitTo(numb,5,true)
+numb = UInt32(0)
+locArr = UInt32(0)
+@setBitTo1UINt32(numb,1)
+@setBitTo1UINt32(numb,5)
+typeof(numb)
 
-numbB= @bitDilatate(numb)
+numbB= bitDilatate(numb,locArr)
 
 @test isBit1AtPos(numbB,1)
 @test isBit1AtPos(numbB,2)
@@ -49,12 +51,12 @@ numbB= @bitDilatate(numb)
 #### bitPassOnes
 
 
-source = 0
-target = 0
-@setBitTo(source,1,true)
-@setBitTo(source,5,true)
-@setBitTo(target,4,true)
-new = @bitPassOnes(source,target)
+source = UInt32(0)
+target = UInt32(0)
+@setBitTo1UINt32(source,1)
+@setBitTo1UINt32(source,5)
+@setBitTo1UINt32(target,4)
+new =bitPassOnesUINt(source,target)
 
 @test isBit1AtPos(new,1)
 @test !isBit1AtPos(new,2)
@@ -65,6 +67,8 @@ new = @bitPassOnes(source,target)
 
 nnn = UInt8(1)
 isBit1AtPos(nnn,1)
+
+
 
 
 # using Revise, Parameters, Logging, Test

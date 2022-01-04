@@ -1,12 +1,13 @@
 
     ######### getting all together in Housedorff 
-
+    # julia -g 2 C:\GitHub\GitHub\NuclearMedEval\test\distanceMetr\HousdorffTest\integrationHousedorff.jl
     using Revise, Parameters, Logging, Test
     using CUDA
     includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
     using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
     using Main.MainLoopKernel,Main.PrepareArrtoBool,Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils,Main.ResultListUtils, Main.Housdorff
 
+    CUDA.allowscalar(true)
 
     mainArrDims= (120,120,120);
     mainArrCPU= zeros(UInt8,mainArrDims);
@@ -90,6 +91,7 @@ using  BenchmarkTools
 
     #main calculations
 
+    # @benchmark CUDA.@sync @cuda threads=threadsMainKern blocks=blocksMainKern shmem=shmemSizeMain cooperative=true mainKernelLoad( referenceArrs,dilatationArrs, mainArrDims,dataBdim
     @benchmark CUDA.@sync @cuda threads=threadsMainKern blocks=blocksMainKern shmem=shmemSizeMain cooperative=true mainKernelLoad( referenceArrs,dilatationArrs, mainArrDims,dataBdim
     ,numberToLooFor,metaDataDims,metaData,iterThrougWarNumb,robustnessPercent
     ,shmemSumLengthMaxDiv4,globalFpResOffsetCounter,globalFnResOffsetCounter

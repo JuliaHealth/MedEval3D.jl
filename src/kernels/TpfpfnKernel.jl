@@ -65,23 +65,17 @@ function getTpfpfnData!(goldGPU
     , segmGPU
     ,args,threads,blocks,metricsTuplGlobal) where T
 
-#resetting to 0     
-# for i in 1:11    
-#     CUDA.fill!(args[1][i],0)
+# for i in  1:4   
+#     CUDA.fill!(args[i],0)
 # end   
-for i in  1:4   
-    CUDA.fill!(args[i],0)
-end   
 
-for i in 1:length(metricsTuplGlobal)    
-    metricsTuplGlobal[i]=0
-    #CUDA.fill!(args[11][i],0)
-end   
+# for i in 1:length(metricsTuplGlobal)    
+#     metricsTuplGlobal[i]=0
+#     #CUDA.fill!(args[11][i],0)
+# end   
 
-#getMaxBlocksPerMultiproc(args, getBlockTpFpFn) -- evaluates to 3
 
 #get tp,fp,fna and slicewise results if required
-# @cuda threads=threads blocks=args[6][3] getBlockTpFpFn(goldGPU, segmGPU,args...) #args[8][3]  is number of slices ...
 @cuda threads=threads blocks=blocks getBlockTpFpFn(goldGPU, segmGPU,args...) #args[8][3]  is number of slices ...
 getMetricsCPU(args[1][1],args[3][1], args[4][1],(args[6]-(args[1][1] +args[3][1]+ args[4][1] )) ,metricsTuplGlobal,args[10],1 )
 return args
@@ -107,21 +101,34 @@ function getBlockTpFpFn(goldGPU#goldBoolGPU
         ,conf)
     
     shmemSum = @cuStaticSharedMem(UInt32, (33,3))  
-    locArr= zeros(MVector{3,UInt16})
+    shmemblockData = @cuStaticSharedMem(UInt32,(32, 32 ,3))
+
+    # locArr= zeros(MVector{3,UInt16})
     @iterateLinearlyMultipleBlocks(iterLoop,pixPerSlice,totalNumbOfVoxels,
     #inner expression
     begin
         # CUDA.@cuprint "i $(i)  val $(goldGPU[i])"
         #updating variables needed to calculate means
            boolGold = goldGPU[i]==numberToLooFor  
-           boolSegm = segmGPU[i]==numberToLooFor     
-           @inbounds locArr[ (boolGold & boolSegm + boolSegm +1) ]+=(boolGold | boolSegm)
+           boolSegm = segmGPU[i]==numberToLooFor 
+           @inbounds  shmemblockData[threadIdxX(),threadIdxY(), (boolGold & boolSegm + boolSegm +1)]+=(boolGold | boolSegm)
+        #    locArr[1]=boolGold    
+        #   @inbounds locArr[ (boolGold & boolSegm + boolSegm +1) ]+=(boolGold | boolSegm)
     end) 
 
-    #tell what variables are to be reduced and by what operation
-    @redWitAct(offsetIter,shmemSum,  locArr[1],+,     locArr[2],+,     locArr[3],+   )
+   # tell what variables are to be reduced and by what operation
+    @redWitAct(offsetIter,shmemSum, shmemblockData[threadIdxX(),threadIdxY(),1],+,    shmemblockData[threadIdxX(),threadIdxY(),2],+,     shmemblockData[threadIdxX(),threadIdxY(),3],+   )
     sync_threads()
     @addAtomic(shmemSum, fn, fp,tp)
+    
+    
+    
+
+
+
+
+    
+    
     # sync_grid(grid_handle)
     # if(blockIdxX==1)
     #     getMetrics(tp[1],fp[1], fn[1],(totalNumbOfVoxels-(tp[1] +fn[1]+ fp[1] )) ,metricsTuplGlobal,conf,1 )
