@@ -10,20 +10,26 @@ using Main.CUDAAtomicUtils, Main.TpfpfnKernel, Main.InterClassCorrKernel,Main.Me
 using Conda
 using PyCall
 using Pkg
+using Statistics
+using BenchmarkTools
+
 Conda.pip_interop(true)
 Conda.pip("install", "gspread")
 gspread= pyimport("gspread")
 gspread= pyimport("gspread")
-json=pyimport("json")
+# using PyCall
+# @pyimport pip
+# pip.main(["install","google-api-python-client","google-auth-httplib2","google-auth-oauthlib"])
+
+acc= gspread.service_account(filename="C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\credentials.json.txt")
+sh= acc.open_by_url("https://docs.google.com/spreadsheets/d/1YBKQ70ghpEN-OQdRLoWAHl5EetDzBoCa6ViNQ1D7zYg/edit#gid=0")
+worksheet = sh.get_worksheet(0)
+
+# print(sh.sheet1.get("A1"))
 
 
-
-
-
-
-
-BenchmarkTools.DEFAULT_PARAMETERS.samples = 500
-BenchmarkTools.DEFAULT_PARAMETERS.seconds =600
+BenchmarkTools.DEFAULT_PARAMETERS.samples = 100
+BenchmarkTools.DEFAULT_PARAMETERS.seconds =30
 BenchmarkTools.DEFAULT_PARAMETERS.gcsample = true
 
 pathToHd5= "C:\\Users\\1\\PycharmProjects\\pythonProject3\\mytestfile.hdf5"
@@ -34,22 +40,84 @@ translated=read(g["translated"])
 onlyLungs=read(g["onlyLungs"])
 onlyBladder=read(g["onlyBladder"])
 onlyBladder
+sizz= size(not_translated)
 
 sum(onlyBladder)
 
 ########## first non distance metrics
-arrGold = CuArray(not_translated)
-arrAlgo = CuArray(translated)
-
-sizz= size(not_translated)
+arrGold = CuArray((not_translated))
+arrAlgo = CuArray((translated))
 conf = ConfigurtationStruct(dice=true)
-numberToLooFor = UInt8(1)
-args,threads,blocks,metricsTuplGlobal= TpfpfnKernel.prepareForconfusionTableMetrics(arrGold    , arrAlgo    ,numberToLooFor  ,conf)
+cellStr= "B2"
+"""
+given particular configuration struct it prepares and executes the benchmark also save result to given cell in worksheet
+"""
+# function getBenchmarkInMilisForConfigurationStruct(conf,cellStr,arrGold,arrAlgo,worksheet)
+    numberToLooFor = UInt8(1)
+    argss,threads,blocks,metricsTuplGlobal= TpfpfnKernel.prepareForconfusionTableMetrics(arrGold    , arrAlgo    ,numberToLooFor  ,conf)
+    
+    argsB = TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argss,threads,blocks,metricsTuplGlobal) 
+    dice = metricsTuplGlobal[4][1]
+    # dice # should be 0.757
+    bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
+    res= Statistics.median(bench).time/1000000
+    worksheet.update(cellStr, res)
+    bench
+# end
 
-argsB = TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal) 
-dice = metricsTuplGlobal[4][1]
-dice # should be 0.757
-@benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
+# getBenchmarkInMilisForConfigurationStruct(ConfigurtationStruct(dice=true),"B2",arrGold,arrAlgo,worksheet)
+
+conf = ConfigurtationStruct(jaccard=true)
+cellStr= "B3"
+bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
+res= Statistics.median(bench).time/1000000
+worksheet.update(cellStr, res)
+
+
+conf = ConfigurtationStruct(gce=true)
+cellStr= "B4"
+bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
+res= Statistics.median(bench).time/1000000
+worksheet.update(cellStr, res)
+
+conf = ConfigurtationStruct(vol=true)
+cellStr= "B5"
+bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
+res= Statistics.median(bench).time/1000000
+worksheet.update(cellStr, res)
+
+conf = ConfigurtationStruct(randInd=true)
+cellStr= "B6"
+bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
+res= Statistics.median(bench).time/1000000
+worksheet.update(cellStr, res)
+
+conf = ConfigurtationStruct(ic=true)
+cellStr= "B7"
+bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
+res= Statistics.median(bench).time/1000000
+worksheet.update(cellStr, res)
+
+conf = ConfigurtationStruct(kc=true)
+cellStr= "B8"
+bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
+res= Statistics.median(bench).time/1000000
+worksheet.update(cellStr, res)
+
+conf = ConfigurtationStruct(mi=true)
+cellStr= "B9"
+bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
+res= Statistics.median(bench).time/1000000
+worksheet.update(cellStr, res)
+
+conf = ConfigurtationStruct(vi=true)
+cellStr= "B10"
+bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
+res= Statistics.median(bench).time/1000000
+worksheet.update(cellStr, res)
+
+bench
+ #in miliseconds
 
 
 

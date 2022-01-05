@@ -1,4 +1,10 @@
 using GoogleSheets
+
+
+
+
+GoogleSheets.config_dir= ""#"C:\\Users\\1\\.julia\\config\\credentials.json"
+
 client = sheets_client(AUTH_SCOPE_READONLY)
 SAMPLE_SPREADSHEET_ID = "1YBKQ70ghpEN-OQdRLoWAHl5EetDzBoCa6ViNQ1D7zYg"
 SAMPLE_RANGE_NAME = "metrics!A1:A2"

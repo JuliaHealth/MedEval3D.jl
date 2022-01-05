@@ -100,6 +100,19 @@ function bitPassOnesUINt(source::UInt32,target::UInt32) ::UInt32
 end
 
 
+"""
+increments given UINT16 given both boolGold and boolSegm are true
+"""
+function addToTp(source::UInt32,target::UInt32)::UInt32
+    Base.llvmcall("""
+    %4 = and i8 %0, %1
+    %5 = zext i8 %4 to i16
+    %6 = add i16 %2,%5
+    ret i16 %6""", UInt16, Tuple{Bool,Bool, UInt16}, boolGold, boolSegm,tp)
+end
+
+
+
 
 end#BitWiseUtils
 

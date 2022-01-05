@@ -4,7 +4,7 @@ true negatives, false positives and negatives par image and per slice
 using synergism described by Taha et al. this will enable later fast calculations of many other metrics
 """
 module TpfpfnKernel
-export getTpfpfnData,prepareForconfusionTableMetrics,@iterateLinearlyForTPTF
+export getTpfpfnData,prepareForconfusionTableMetrics,@iterateLinearlyForTPTF,addToTp,addToFp,addToFn
 
 using CUDA,Main.ReductionUtils, Main.CUDAGpuUtils ,Main.IterationUtils , Main.MemoryUtils,Main.CUDAAtomicUtils, StaticArrays
 using Main.MainOverlap, Main.RandIndex, Main.ProbabilisticMetrics, Main.VolumeMetric, Main.InformationTheorhetic
@@ -65,14 +65,14 @@ function getTpfpfnData!(goldGPU
     , segmGPU
     ,args,threads,blocks,metricsTuplGlobal) where T
 
-# for i in  1:4   
-#     CUDA.fill!(args[i],0)
-# end   
+for i in  1:4   
+    CUDA.fill!(args[i],0)
+end   
 
-# for i in 1:length(metricsTuplGlobal)    
-#     metricsTuplGlobal[i]=0
-#     #CUDA.fill!(args[11][i],0)
-# end   
+for i in 1:length(metricsTuplGlobal)    
+    metricsTuplGlobal[i]=0
+    #CUDA.fill!(args[11][i],0)
+end   
 
 
 #get tp,fp,fna and slicewise results if required
@@ -101,23 +101,41 @@ function getBlockTpFpFn(goldGPU#goldBoolGPU
         ,conf)
     
     shmemSum = @cuStaticSharedMem(UInt32, (33,3))  
-    shmemblockData = @cuStaticSharedMem(UInt32,(32, 32 ,3))
+    #shmemblockData = @cuStaticSharedMem(UInt32,(32, 32 ,3))
+    locFn = UInt16(0)
+    locFp = UInt16(0)
+    locTp = UInt16(0)
+    boolGold=false
+    boolSegm=false
 
+    # boolGold= UInt8(0)
+    # boolSegm= UInt8(0)
     # locArr= zeros(MVector{3,UInt16})
     @iterateLinearlyMultipleBlocks(iterLoop,pixPerSlice,totalNumbOfVoxels,
     #inner expression
     begin
         # CUDA.@cuprint "i $(i)  val $(goldGPU[i])"
         #updating variables needed to calculate means
-           boolGold = goldGPU[i]==numberToLooFor  
-           boolSegm = segmGPU[i]==numberToLooFor 
-           @inbounds  shmemblockData[threadIdxX(),threadIdxY(), (boolGold & boolSegm + boolSegm +1)]+=(boolGold | boolSegm)
+
+        boolGold = goldGPU[i]==numberToLooFor  
+        boolSegm = segmGPU[i]==numberToLooFor 
+
+        #    @inbounds  shmemblockData[threadIdxX(),threadIdxY(), (boolGold & boolSegm + boolSegm +1)]+=(boolGold | boolSegm)
+
+        locTp= addToTp(boolGold,boolSegm,locTp )
+        locFp= addToFp(boolGold,boolSegm,locFp )
+        locFn= addToFn(boolGold,boolSegm,locFn )
+
+         
         #    locArr[1]=boolGold    
         #   @inbounds locArr[ (boolGold & boolSegm + boolSegm +1) ]+=(boolGold | boolSegm)
     end) 
 
    # tell what variables are to be reduced and by what operation
-    @redWitAct(offsetIter,shmemSum, shmemblockData[threadIdxX(),threadIdxY(),1],+,    shmemblockData[threadIdxX(),threadIdxY(),2],+,     shmemblockData[threadIdxX(),threadIdxY(),3],+   )
+    # @redWitAct(offsetIter,shmemSum, shmemblockData[threadIdxX(),threadIdxY(),1],+,    shmemblockData[threadIdxX(),threadIdxY(),2],+,     shmemblockData[threadIdxX(),threadIdxY(),3],+   )
+    # @redWitAct(offsetIter,shmemSum, locArr[1],+,    locArr[2],+,     locArr[3],+   )
+    @redWitAct(offsetIter,shmemSum, locFn,+,   locFp,+,     locTp,+   )
+    # @redWitAct(offsetIter,shmemSum, locFn,+)#,   locFp,+,     locTp,+   )
     sync_threads()
     @addAtomic(shmemSum, fn, fp,tp)
     
@@ -212,6 +230,44 @@ function getGlobalMetricsKernel(tp,fp, fn,totalNumbOfVoxels::Int64,metricsTuplGl
   getMetrics(tp[1],fp[1], fn[1],(totalNumbOfVoxels-(tp[1] +fn[1]+ fp[1] )) ,metricsTuplGlobal,conf,1 )
   return
 end
+
+
+"""
+increments given UINT16 given both boolGold and boolSegm are true
+"""
+function addToTp(boolGold::Bool, boolSegm::Bool,tp::UInt16)
+    Base.llvmcall("""
+    %4 = and i8 %0, %1
+    %5 = zext i8 %4 to i16
+    %6 = add i16 %2,%5
+    ret i16 %6""", UInt16, Tuple{Bool,Bool, UInt16}, boolGold, boolSegm,tp)
+end
+
+"""
+increments given UINT16 when boolGold is false and boolSegm is true
+"""
+function addToFp(boolGold::Bool, boolSegm::Bool,tp::UInt16)
+    Base.llvmcall("""
+    %4 = xor i8 %0, %1
+    %5 = and i8 %4, %1
+    %6 = zext i8 %5 to i16
+    %7 = add i16 %2,%6
+    ret i16 %7""", UInt16, Tuple{Bool,Bool, UInt16}, boolGold, boolSegm,tp)
+end
+
+"""
+increments given UINT16 when boolGold is true and boolSegm is false
+"""
+function addToFn(boolGold::Bool, boolSegm::Bool,tp::UInt16)
+    Base.llvmcall("""
+    %4 = xor i8 %0, %1
+    %5 = and i8 %4, %1
+    %6 = zext i8 %5 to i16
+    %7 = add i16 %2,%6
+    ret i16 %7""", UInt16, Tuple{Bool,Bool, UInt16}, boolGold, boolSegm,tp)
+end
+
+
 
 
 
