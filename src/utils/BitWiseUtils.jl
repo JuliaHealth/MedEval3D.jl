@@ -4,7 +4,7 @@ makes some bitwise operations easier
 
 module BitWiseUtils
 
-export @bitDilatate,bitPassOnesUINt,bitDilatateUINt,@setBitTo1, @setBitTo , @setBitTo1UINt32, isBit1AtPos, bitDilatate,@bitPassOnes,bitPassOnesUINt
+export llvmPassOnes,@bitDilatate,bitPassOnesUINt,bitDilatateUINt,@setBitTo1, @setBitTo , @setBitTo1UINt32, isBit1AtPos, bitDilatate,@bitPassOnes,bitPassOnesUINt
 """
 sets given bit of supplied number to 1
 """
@@ -103,12 +103,10 @@ end
 """
 increments given UINT16 given both boolGold and boolSegm are true
 """
-function addToTp(source::UInt32,target::UInt32)::UInt32
+function llvmPassOnes(source::UInt32,target::UInt32)::UInt32
     Base.llvmcall("""
-    %4 = and i8 %0, %1
-    %5 = zext i8 %4 to i16
-    %6 = add i16 %2,%5
-    ret i16 %6""", UInt16, Tuple{Bool,Bool, UInt16}, boolGold, boolSegm,tp)
+    %3 = or i32 %0, %1
+    ret i32 %3""", UInt32, Tuple{UInt32,UInt32}, source, target)
 end
 
 

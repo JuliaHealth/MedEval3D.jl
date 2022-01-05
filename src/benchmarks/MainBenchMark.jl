@@ -92,11 +92,11 @@ bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,ar
 res= Statistics.median(bench).time/1000000
 worksheet.update(cellStr, res)
 
-conf = ConfigurtationStruct(ic=true)
-cellStr= "B7"
-bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
-res= Statistics.median(bench).time/1000000
-worksheet.update(cellStr, res)
+# conf = ConfigurtationStruct(ic=true)
+# cellStr= "B7"
+# bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
+# res= Statistics.median(bench).time/1000000
+# worksheet.update(cellStr, res)
 
 conf = ConfigurtationStruct(kc=true)
 cellStr= "B8"
@@ -116,10 +116,33 @@ bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,ar
 res= Statistics.median(bench).time/1000000
 worksheet.update(cellStr, res)
 
-bench
  #in miliseconds
+ 
+ ########## first non distance metrics
+
+ numberToLooFor = 1
+
+ argsMain, threads,blocks, totalNumbOfVoxels=InterClassCorrKernel.prepareInterClassCorrKernel(arrGold ,arrAlgo,numberToLooFor)
+ globalICC= InterClassCorrKernel.calculateInterclassCorr(arrGold,arrAlgo,threads,blocks,argsMain)
+ 
+ bench = @benchmark CUDA.@sync InterClassCorrKernel.calculateInterclassCorr(arrGold,arrAlgo,threads,blocks,argsMain)
+ res= Statistics.median(bench).time/1000000
+ worksheet.update("B7", res)
+
+ # ################ Mahalinobis 
+ using Main.MeansMahalinobis
+ arrGold = CuArray((onlyLungs))
+ arrAlgo = CuArray((onlyBladder))
+ sizz= size(onlyBladder)
+ sizz= size(onlyLungs)
+ 
+ args,threads ,blocks= MeansMahalinobis.prepareMahalinobisKernel(arrGold,arrAlgo,numberToLooFor)
+ mahalanobisResGlob=  MeansMahalinobis.calculateMalahlinobisDistance(arrGold,arrAlgo,args,threads ,blocks)
 
 
+ bench = @benchmark CUDA.@sync MeansMahalinobis.calculateMalahlinobisDistance(arrGold,arrAlgo,args,threads ,blocks)
+ res= Statistics.median(bench).time/1000000
+ worksheet.update("B11", res)
 
 # includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\aPrfofiling\\profilingProcessMaskData.jl")
  
@@ -146,7 +169,7 @@ bench
 # @benchmark toBench(data) setup=(data=clearFunction() )
 
 
-@benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
+# @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
 # @btime CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal) 
 #all 57 ms
 

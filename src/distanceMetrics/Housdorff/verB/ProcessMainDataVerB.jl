@@ -92,7 +92,7 @@ macro loadMainValues(mainArr,xMeta,yMeta,zMeta)
     # shmemblockData[threadIdxX(),threadIdxY(),2]= locArr #(bitDilatate(shmemblockData[threadIdxX(),threadIdxY(),1],locArr))
     
     #krowa
-    # @inbounds shmemblockData[threadIdxX(),threadIdxY(),2]= (@bitDilatate(shmemblockData[threadIdxX(),threadIdxY(),1]))
+    # @inbounds shmemblockData[threadIdxX(),threadIdxY(),2]= (llvmPassOnes(shmemblockData[threadIdxX(),threadIdxY(),1]))
 
 
 
@@ -171,9 +171,10 @@ macro dilatateHelper(predicate, paddingPos, padingVariedA, padingVariedB,normalX
      else
   
     # @inbounds shmemblockData[threadIdxX(),threadIdxY(),2] = @bitPassOnes(shmemblockData[threadIdxX(),threadIdxY(),2],shmemblockData[threadIdxX()+($normalXChange),threadIdxY()+($normalYchange),1])
-    @inbounds shmemblockData[threadIdxX(),threadIdxY(),2] = bitPassOnesUINt(shmemblockData[threadIdxX(),threadIdxY(),2],shmemblockData[threadIdxX()+($normalXChange),threadIdxY()+($normalYchange),1])
-    
-    #CUDA.@cuprint "aaa $(shmemblockData[threadIdxX()+($normalXChange),threadIdxY()+($normalYchange),1])  "
+    #@inbounds shmemblockData[threadIdxX(),threadIdxY(),2] = 
+   
+   # @inbounds shmemblockData[threadIdxX(),threadIdxY(),2] =llvmPassOnes(shmemblockData[threadIdxX(),threadIdxY(),2],shmemblockData[threadIdxX()+($normalXChange),threadIdxY()+($normalYchange),1])
+
     
     # @inbounds shmemblockData[threadIdxX(),threadIdxY(),2] = shmemblockData[threadIdxX(),threadIdxY(),2]+ shmemblockData[threadIdxX()+($normalXChange),threadIdxY()+($normalYchange),1]
     # @inbounds shmemblockData[threadIdxX(),threadIdxY(),2] =reinterpret(UInt32,( Int32(@bitPassOnes(shmemblockData[threadIdxX(),threadIdxY(),2],shmemblockData[threadIdxX()+($normalXChange),threadIdxY()+($normalYchange),1]))))

@@ -56,7 +56,7 @@ target = UInt32(0)
 @setBitTo1UINt32(source,1)
 @setBitTo1UINt32(source,5)
 @setBitTo1UINt32(target,4)
-new =bitPassOnesUINt(source,target)
+new =llvmPassOnes(source,target)
 
 @test isBit1AtPos(new,1)
 @test !isBit1AtPos(new,2)
@@ -70,6 +70,21 @@ isBit1AtPos(nnn,1)
 
 
 
+function llvmPassOnesBB(source::UInt32,target::UInt32,array::Vector{UInt32})::UInt32
+    Base.llvmcall("""
+    %3 = or i32 %0, %1
+    %2[1]= %3
+    ret i32 %3""", UInt32, Tuple{UInt32,UInt32}, source, target)
+end
+
+
+arr = [UInt32(1), UInt32(2)]
+source = UInt32(0)
+target = UInt32(0)
+@setBitTo1UINt32(source,1)
+@setBitTo1UINt32(source,5)
+@setBitTo1UINt32(target,4)
+new =llvmPassOnesBB(source,target,arr)
 
 # using Revise, Parameters, Logging, Test
 # using CUDA
