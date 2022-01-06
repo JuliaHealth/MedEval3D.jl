@@ -17,7 +17,7 @@ Toexperiment
 
 """
 module FirstHouseDorffPass
-using CUDA, Main.CUDAGpuUtils, Logging,StaticArrays
+using CUDA, ..CUDAGpuUtils, Logging,StaticArrays
 
 """
 prepare first pass of Housedorff kernel run

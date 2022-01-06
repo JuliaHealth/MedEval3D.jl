@@ -4,8 +4,8 @@ collecting all needed  functions required to calculate Housdorff distance
 """
 module Housdorff
 using CUDA
-using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
-using Main.BitWiseUtils,Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils,Main.ResultListUtils,Main.PrepareArrtoBool, Main.MainLoopKernel,Main.ScanForDuplicates
+using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
+using ..BitWiseUtils,..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils,..ResultListUtils,..PrepareArrtoBool, ..MainLoopKernel,..ScanForDuplicates
 export get_shmemMainKernel, getHousedorffDistance,boolKernelLoad,mainKernelLoad,get_shmemMainKernel,get_shmemBoolKernel,preparehousedorfKernel
 """
 calculate housedorff distance of given arrays with given robustness percentage

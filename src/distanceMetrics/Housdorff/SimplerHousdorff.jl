@@ -91,7 +91,7 @@ To maximize occupancy the blocks will concurrently work on both passes at once -
 
 """
 module SimplerHousdorff
-using CUDA, Main.CUDAGpuUtils, Logging
+using CUDA, ..CUDAGpuUtils, Logging
 """
 Metadata
 divide array into blocks and assigns the metadata for each 

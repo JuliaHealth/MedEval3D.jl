@@ -15,7 +15,7 @@ mainActiveCounterNow,mainActiveCounterNext - at first main queue will have only 
             call it the end and finish kernel       
 """
 module ScheduleBlocksHD
-using CUDA, Main.CUDAGpuUtils, Logging,StaticArrays
+using CUDA, ..CUDAGpuUtils, Logging,StaticArrays
 
 
 

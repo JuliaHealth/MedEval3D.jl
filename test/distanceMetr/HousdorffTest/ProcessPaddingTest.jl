@@ -8,10 +8,10 @@
 # includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\mainHouseDorffKernel\\ProcessMainData.jl")
 # includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\GPUtestUtils.jl")
 
-# using Main.CUDAGpuUtils, Main.HFUtils,Cthulhu
+# using ..CUDAGpuUtils, ..HFUtils,Cthulhu
 
 
-# using Main.CUDAGpuUtils, Main.HFUtils,Cthulhu
+# using ..CUDAGpuUtils, ..HFUtils,Cthulhu
 
 # #@testset "processPaddingTest" begin 
 
@@ -125,8 +125,8 @@
 using Revise, Parameters, Logging, Test
 using CUDA
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
-using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
-using Main.BitWiseUtils,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
+using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
+using ..BitWiseUtils,..ResultListUtils, ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils, ..ScanForDuplicates
 
 
 mainArrGPU= CUDA.zeros(UInt32, 50,50,20)
@@ -231,8 +231,8 @@ end
 # using Revise, Parameters, Logging, Test
 # using CUDA
 # includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
-# using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
-# using Main.BitWiseUtils,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
+# using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
+# using ..BitWiseUtils,..ResultListUtils, ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils, ..ScanForDuplicates
 
 
 
@@ -328,8 +328,8 @@ end
 using Revise, Parameters, Logging, Test
 using CUDA
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
-using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
-using Main.Housdorff,Main.ProcessMainDataVerB,Main.MainLoopKernel,Main.BitWiseUtils,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
+using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
+using ..Housdorff,..ProcessMainDataVerB,..MainLoopKernel,..BitWiseUtils,..ResultListUtils, ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils, ..ScanForDuplicates
 
 mainArr= CUDA.zeros(UInt32, 300,300,10)
 refArr= CUDA.zeros(UInt8, 300,300,320)

@@ -8,8 +8,8 @@ using CUDA
 # includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
 
-#using Main.BasicPreds, Main.CUDAGpuUtils , Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils, Main.CUDAAtomicUtils
-using Main.CUDAAtomicUtils
+#using ..BasicPreds, ..CUDAGpuUtils , ..IterationUtils,..ReductionUtils , ..MemoryUtils, ..CUDAAtomicUtils
+using ..CUDAAtomicUtils
 
 result = CUDA.zeros(1)
 function testAddAtomicKernel(result)

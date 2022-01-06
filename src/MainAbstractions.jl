@@ -4,10 +4,10 @@ making it possible to invoke metrics in simple way
 module MainAbstractions
 using CUDA 
 using Revise, Parameters, Logging, Test
-using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils, Main.BasicStructs
-using Shuffle,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
-using Main.MainOverlap, Main.RandIndex , Main.ProbabilisticMetrics , Main.VolumeMetric ,Main.InformationTheorhetic
-using Main.CUDAAtomicUtils, Main.TpfpfnKernel, Main.InterClassCorrKernel,Main.MeansMahalinobis
+using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils, ..BasicStructs
+using Shuffle,..ResultListUtils, ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils, ..ScanForDuplicates
+using ..MainOverlap, ..RandIndex , ..ProbabilisticMetrics , ..VolumeMetric ,..InformationTheorhetic
+using ..CUDAAtomicUtils, ..TpfpfnKernel, ..InterClassCorrKernel,..MeansMahalinobis
 export prepareMetrics, calcMetricGlobal
 """
 function created to prepare  kernel launch - required data is summarized in the ConfigurtationStruct

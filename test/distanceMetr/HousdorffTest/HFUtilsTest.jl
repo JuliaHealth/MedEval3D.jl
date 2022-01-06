@@ -5,11 +5,11 @@ using  Test, Revise
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\mainHouseDorffKernel\\HFUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\GPUtestUtils.jl")
-using Main.HFUtils
-using Main.CUDAGpuUtils,Cthulhu,BenchmarkTools , CUDA, StaticArrays
+using ..HFUtils
+using ..CUDAGpuUtils,Cthulhu,BenchmarkTools , CUDA, StaticArrays
 
-using Main.HFUtils
-using Main.CUDAGpuUtils,Cthulhu,BenchmarkTools , CUDA, StaticArrays
+using ..HFUtils
+using ..CUDAGpuUtils,Cthulhu,BenchmarkTools , CUDA, StaticArrays
 
 
 @testset "clearMainShmem" begin 

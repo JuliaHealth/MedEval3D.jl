@@ -201,10 +201,10 @@ end
 # includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\GPUtestUtils.jl")
 
 
-# using Main.CUDAGpuUtils, Main.HFUtils,Cthulhu
+# using ..CUDAGpuUtils, ..HFUtils,Cthulhu
 
 
-# using Main.CUDAGpuUtils, Main.HFUtils,Cthulhu
+# using ..CUDAGpuUtils, ..HFUtils,Cthulhu
 
 
 # @testset "executeDataIterFirstPass" begin 
@@ -324,7 +324,7 @@ end
 # # # includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\mainHouseDorffKernel\\ProcessMainData.jl")
 # # # includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\GPUtestUtils.jl")
 
-# # # using Main.HFUtils, Main.ProcessMainData,CUDA,Main.CUDAGpuUtils,StaticArrays
+# # # using ..HFUtils, ..ProcessMainData,CUDA,..CUDAGpuUtils,StaticArrays
 
 
 # # # function wrapForProfile()

@@ -3,8 +3,8 @@
 initializations of Housedorff kernelalso clear up functions
 """
 module HKernelInits
-using CUDA, Main.CUDAGpuUtils, Logging,StaticArrays
-using Main.HFUtils
+using CUDA, ..CUDAGpuUtils, Logging,StaticArrays
+using ..HFUtils
 export memoryAllocations,clearMainShmem,clearPadding,clearHalfOfPadding
 
 """

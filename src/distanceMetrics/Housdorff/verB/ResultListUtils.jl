@@ -5,7 +5,7 @@
 utility functions helping managing result list 
 """
 module ResultListUtils
-using CUDA,Main.MetaDataUtils, Main.CUDAAtomicUtils
+using CUDA,..MetaDataUtils, ..CUDAAtomicUtils
 export getResLinIndex,allocateResultLists,@addResult
 
 """

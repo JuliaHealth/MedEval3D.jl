@@ -4,11 +4,11 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\m
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\mainHouseDorffKernel\\ProcessMainData.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\GPUtestUtils.jl")
 
-using Main.HFUtils
-using Main.CUDAGpuUtils,BenchmarkTools , CUDA, StaticArrays
+using ..HFUtils
+using ..CUDAGpuUtils,BenchmarkTools , CUDA, StaticArrays
 
-using Main.HFUtils, Main.ProcessMainData,CUDA,Main.CUDAGpuUtils,StaticArrays
-using Main.CUDAGpuUtils,BenchmarkTools , CUDA, StaticArrays
+using ..HFUtils, ..ProcessMainData,CUDA,..CUDAGpuUtils,StaticArrays
+using ..CUDAGpuUtils,BenchmarkTools , CUDA, StaticArrays
 
 
 

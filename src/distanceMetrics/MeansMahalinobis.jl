@@ -10,7 +10,7 @@ varianceZGlobal - should be reduced atomically in the end with all other variabl
 """
 
 module MeansMahalinobis
-using Main.CUDAGpuUtils, CUDA, Main.IterationUtils, Main.ReductionUtils, Main.MemoryUtils
+using ..CUDAGpuUtils, CUDA, ..IterationUtils, ..ReductionUtils, ..MemoryUtils
 export meansMahalinobisKernel,prepareMahalinobisKernel
 
 

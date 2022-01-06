@@ -24,7 +24,7 @@ we synchronize
 """
 
 module  MetadataAnalyzePass     
-using CUDA, Logging,Main.CUDAGpuUtils, Main.ResultListUtils,Main.WorkQueueUtils,Main.ScanForDuplicates, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils, Main.ScanForDuplicates
+using CUDA, Logging,..CUDAGpuUtils, ..ResultListUtils,..WorkQueueUtils,..ScanForDuplicates, Logging,StaticArrays, ..IterationUtils, ..ReductionUtils, ..CUDAAtomicUtils,..MetaDataUtils, ..ScanForDuplicates
 export @metaDataWarpIter, @loadCounters,@analyzeMetadataFirstPass, @checkIsActiveOrFullOr,@setIsToBeActive
 
 

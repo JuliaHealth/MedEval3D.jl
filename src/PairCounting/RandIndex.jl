@@ -1,6 +1,6 @@
 module RandIndex
     
-using Main.BasicStructs, Parameters, Setfield
+using ..BasicStructs, Parameters, Setfield
 
 
 """

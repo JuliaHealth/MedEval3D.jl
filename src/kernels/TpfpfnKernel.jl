@@ -6,8 +6,8 @@ using synergism described by Taha et al. this will enable later fast calculation
 module TpfpfnKernel
 export getTpfpfnData,prepareForconfusionTableMetricsNoSliceWise,@iterateLinearlyForTPTF,addToTp,addToFp,addToFn
 
-using CUDA,Main.ReductionUtils, Main.CUDAGpuUtils ,Main.IterationUtils , Main.MemoryUtils,Main.CUDAAtomicUtils, StaticArrays
-using Main.MainOverlap, Main.RandIndex, Main.ProbabilisticMetrics, Main.VolumeMetric, Main.InformationTheorhetic
+using CUDA,..ReductionUtils, ..CUDAGpuUtils ,..IterationUtils , ..MemoryUtils,..CUDAAtomicUtils, StaticArrays
+using ..MainOverlap, ..RandIndex, ..ProbabilisticMetrics, ..VolumeMetric, ..InformationTheorhetic
 
 
 """

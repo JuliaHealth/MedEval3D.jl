@@ -3,9 +3,9 @@
 utility functions for Housedorff kernel
 """
 module HFUtils
-using Main.CUDAGpuUtils, Logging,StaticArrays
- using CUDA, Main.BasicStructs, Logging
- using Main.CUDAGpuUtils ,Main.IterationUtils
+using ..CUDAGpuUtils, Logging,StaticArrays
+ using CUDA, ..BasicStructs, Logging
+ using ..CUDAGpuUtils ,..IterationUtils
 export    clearLocArr,clearMainShmem,clearPadding,getIndexOfQueue
 export @iter3dOuter,@iterDataBlock , calculateLoopsIter, @iterDataBlockZdeepest
 

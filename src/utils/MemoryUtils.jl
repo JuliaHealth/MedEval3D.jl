@@ -3,7 +3,7 @@
 some utilities for managing memory
 """
 module MemoryUtils
-using Main.CUDAGpuUtils, CUDA
+using ..CUDAGpuUtils, CUDA
 export clearSharedMemWarpLong
 """
 In case we have 32 length shared memory we can clear it using given warps

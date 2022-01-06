@@ -2,7 +2,7 @@
 process padding in shared memory - where we have results that may affect other blocks
 """
 module ProcessPadding
-using CUDA, Main.CUDAGpuUtils, Logging
+using CUDA, ..CUDAGpuUtils, Logging
 
 """
 Analizing all padding planes - so we need properly pass mainly x,y,z indexes ...

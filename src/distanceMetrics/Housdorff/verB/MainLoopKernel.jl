@@ -1,6 +1,6 @@
 module MainLoopKernel
-using CUDA, Logging,Main.CUDAGpuUtils, Main.ResultListUtils,Main.WorkQueueUtils,Main.ScanForDuplicates, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils
-using Main.BitWiseUtils,Main.MetadataAnalyzePass, Main.ScanForDuplicates, Main.ProcessMainDataVerB
+using CUDA, Logging,..CUDAGpuUtils, ..ResultListUtils,..WorkQueueUtils,..ScanForDuplicates, Logging,StaticArrays, ..IterationUtils, ..ReductionUtils, ..CUDAAtomicUtils,..MetaDataUtils
+using ..BitWiseUtils,..MetadataAnalyzePass, ..ScanForDuplicates, ..ProcessMainDataVerB
 export mainKernelLoad,@mainLoopKernelAllocations,getSmallGPUForHousedorff,getBigGPUForHousedorffAfterBoolKernel,@loadDataAtTheBegOfDilatationStep,@mainLoopKernel, @iterateOverWorkQueue,@mainLoop,@mainLoopKernelAllocations,@clearBeforeNextDilatation
 
 

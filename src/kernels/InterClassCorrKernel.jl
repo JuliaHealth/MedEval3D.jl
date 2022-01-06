@@ -9,7 +9,7 @@ calculating intercalss correlation
 """
 module InterClassCorrKernel
 
-using CUDA, Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
+using CUDA, ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 
 export prepareInterClassCorrKernel,calculateInterclassCorr
 
@@ -34,7 +34,7 @@ function prepareInterClassCorrKernel()
      ,iterLoop,pixPerSlice,totalNumbOfVoxels
      ,numberToLooFor )
   get_shmem(threads) = 4*33+3  #the same for both kernels
-  threads,blocks =getThreadsAndBlocksNumbForKernel(get_shmem, kernel_InterClassCorr,(CUDA.zeros(2,2,2),CUDA.zeros(2,2,2),argsMain...))
+  threads,blocks =getThreadsAndBlocksNumbForKernel(get_shmem, kernel_InterClassCorr,(CUDA.zeros(2,2,2),CUDA.zeros(2,2,2),args...))
   totalNumbOfVoxels= (mainArrDims[1]*mainArrDims[2]*mainArrDims[3])
   pixPerSlice= cld(totalNumbOfVoxels,blocks)
   iterLoop = UInt32(fld(pixPerSlice, threads[1]*threads[2]))
@@ -77,7 +77,7 @@ function calculateInterclassCorr(flatGold
  ,iterLoop,pixPerSlice,totalNumbOfVoxels
  ,numberToLooFor )           
 
-@cuda threads=threads blocks=blocks cooperative = true kernel_InterClassCorr(flatGold,flatSegm,argsMain...)
+@cuda threads=threads blocks=blocks cooperative = true kernel_InterClassCorr(flatGold,flatSegm,args...)
 
   # println("grandMean[1] $(grandMean[1])  \n")
 # @cuda threads=threads blocks=blocks  kernel_InterClassCorr(flatGold  ,flatSegm,args... )
@@ -270,7 +270,7 @@ end
 # end
   
 # @cuda threads=threadsMean  blocks=blocksMean  kernel_InterClassCorr_means(goldGPU,segmGPU,argsMean...)
-# @cuda threads=threadsMain  blocks=blocksMain  kernel_InterClassCorr(goldGPU,segmGPU,argsMain...)
+# @cuda threads=threadsMain  blocks=blocksMain  kernel_InterClassCorr(goldGPU,segmGPU,args....)
 
 #   print("before correction ssw $(argsMain[4][1]) ssb $(argsMain[5][1])")
 

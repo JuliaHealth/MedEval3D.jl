@@ -3,7 +3,7 @@ It holds macos and functions usefull for reductions of 3 dimensional data
 
 """
 module ReductionUtils
-using Main.CUDAGpuUtils, CUDA
+using ..CUDAGpuUtils, CUDA
 export @redWitAct, @addAtomic,@addNonAtomic, @redOnlyStepOne,@redOnlyStepThree, @getFromLane
 """
 adapted from https://discourse.julialang.org/t/macro-magic-looping-over-varargs-printing-values-and-symbols/3025

@@ -29,7 +29,7 @@ not finished experiments on using WMMA tensor cores
 # """
 # module Mahalanobis
 # export WMMAkernel
-# using CUDA,Main.IterationUtils, Main.ReductionUtils, Main.MemoryUtils
+# using CUDA,..IterationUtils, ..ReductionUtils, ..MemoryUtils
 # """
 
 # First we upload means meanx, mean y and mean z to shared memory 

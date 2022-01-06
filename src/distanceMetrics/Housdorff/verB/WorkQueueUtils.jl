@@ -1,5 +1,5 @@
 module WorkQueueUtils
-using  Main.BitWiseUtils,CUDA, Logging,Main.CUDAGpuUtils, Main.ResultListUtils,Main.WorkQueueUtils, Logging,StaticArrays, Main.IterationUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils, Main.BitWiseUtils
+using  ..BitWiseUtils,CUDA, Logging,..CUDAGpuUtils, ..ResultListUtils,..WorkQueueUtils, Logging,StaticArrays, ..IterationUtils, ..ReductionUtils, ..CUDAAtomicUtils,..MetaDataUtils, ..BitWiseUtils
 export allocateWorkQueue,appendToWorkQueue,@appendToWorkQueueBasic,@appendToLocalWorkQueue,@appendToGlobalWorkQueue
 """
 allocate memory for  work queues

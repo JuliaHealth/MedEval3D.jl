@@ -10,7 +10,7 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
 #includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/PrepareArrtoBool.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/MetaDataUtils.jl")
-using Main.PrepareArrtoBool, Main.CUDAGpuUtils, Main.PrepareArrtoBool, Main.CUDAAtomicUtils, Main.MetaDataUtils
+using ..PrepareArrtoBool, ..CUDAGpuUtils, ..PrepareArrtoBool, ..CUDAAtomicUtils, ..MetaDataUtils
 using CUDA
 
 

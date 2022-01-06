@@ -2,7 +2,7 @@
 this kernel will prepare da
 """
 module PrepareArrtoBool
-using CUDA, Logging,Main.CUDAGpuUtils, Logging,StaticArrays, Main.IterationUtils,Main.BitWiseUtils, Main.ReductionUtils, Main.CUDAAtomicUtils,Main.MetaDataUtils,Main.HFUtils
+using CUDA, Logging,..CUDAGpuUtils, Logging,StaticArrays, ..IterationUtils,..BitWiseUtils, ..ReductionUtils, ..CUDAAtomicUtils,..MetaDataUtils,..HFUtils
 export @planeIter,getLargeForBoolKernel,getSmallForBoolKernel,@getBoolCubeKernel,@localAllocations,@uploadLocalfpFNCounters,@uploadMinMaxesToShmem,@uploadDataToMetaData,@finalGlobalSet
 
 

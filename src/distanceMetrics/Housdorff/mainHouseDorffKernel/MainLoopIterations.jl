@@ -34,8 +34,8 @@ as we will looop here intensively and after each iteration we will need to synch
     fp,fn - amount of false positives and false negatives - used in order to be able to get early termination
                     """
 module MainLoopIterations
-using CUDA, Main.CUDAGpuUtils, Logging,StaticArrays
-using Main.HFUtils
+using CUDA, ..CUDAGpuUtils, Logging,StaticArrays
+using ..HFUtils
 
 function mainLoopIterationsKernel(reducedArrays
                                     ,metaData

@@ -3,7 +3,7 @@
 after all processing we need to establish weather the mask is full  (in case of first iteration also is it empty)
 """
 module IsBlockToStayActive
-using CUDA, Main.CUDAGpuUtils, Logging,StaticArrays,Main.HFUtils
+using CUDA, ..CUDAGpuUtils, Logging,StaticArrays,..HFUtils
 export isActiveForFirstPass, isActiveForNormalPass
 """
 We check is block still active in first pass - we need to check is empty or full and set the metadata

@@ -3,11 +3,11 @@
 using Revise, Parameters, Logging, Test
 using CUDA
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
-using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils, Main.BasicStructs
-using Shuffle,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
-using Main.MainOverlap, Main.RandIndex , Main.ProbabilisticMetrics , Main.VolumeMetric ,Main.InformationTheorhetic
-using Main.CUDAAtomicUtils, Main.TpfpfnKernel, Main.InterClassCorrKernel,Main.MeansMahalinobis
-using Main.MainAbstractions
+using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils, ..BasicStructs
+using Shuffle,..ResultListUtils, ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils, ..ScanForDuplicates
+using ..MainOverlap, ..RandIndex , ..ProbabilisticMetrics , ..VolumeMetric ,..InformationTheorhetic
+using ..CUDAAtomicUtils, ..TpfpfnKernel, ..InterClassCorrKernel,..MeansMahalinobis
+using ..MainAbstractions
 
 using Conda
 using PyCall
@@ -121,7 +121,7 @@ res
 
 
 # # ################ Mahalinobis 
-# using Main.MeansMahalinobis
+# using ..MeansMahalinobis
 # args,threads ,blocks= MeansMahalinobis.prepareMahalinobisKernel()
 # mahalanobisResGlob=  MeansMahalinobis.calculateMalahlinobisDistance(arrGold,arrAlgo,args,threads ,blocks,1)
 # goldS3d= CuArray(goldS);
@@ -313,7 +313,7 @@ res
 # tn = 5
 
 
-# using Main.RandIndex
+# using ..RandIndex
 
 # MainOverlap.dice(tp,fp, fn)
 # MainOverlap.jaccard(tp,fp, fn)

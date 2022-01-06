@@ -4,7 +4,7 @@ based on  https://github.com/Visceral-Project/EvaluateSegmentation/blob/master/s
 
 """
 module VolumeMetric
-using Main.BasicStructs, Parameters, Setfield
+using ..BasicStructs, Parameters, Setfield
 
 
 """

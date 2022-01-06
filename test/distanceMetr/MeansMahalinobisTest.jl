@@ -7,7 +7,7 @@ includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\MeansMahalinobis.jl")
 
-using  Main.CUDAGpuUtils , Main.MeansMahalinobis, Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils
+using  ..CUDAGpuUtils , ..MeansMahalinobis, ..IterationUtils,..ReductionUtils , ..MemoryUtils
 nx=512 ; ny=512 ; nz=317
 #first we initialize the metrics on CPU so we will modify them easier
 goldBoolCPU= zeros(Float32,nx,ny,nz); #mimicks gold standard mask

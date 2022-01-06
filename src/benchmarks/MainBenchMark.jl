@@ -3,15 +3,15 @@ using HDF5
 using CUDA ,BenchmarkTools
 using Revise, Parameters, Logging, Test
 includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
-using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils, Main.BasicStructs
-using Shuffle,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
-using Main.MainOverlap, Main.RandIndex , Main.ProbabilisticMetrics , Main.VolumeMetric ,Main.InformationTheorhetic
-using Main.CUDAAtomicUtils, Main.TpfpfnKernel, Main.InterClassCorrKernel,Main.MeansMahalinobis
+using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils, ..BasicStructs
+using Shuffle,..ResultListUtils, ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils, ..ScanForDuplicates
+using ..MainOverlap, ..RandIndex , ..ProbabilisticMetrics , ..VolumeMetric ,..InformationTheorhetic
+using ..CUDAAtomicUtils, ..TpfpfnKernel, ..InterClassCorrKernel,..MeansMahalinobis
 using Conda
 using PyCall
 using Pkg
 using Statistics
-using BenchmarkTools, Main.MainAbstractions
+using BenchmarkTools, ..MainAbstractions
 
 #!!!!!!!!!!!!! below important if we do not set google sheets we need to set it as false
 isTobeSavedToGoogle= true
@@ -135,7 +135,7 @@ field=Symbol("dice")
 
 
 
-using Main.MeansMahalinobis
+using ..MeansMahalinobis
 arrGold = CuArray((onlyLungs))
 arrAlgo = CuArray((onlyBladder))
 

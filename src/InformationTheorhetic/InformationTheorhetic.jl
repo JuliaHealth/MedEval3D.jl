@@ -2,7 +2,7 @@
 based on  https://github.com/Visceral-Project/EvaluateSegmentation/blob/master/source/MutualInformationMetric.h
 """
 module InformationTheorhetic
-using Main.BasicStructs, Parameters, Setfield, CUDA
+using ..BasicStructs, Parameters, Setfield, CUDA
 
 """
 calculate mutual information  based on precalulated constants
