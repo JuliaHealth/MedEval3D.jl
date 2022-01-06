@@ -2,6 +2,29 @@
 
 Project with set of CUDA accelerated  medical segmentation metrics.Mathemathical basis for metrics calculations are based on the work of the Taha et al. [1].
 
+# Example
+
+Example for calculating Mahalinobis distance
+```
+arrGold = CUDA.ones(3,3,3)
+arrAlgoCPU = ones(3,3,3)
+arrAlgoCPU[1,1,1]=0
+arrAlgoCPU[3,3,3]=0
+arrAlgoCPU[3,2,3]=0
+arrAlgoCPU[3,2,2]=0
+arrAlgo =CuArray(arrAlgoCPU) 
+
+conf= ConfigurtationStruct(md=true)
+numberToLookFor = UInt8(1)
+
+preparedDict=MainAbstractions.prepareMetrics(conf)
+
+res= calcMetricGlobal(preparedDict,conf,arrGold,arrAlgo,numberToLookFor)
+res.md # will give 0.127
+
+```
+# Details
+
 Programming model is based on the two phase metric evaluation. 
 
 First phase is invoked as a preparation step in order to calculate variables that are constant across kernel given image array dimensions. Those constants include thread block dimensions and number of required thread blocks to optimize occupancy using Occupancy API. Other constants are mainly related to precalculation of loop sizes and appropriate GPU memory allocations.  Preparation step is designed to be invoked once for each dataset and can be cached and reused given image array size and GPU hardware will not change.
@@ -38,27 +61,7 @@ res = calcMetricGlobal(preparedDict,conf,arrGold,arrAlgo,numberToLookFor))
 Now we access the Result using the field name of the ResultMetrics struct (reference in the end)
 
 
-# Example
 
-Example for calculating Mahalinobis distance
-```
-arrGold = CUDA.ones(3,3,3)
-arrAlgoCPU = ones(3,3,3)
-arrAlgoCPU[1,1,1]=0
-arrAlgoCPU[3,3,3]=0
-arrAlgoCPU[3,2,3]=0
-arrAlgoCPU[3,2,2]=0
-arrAlgo =CuArray(arrAlgoCPU) 
-
-conf= ConfigurtationStruct(md=true)
-numberToLookFor = UInt8(1)
-
-preparedDict=MainAbstractions.prepareMetrics(conf)
-
-res= calcMetricGlobal(preparedDict,conf,arrGold,arrAlgo,numberToLookFor)
-res.md # will give 0.127
-
-```
 
 
 
