@@ -4,7 +4,7 @@ using DrWatson
 module based on https://github.com/Visceral-Project/EvaluateSegmentation/blob/master/source/ContingencyTable.h
 """
 module ContTable
-using ..BasicStructs, Parameters, Setfield
+using ..BasicStructs, Parameters
 
 """
 giving set of constant associated with  the image that will be usefull for calculating 

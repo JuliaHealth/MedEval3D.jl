@@ -9,7 +9,7 @@ calculating intercalss correlation
 """
 module InterClassCorrKernel
 
-using CUDA, Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUtils,Main.CUDAAtomicUtils
+using CUDA, ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 
 export prepareInterClassCorrKernel,calculateInterclassCorr
 

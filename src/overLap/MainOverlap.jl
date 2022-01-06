@@ -6,7 +6,7 @@ https://github.com/Visceral-Project/EvaluateSegmentation/blob/master/source/Jacc
 https://github.com/Visceral-Project/EvaluateSegmentation/blob/master/source/GlobalConsistencyError.h
 """
 module MainOverlap
-using ..BasicStructs, Parameters, Setfield
+using ..BasicStructs, Parameters
 
 export calculateBAsicOverlap, dice, jaccard, gce
 

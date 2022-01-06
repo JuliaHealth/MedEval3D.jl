@@ -1,6 +1,6 @@
 
 module ProbabilisticMetrics
-using ..BasicStructs, Parameters, Setfield
+using ..BasicStructs, Parameters
  export calculateCohenCappa
 
 # """
