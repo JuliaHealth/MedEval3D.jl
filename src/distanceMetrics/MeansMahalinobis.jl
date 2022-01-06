@@ -20,13 +20,13 @@ export meansMahalinobisKernel,prepareMahalinobisKernel
 prepares all equired arguments and gives back the  arguments and thread and block configuration 
 for calculation of Mahalanobis distance - the latter is based on the occupancy API
 """
-function prepareMahalinobisKernel(goldGPU,segmGPU,numberToLooFor)
+function prepareMahalinobisKernel()
    
     
-    
+    numberToLooFor=1
     #we will fill it after we work with launch configuration
     loopXdim = UInt32(1);loopYdim = UInt32(1) ;loopZdim = UInt32(1) ;
-    sizz = size(segmGPU);maxX = UInt32(sizz[1]);maxY = UInt32(sizz[2]);maxZ = UInt32(sizz[3])
+    sizz = (2,2,2);maxX = UInt32(sizz[1]);maxY = UInt32(sizz[2]);maxZ = UInt32(sizz[3])
     #gold
     totalXGold= CuArray([0.0]);
     totalYGold= CuArray([0.0]);
@@ -53,8 +53,7 @@ function prepareMahalinobisKernel(goldGPU,segmGPU,numberToLooFor)
     covarianceGlobal= CUDA.zeros(Float32,12,1);
 
     mahalanobisResGlobal= CUDA.zeros(1);
-    # mahalanobisResSliceWise= CUDA.zeros(sizz[3]+1);
-    #mahalanobisResSliceWise= CUDA.zeros(sizz[3]);
+
 
     args = (numberToLooFor
     ,loopYdim,loopXdim,loopZdim
@@ -67,15 +66,14 @@ function prepareMahalinobisKernel(goldGPU,segmGPU,numberToLooFor)
         ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
         ,mahalanobisResGlobal
         #, mahalanobisResSliceWise
-    
     )
         
         
         get_shmem(threads) = (sizeof(UInt32)*3*4)
     
-    threads ,blocks  = getThreadsAndBlocksNumbForKernel(get_shmem,meansMahalinobisKernel,(goldGPU,segmGPU,args...))
+    threads ,blocks  = getThreadsAndBlocksNumbForKernel(get_shmem,meansMahalinobisKernel,(CUDA.zeros(2,2,2),CUDA.zeros(2,2,2),args...))
 
-            loopXdim = UInt32(fld(maxX, threads[1]))
+        loopXdim = UInt32(fld(maxX, threads[1]))
         loopYdim = UInt32(fld(maxY, threads[2])) 
         loopZdim = UInt32(fld(maxZ,blocks )) 
         
@@ -105,15 +103,41 @@ end
 executed after prepareMahalinobisKernel - will execute on given arrays 
     and return the Mahalinobis distance between gold standard mask and the result of segmentation
 """
-function calculateMalahlinobisDistance(goldGPU,segmGPU,args,threads ,blocks)
+function calculateMalahlinobisDistance(goldGPU,segmGPU,args,threads ,blocks,numberToLooFor)
 
 # setting main arays
 
 ##### setting to 0 all entries that require it    
 for i in 6:28    
     CUDA.fill!(args[i],0)
-end    
-    
+end 
+
+numbToLooFor,loopYdima,loopXdima,loopZdima,dims,totalXGold,totalYGold,totalZGold,totalCountGold,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,countPerZGold, countPerZSegm,varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm,mahalanobisResGlobal=args
+
+numberToLooFor
+sizz = size(goldGPU)
+
+maxX = UInt32(sizz[1]);maxY = UInt32(sizz[2]);maxZ = UInt32(sizz[3])
+loopXdim = UInt32(fld(maxX, threads[1]))
+loopYdim = UInt32(fld(maxY, threads[2]))
+loopZdim = UInt32(fld(maxZ,blocks )) 
+countPerZGold= CUDA.zeros(Float32,sizz[3]+1);
+countPerZSegm= CUDA.zeros(Float32,sizz[3]+1);
+# println( "loopXdim $(loopXdim) loopYdim $(loopYdim)  loopZdim $(loopZdim) maxX $(maxX) maxY $(maxY) maxZ $(maxZ) \n")
+args = (numberToLooFor
+,loopYdim,loopXdim,loopZdim
+,(maxX, maxY,maxZ)
+,totalXGold,totalYGold,totalZGold,totalCountGold
+,totalXSegm,totalYSegm,totalZSegm,totalCountSegm
+    ,countPerZGold, countPerZSegm,
+    #,covariancesSliceWiseGold, covariancesSliceWiseSegm,
+varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
+    ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
+    ,mahalanobisResGlobal
+    #, mahalanobisResSliceWise
+
+)
+
 @cuda cooperative=true threads=threads blocks=blocks meansMahalinobisKernel(goldGPU,segmGPU,args...)
 
 return  args[28][1]

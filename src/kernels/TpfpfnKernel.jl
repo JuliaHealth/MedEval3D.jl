@@ -4,7 +4,7 @@ true negatives, false positives and negatives par image and per slice
 using synergism described by Taha et al. this will enable later fast calculations of many other metrics
 """
 module TpfpfnKernel
-export getTpfpfnData,prepareForconfusionTableMetrics,@iterateLinearlyForTPTF,addToTp,addToFp,addToFn
+export getTpfpfnData,prepareForconfusionTableMetricsNoSliceWise,@iterateLinearlyForTPTF,addToTp,addToFp,addToFn
 
 using CUDA,Main.ReductionUtils, Main.CUDAGpuUtils ,Main.IterationUtils , Main.MemoryUtils,Main.CUDAAtomicUtils, StaticArrays
 using Main.MainOverlap, Main.RandIndex, Main.ProbabilisticMetrics, Main.VolumeMetric, Main.InformationTheorhetic
@@ -16,13 +16,14 @@ goldGPU , segmGPU - example of arrays of gold standard and algorithm output they
 numberToLooFor - number we will look for in the arrays
 conf - configuration struct telling which metrics exactly we want
 """
-function prepareForconfusionTableMetrics(goldGPU, segmGPU    ,numberToLooFor  ,conf)
+function prepareForconfusionTableMetricsNoSliceWise(conf)
     tp,tn,fp,fn= CUDA.zeros(UInt32,1),CUDA.zeros(UInt32,1),CUDA.zeros(UInt32,1),CUDA.zeros(UInt32,1)
-    mainArrDims= size(goldGPU)
+    mainArrDims= (2,2,2)
+    numberToLooFor=1
     # sliceMetricsTupl= (CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]) ,CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]),CUDA.zeros(mainArrDims[3]) )
- metricsTuplGlobal= zeros(Float64,11) #  (CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1)
-# ,CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1)
-# ,CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1) )#eleven entries
+    metricsTuplGlobal= zeros(Float64,11) #  (CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1)
+    #,CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1)
+    #,CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1),CUDA.zeros(1) )#eleven entries
     totalNumbOfVoxels= (mainArrDims[1]*mainArrDims[2]*mainArrDims[3])
     pixPerSlice = mainArrDims[1]*mainArrDims[2]
     iterLoop=5
@@ -33,9 +34,9 @@ function prepareForconfusionTableMetrics(goldGPU, segmGPU    ,numberToLooFor  ,c
    # ,metricsTuplGlobal
     ,conf)
     
-      get_shmem(threads) = 4*33  #the same for both kernels
+      get_shmem(threads) = 4*33 
   
-  threads,blocks = getThreadsAndBlocksNumbForKernel(get_shmem,getBlockTpFpFn,(goldGPU, segmGPU,args...))
+  threads,blocks = getThreadsAndBlocksNumbForKernel(get_shmem,getBlockTpFpFn,(CUDA.zeros(2,2,2), CUDA.zeros(2,2,2) ,args...))
     #corrections for loop x,y,z variables
     pixPerSlice= cld(totalNumbOfVoxels,blocks)
     iterLoop = UInt32(fld(pixPerSlice, threads[1]*threads[2]))
@@ -63,7 +64,7 @@ conf- adapted ConfigurtationStruct - used to pass information what metrics shoul
 """
 function getTpfpfnData!(goldGPU
     , segmGPU
-    ,args,threads,blocks,metricsTuplGlobal) where T
+    ,args,threads,blocks,metricsTuplGlobal,numberToLooFor,conf) where T
 
 for i in  1:4   
     CUDA.fill!(args[i],0)
@@ -73,10 +74,20 @@ for i in 1:length(metricsTuplGlobal)
     metricsTuplGlobal[i]=0
     #CUDA.fill!(args[11][i],0)
 end   
+mainArrDims= size(goldGPU)
+totalNumbOfVoxels= (mainArrDims[1]*mainArrDims[2]*mainArrDims[3])
+pixPerSlice= cld(totalNumbOfVoxels,blocks)
+iterLoop = UInt32(fld(pixPerSlice, threads[1]*threads[2]))
 
+args = (#sliceMetricsTupl,
+args[1],args[2],args[3],args[4]#tp,tn,fp,fn
+,mainArrDims,totalNumbOfVoxels,iterLoop,pixPerSlice
+,numberToLooFor#numberToLooFor
+# ,metricsTuplGlobal
+,conf)
 
 #get tp,fp,fna and slicewise results if required
-@cuda threads=threads blocks=blocks getBlockTpFpFn(goldGPU, segmGPU,args...) #args[8][3]  is number of slices ...
+@cuda threads=threads blocks=blocks getBlockTpFpFn(vec(goldGPU), vec(segmGPU),args...) #args[8][3]  is number of slices ...
 getMetricsCPU(args[1][1],args[3][1], args[4][1],(args[6]-(args[1][1] +args[3][1]+ args[4][1] )) ,metricsTuplGlobal,args[10],1 )
 return args
 end#getTpfpfnData
@@ -101,10 +112,10 @@ function getBlockTpFpFn(goldGPU#goldBoolGPU
         ,conf)
     
     shmemSum = @cuStaticSharedMem(UInt32, (33,3))  
-    #shmemblockData = @cuStaticSharedMem(UInt32,(32, 32 ,3))
-    locFn = UInt16(0)
-    locFp = UInt16(0)
-    locTp = UInt16(0)
+    shmemblockData = @cuStaticSharedMem(UInt32,(32, 32 ,3))
+    # locFn = UInt16(0)
+    # locFp = UInt16(0)
+    # locTp = UInt16(0)
     boolGold=false
     boolSegm=false
 
@@ -120,11 +131,11 @@ function getBlockTpFpFn(goldGPU#goldBoolGPU
         boolGold = goldGPU[i]==numberToLooFor  
         boolSegm = segmGPU[i]==numberToLooFor 
 
-        #    @inbounds  shmemblockData[threadIdxX(),threadIdxY(), (boolGold & boolSegm + boolSegm +1)]+=(boolGold | boolSegm)
+        @inbounds  shmemblockData[threadIdxX(),threadIdxY(), (boolGold & boolSegm + boolSegm +1)]+=(boolGold | boolSegm)
 
-        locTp= addToTp(boolGold,boolSegm,locTp )
-        locFp= addToFp(boolGold,boolSegm,locFp )
-        locFn= addToFn(boolGold,boolSegm,locFn )
+        # locTp= addToTp(boolGold,boolSegm,locTp )
+        # locFp= addToFp(boolGold,boolSegm,locFp )
+        # locFn= addToFn(boolGold,boolSegm,locFn )
 
          
         #    locArr[1]=boolGold    
@@ -132,9 +143,9 @@ function getBlockTpFpFn(goldGPU#goldBoolGPU
     end) 
 
    # tell what variables are to be reduced and by what operation
-    # @redWitAct(offsetIter,shmemSum, shmemblockData[threadIdxX(),threadIdxY(),1],+,    shmemblockData[threadIdxX(),threadIdxY(),2],+,     shmemblockData[threadIdxX(),threadIdxY(),3],+   )
+    @redWitAct(offsetIter,shmemSum, shmemblockData[threadIdxX(),threadIdxY(),1],+,    shmemblockData[threadIdxX(),threadIdxY(),2],+,     shmemblockData[threadIdxX(),threadIdxY(),3],+   )
     # @redWitAct(offsetIter,shmemSum, locArr[1],+,    locArr[2],+,     locArr[3],+   )
-    @redWitAct(offsetIter,shmemSum, locFn,+,   locFp,+,     locTp,+   )
+    #@redWitAct(offsetIter,shmemSum, locFn,+,   locFp,+,     locTp,+   )
     # @redWitAct(offsetIter,shmemSum, locFn,+)#,   locFp,+,     locTp,+   )
     sync_threads()
     @addAtomic(shmemSum, fn, fp,tp)
@@ -289,25 +300,47 @@ positionToUpdate - index at which we want to update the metric - in case of slic
 
 """
 function getMetrics(tp,fp, fn,tn,sliceMetricsTupl,conf,positionToUpdate   )
-@ifXY 1 7 if (conf.dice ) @inbounds sliceMetricsTupl[4][positionToUpdate]=   MainOverlap.dice(tp,fp, fn) end 
-@ifXY 1 8  if (conf.jaccard ) @inbounds sliceMetricsTupl[5][positionToUpdate]= MainOverlap.jaccard(tp,fp, fn) end 
-@ifXY 1 9  if (conf.gce ) @inbounds sliceMetricsTupl[6][positionToUpdate]= MainOverlap.gce(tn,tp,fp, fn) end 
-@ifXY 1 10 if (conf.randInd ) @inbounds sliceMetricsTupl[7][positionToUpdate]=  RandIndex.calculateAdjustedRandIndex(tn,tp,fp, fn) end 
-@ifXY 1 11 if (conf.kc ) @inbounds sliceMetricsTupl[8][positionToUpdate]=  ProbabilisticMetrics.calculateCohenCappa(tn,tp,fp, fn  ) end 
-@ifXY 1 12  if (conf.vol ) @inbounds sliceMetricsTupl[9][positionToUpdate]= VolumeMetric.getVolumMetric(tp,fp, fn ) end 
-@ifXY 1 13 if (conf.mi ) @inbounds sliceMetricsTupl[10][positionToUpdate]=   InformationTheorhetic.mutualInformationMetr(tn,tp,fp, fn) end 
-@ifXY 1 14 if (conf.vi ) @inbounds sliceMetricsTupl[11][positionToUpdate]=  InformationTheorhetic.variationOfInformation(tn,tp,fp, fn) end 
+# @ifXY 1 7 if (conf.dice ) @inbounds sliceMetricsTupl[4][positionToUpdate]=   MainOverlap.dice(tp,fp, fn) end 
+# @ifXY 1 8  if (conf.jaccard ) @inbounds sliceMetricsTupl[5][positionToUpdate]= MainOverlap.jaccard(tp,fp, fn) end 
+# @ifXY 1 9  if (conf.gce ) @inbounds sliceMetricsTupl[6][positionToUpdate]= MainOverlap.gce(tn,tp,fp, fn) end 
+# @ifXY 1 10 if (conf.randInd ) @inbounds sliceMetricsTupl[7][positionToUpdate]=  RandIndex.calculateAdjustedRandIndex(tn,tp,fp, fn) end 
+# @ifXY 1 11 if (conf.kc ) @inbounds sliceMetricsTupl[8][positionToUpdate]=  ProbabilisticMetrics.calculateCohenCappa(tn,tp,fp, fn  ) end 
+# @ifXY 1 12  if (conf.vol ) @inbounds sliceMetricsTupl[9][positionToUpdate]= VolumeMetric.getVolumMetric(tp,fp, fn ) end 
+# @ifXY 1 13 if (conf.mi ) @inbounds sliceMetricsTupl[10][positionToUpdate]=   InformationTheorhetic.mutualInformationMetr(tn,tp,fp, fn) end 
+# @ifXY 1 14 if (conf.vi ) @inbounds sliceMetricsTupl[11][positionToUpdate]=  InformationTheorhetic.variationOfInformation(tn,tp,fp, fn) end 
 
 end
 
 function getMetricsCPU(tp,fp, fn,tn,sliceMetricsTupl,conf,positionToUpdate   )
+    tnPrim= tn
+    # println( """
+    # tp $(tp)
+    # fp $(fp)
+    # fn $(fn)
+    # tn $(tn)
+    # dice $(MainOverlap.dice(tp,fp, fn)) 
+    # jaccard $(MainOverlap.jaccard(tp,fp, fn))
+    # gce $(MainOverlap.gce(tn,tp,fp, fn))
+    # rand $(RandIndex.calculateAdjustedRandIndex(tn,tp,fp, fn))
+    # kc $(ProbabilisticMetrics.calculateCohenCappa(tn,tp,fp, fn  ) )
+    # vol $(VolumeMetric.getVolumMetric(tp,fp, fn ))
+    # mi $(InformationTheorhetic.mutualInformationMetr(tn,tp,fp, fn))
+    # vi $(InformationTheorhetic.variationOfInformation(tn,tp,fp, fn))
+    # """)
     if (conf.dice ) @inbounds sliceMetricsTupl[4]=   MainOverlap.dice(tp,fp, fn) end 
-   if (conf.jaccard ) @inbounds sliceMetricsTupl[5]= MainOverlap.jaccard(tp,fp, fn) end 
+
+    if (conf.jaccard ) @inbounds sliceMetricsTupl[5]= MainOverlap.jaccard(tp,fp, fn) end 
+
     if (conf.gce ) @inbounds sliceMetricsTupl[6]= MainOverlap.gce(tn,tp,fp, fn) end 
-     if (conf.randInd ) @inbounds sliceMetricsTupl[7]=  RandIndex.calculateAdjustedRandIndex(tn,tp,fp, fn) end 
-     if (conf.kc ) @inbounds sliceMetricsTupl[8]=  ProbabilisticMetrics.calculateCohenCappa(tn,tp,fp, fn  ) end 
+
+    if (conf.randInd ) @inbounds sliceMetricsTupl[7]=  RandIndex.calculateAdjustedRandIndex(tn,tp,fp, fn) end 
+
+    if (conf.kc ) @inbounds sliceMetricsTupl[8]=  ProbabilisticMetrics.calculateCohenCappa(tn,tp,fp, fn  ) end 
+
     if (conf.vol ) @inbounds sliceMetricsTupl[9]= VolumeMetric.getVolumMetric(tp,fp, fn ) end 
-   if (conf.mi ) @inbounds sliceMetricsTupl[10]=   InformationTheorhetic.mutualInformationMetr(tn,tp,fp, fn) end 
+
+    if (conf.mi ) @inbounds sliceMetricsTupl[10]=   InformationTheorhetic.mutualInformationMetr(tnPrim,tp,fp, fn) end 
+
     if (conf.vi ) @inbounds sliceMetricsTupl[11]=  InformationTheorhetic.variationOfInformation(tn,tp,fp, fn) end 
     
     end

@@ -122,7 +122,7 @@ end
     conf = ConfigurtationStruct(trues(12)...)
     numberToLooFor = UInt8(1)
     
-    args,threads,blocks,metricsTuplGlobal= TpfpfnKernel.prepareForconfusionTableMetrics(arrGold    , arrAlgo    ,numberToLooFor  ,conf)
+    args,threads,blocks,metricsTuplGlobal= TpfpfnKernel.prepareForconfusionTableMetricsNoSliceWise(numberToLooFor  ,conf)
     
     # iterLoop= args[9]
     # pixPerSlice = Int64(args[10]) 

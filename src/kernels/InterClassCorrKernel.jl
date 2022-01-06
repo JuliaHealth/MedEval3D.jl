@@ -18,13 +18,13 @@ preparation for the interclass correlation kernel - we prepare the  GPU arrays -
 and using occupancy API calculate optimal number of  threads and blocks for both kernels 
 also return arguments lists for both kernels
 """
-function prepareInterClassCorrKernel(goldGPU,segmGPU,numberToLooFor)
-  mainArrDims= size(goldGPU)
+function prepareInterClassCorrKernel()
+  mainArrDims= (2,2,2)
   sumOfGold= CUDA.zeros(1);
   sumOfSegm= CUDA.zeros(1);
   sswTotal= CUDA.zeros(1);
   ssbTotal= CUDA.zeros(1);
-
+  numberToLooFor= 1
   totalNumbOfVoxels= (mainArrDims[1]*mainArrDims[2]*mainArrDims[3])
   pixPerSlice = mainArrDims[1]*mainArrDims[2]
   iterLoop=5
@@ -34,7 +34,8 @@ function prepareInterClassCorrKernel(goldGPU,segmGPU,numberToLooFor)
      ,iterLoop,pixPerSlice,totalNumbOfVoxels
      ,numberToLooFor )
   get_shmem(threads) = 4*33+3  #the same for both kernels
-  threads,blocks =getThreadsAndBlocksNumbForKernel(get_shmem, kernel_InterClassCorr,(goldGPU,segmGPU,argsMain...))
+  threads,blocks =getThreadsAndBlocksNumbForKernel(get_shmem, kernel_InterClassCorr,(CUDA.zeros(2,2,2),CUDA.zeros(2,2,2),argsMain...))
+  totalNumbOfVoxels= (mainArrDims[1]*mainArrDims[2]*mainArrDims[3])
   pixPerSlice= cld(totalNumbOfVoxels,blocks)
   iterLoop = UInt32(fld(pixPerSlice, threads[1]*threads[2]))
 
@@ -43,8 +44,7 @@ function prepareInterClassCorrKernel(goldGPU,segmGPU,numberToLooFor)
      ,ssbTotal
      ,iterLoop,pixPerSlice,totalNumbOfVoxels
      ,numberToLooFor )
-     pixPerSlice= cld(totalNumbOfVoxels,blocks)
-     iterLoop = UInt32(fld(pixPerSlice, threads[1]*threads[2]))
+
 
   return(argsMain, threads,blocks, totalNumbOfVoxels)
 end
@@ -62,42 +62,22 @@ calculates slicewise and global interclass correlation metric
 """
 function calculateInterclassCorr(flatGold
                                 ,flatSegm,threads,blocks
-                                ,args)::Float64
+                                ,args,numberToLooFor)::Float64
+ mainArrDims= size(flatGold)
+ totalNumbOfVoxels= length(flatGold)
+ pixPerSlice= cld(totalNumbOfVoxels,blocks)
+ iterLoop = UInt32(fld(pixPerSlice, threads[1]*threads[2]))
+ #resetting
+ for i in  1:4   
+  CUDA.fill!(args[i],0)
+ end
+ argsMain=(args[1],args[2]
+ ,args[3]
+ ,args[4]
+ ,iterLoop,pixPerSlice,totalNumbOfVoxels
+ ,numberToLooFor )           
 
-#   mainArrayDims= size(flatGold)
-#   sumOfGold= CUDA.zeros(1);
-#   sumOfSegm= CUDA.zeros(1);
-#   sswTotal= CUDA.zeros(1);
-#   ssbTotal= CUDA.zeros(1);
-
-
-# pixelNumberPerSlice= mainArrayDims[1]*mainArrayDims[2]
-# blocks = 20 
-# threads = (32,20)
-# totalNumbOfVoxels= mainArrayDims[1]*mainArrayDims[2]*mainArrayDims[3]
-# grandMean=CUDA.ones(1)
-# pixPerSlice= cld(totalNumbOfVoxels,blocks)
-# pixelNumberPerSlice= cld(totalNumbOfVoxels,blocks)
-# iterLoop = UInt32(fld(pixPerSlice, threads[1]*threads[2]))
-
-# #first we need to calculate means
-# args = (sumOfGold,sumOfSegm
-# ,sswTotal
-# ,ssbTotal
-# ,iterLoop,pixPerSlice,totalNumbOfVoxels
-# ,numberToLooFor,grandMean )
-
-# get_shmem(threads) = 4*33+3  #the same for both kernels
-# threads,blocks =getThreadsAndBlocksNumbForKernel(get_shmem,kernel_InterClassCorr_means,(flatGold,flatSegm,args...))
-
-# pixelNumberPerSlice= cld(totalNumbOfVoxels,blocks)
-# iterLoop = UInt32(fld(pixPerSlice, threads[1]*threads[2]))
-
-
-
-
-
-@cuda threads=threads blocks=blocks cooperative = true kernel_InterClassCorr(flatGold,flatSegm,args...)
+@cuda threads=threads blocks=blocks cooperative = true kernel_InterClassCorr(flatGold,flatSegm,argsMain...)
 
   # println("grandMean[1] $(grandMean[1])  \n")
 # @cuda threads=threads blocks=blocks  kernel_InterClassCorr(flatGold  ,flatSegm,args... )

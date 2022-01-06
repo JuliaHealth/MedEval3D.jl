@@ -69,3 +69,5 @@ includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/Housdorff/verB/Hou
 
 includet("C:/GitHub/GitHub/NuclearMedEval/src/kernels/TpfpfnKernel.jl")
 includet("C:/GitHub/GitHub/NuclearMedEval/src/kernels/InterClassCorrKernel.jl")
+includet("C:/GitHub/GitHub/NuclearMedEval/src/MainAbstractions.jl")
+

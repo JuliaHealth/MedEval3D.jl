@@ -17,7 +17,7 @@ configuration struct that when passed will marks what kind of metrics we are int
     
 """
 @with_kw struct ConfigurtationStruct
-    sliceWiseMatrics::Bool = false# if it will be marked as true metrics will be calculated not only globally but also 
+    sliceWiseMetrics::Bool = false# if it will be marked as true metrics will be calculated not only globally but also 
     dice::Bool = false #dice coefficient
     jaccard::Bool = false #jaccard coefficient
     gce::Bool = false #global consistency error
@@ -35,7 +35,7 @@ end #ConfigurtationStruct
 """
 Struct holding all resulting metrics - if some metric was not calculated its value is just -1  
 """
-@with_kw struct ResultMetrics
+@with_kw mutable struct ResultMetrics
     dice::Float64 = -1.0 #dice coefficient
     jaccard::Float64 =  -1.0 #jaccard coefficient
     gce::Float64 =  -1.0 #global consistency error

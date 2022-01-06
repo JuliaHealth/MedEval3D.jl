@@ -7,7 +7,7 @@ using Main.CUDAGpuUtils ,Main.IterationUtils,Main.ReductionUtils , Main.MemoryUt
 using Shuffle,Main.ResultListUtils, Main.MetadataAnalyzePass,Main.MetaDataUtils,Main.WorkQueueUtils,Main.ProcessMainDataVerB,Main.HFUtils, Main.ScanForDuplicates
 using Main.MainOverlap, Main.RandIndex , Main.ProbabilisticMetrics , Main.VolumeMetric ,Main.InformationTheorhetic
 using Main.CUDAAtomicUtils, Main.TpfpfnKernel, Main.InterClassCorrKernel,Main.MeansMahalinobis
-
+using Main.MainAbstractions
 
 using Conda
 using PyCall
@@ -94,39 +94,36 @@ arrGold = CuArray(goldS)
 arrAlgo = CuArray(segmAlgo)
 sizz= size(goldS)
 ##### load tests ...
-conf = ConfigurtationStruct(trues(12)...)
+conf = ConfigurtationStruct(false,trues(11)...)
 numberToLooFor = UInt8(1)
-args,threads,blocks,metricsTuplGlobal= TpfpfnKernel.prepareForconfusionTableMetrics(arrGold    , arrAlgo    ,numberToLooFor  ,conf)
 
-argsB = TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal)
-argsB[5][1]
-metricsTuplGlobal
-
-
-
+preparedDict=MainAbstractions.prepareMetrics(conf)
+res = calcMetricGlobal(preparedDict,conf,arrGold,arrAlgo,numberToLooFor)
+res
 #numbers below taken from pymia
 
-@test isapprox(metricsTuplGlobal[4][1],0.654; atol = 0.1) #4) dice
-@test isapprox(metricsTuplGlobal[5][1],0.486; atol = 0.1) #5) jaccard
-@test isapprox(metricsTuplGlobal[6][1],0.000; atol = 0.1) #6) gce
-@test isapprox(metricsTuplGlobal[7][1],0.618699; atol = 0.1) #7) randInd  - false
-@test isapprox(metricsTuplGlobal[8][1],0.640; atol = 0.1) #8) cohen kappa - false
-@test isapprox(metricsTuplGlobal[9][1],0.654; atol = 0.1) #9) volume metric
-@test isapprox(metricsTuplGlobal[10][1],0.130; atol = 0.1) #10) mutual information
-@test isapprox(metricsTuplGlobal[11][1],0.256; atol = 0.1) #11) variation of information
+@test isapprox(res.dice,0.654; atol = 0.1) #4) dice
+@test isapprox(res.jaccard,0.486; atol = 0.1) #5) jaccard
+@test isapprox(res.gce ,0.000; atol = 0.1) #6) gce
+@test isapprox(res.randInd,0.618699; atol = 0.1) #7) randInd  
+@test isapprox(res.kc,0.640; atol = 0.1) #8) cohen kappa 
+@test isapprox(res.vol,0.654; atol = 0.1) #9) volume metric
+@test isapprox(res.mi,0.130; atol = 0.1) #10) mutual information
+@test isapprox(res.vi,0.256; atol = 0.1) #11) variation of information
+@test isapprox(res.ic,0.6381813122385622; atol = 0.1)# interclas correlation
+@test isapprox(res.md,0.08;atol = 0.1 ) #Mahalinobis
 
 
-################# icc
-argsMain, threads,blocks, totalNumbOfVoxels=InterClassCorrKernel.prepareInterClassCorrKernel(arrGold ,arrAlgo,numberToLooFor)
-globalICC= InterClassCorrKernel.calculateInterclassCorr(arrGold,arrAlgo,threads,blocks,argsMain)
-@test isapprox(globalICC,0.6381813122385622; atol = 0.1)
+# ################# icc
+# argsMain, threads,blocks, totalNumbOfVoxels=InterClassCorrKernel.prepareInterClassCorrKernel(arrGold ,arrAlgo,numberToLooFor)
+# globalICC= InterClassCorrKernel.calculateInterclassCorr(arrGold,arrAlgo,threads,blocks,argsMain)
 
 
-# ################ Mahalinobis 
-using Main.MeansMahalinobis
-args,threads ,blocks= MeansMahalinobis.prepareMahalinobisKernel(arrGold,arrAlgo,numberToLooFor)
-mahalanobisResGlob=  MeansMahalinobis.calculateMalahlinobisDistance(arrGold,arrAlgo,args,threads ,blocks)
-@test isapprox(mahalanobisResGlob,0.08;atol = 0.1 )
+
+# # ################ Mahalinobis 
+# using Main.MeansMahalinobis
+# args,threads ,blocks= MeansMahalinobis.prepareMahalinobisKernel()
+# mahalanobisResGlob=  MeansMahalinobis.calculateMalahlinobisDistance(arrGold,arrAlgo,args,threads ,blocks,1)
 # goldS3d= CuArray(goldS);
 # segmS3d= CuArray(segmAlgo);
 # #we will fill it after we work with launch configuration

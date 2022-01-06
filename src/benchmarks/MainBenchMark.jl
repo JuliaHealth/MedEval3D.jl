@@ -11,7 +11,12 @@ using Conda
 using PyCall
 using Pkg
 using Statistics
-using BenchmarkTools
+using BenchmarkTools, Main.MainAbstractions
+
+#!!!!!!!!!!!!! below important if we do not set google sheets we need to set it as false
+isTobeSavedToGoogle= true
+worksheet=0
+
 
 Conda.pip_interop(true)
 Conda.pip("install", "gspread")
@@ -21,15 +26,16 @@ gspread= pyimport("gspread")
 # @pyimport pip
 # pip.main(["install","google-api-python-client","google-auth-httplib2","google-auth-oauthlib"])
 
-acc= gspread.service_account(filename="C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\credentials.json.txt")
-sh= acc.open_by_url("https://docs.google.com/spreadsheets/d/1YBKQ70ghpEN-OQdRLoWAHl5EetDzBoCa6ViNQ1D7zYg/edit#gid=0")
-worksheet = sh.get_worksheet(0)
-
+if(isTobeSavedToGoogle)
+    acc= gspread.service_account(filename="C:\\Users\\1\\PycharmProjects\\credentials.json.txt")
+    sh= acc.open_by_url("https://docs.google.com/spreadsheets/d/1YBKQ70ghpEN-OQdRLoWAHl5EetDzBoCa6ViNQ1D7zYg/edit#gid=0")
+    worksheet = sh.get_worksheet(0)
+end
 # print(sh.sheet1.get("A1"))
 
 
-BenchmarkTools.DEFAULT_PARAMETERS.samples = 100
-BenchmarkTools.DEFAULT_PARAMETERS.seconds =30
+BenchmarkTools.DEFAULT_PARAMETERS.samples = 300
+BenchmarkTools.DEFAULT_PARAMETERS.seconds =60
 BenchmarkTools.DEFAULT_PARAMETERS.gcsample = true
 
 pathToHd5= "C:\\Users\\1\\PycharmProjects\\pythonProject3\\mytestfile.hdf5"
@@ -44,160 +50,97 @@ sizz= size(not_translated)
 
 sum(onlyBladder)
 
+
+
 ########## first non distance metrics
 arrGold = CuArray((not_translated))
 arrAlgo = CuArray((translated))
+conf = ConfigurtationStruct(false,trues(11)...)
+numberToLooFor = UInt8(1)
+preparedDict=MainAbstractions.prepareMetrics(conf)
+
+typeof(:dice)
+
 conf = ConfigurtationStruct(dice=true)
 cellStr= "B2"
 """
 given particular configuration struct it prepares and executes the benchmark also save result to given cell in worksheet
+isTobeSavedToGoogle- if true and we will supply valid worksheet object benchmark time and calculated value of metric will be added to the becnchmark table in google sheets
 """
 # function getBenchmarkInMilisForConfigurationStruct(conf,cellStr,arrGold,arrAlgo,worksheet)
-    numberToLooFor = UInt8(1)
-    argss,threads,blocks,metricsTuplGlobal= TpfpfnKernel.prepareForconfusionTableMetrics(arrGold    , arrAlgo    ,numberToLooFor  ,conf)
-    
-    argsB = TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argss,threads,blocks,metricsTuplGlobal) 
-    dice = metricsTuplGlobal[4][1]
+macro  benchmarkking(confStr::Symbol, cellString::String,field::Symbol, fieldCellString::String, isTobeSavedToGoogle::Symbol)
+    return esc(quote
     # dice # should be 0.757
-    bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
+    resultSingle = calcMetricGlobal(preparedDict,$confStr,arrGold,arrAlgo,numberToLooFor)
+    println(resultSingle)
+    bench = @benchmark(CUDA.@sync calcMetricGlobal(preparedDict,($confStr),arrGold,arrAlgo,numberToLooFor))
     res= Statistics.median(bench).time/1000000
-    worksheet.update(cellStr, res)
-    bench
+    if(isTobeSavedToGoogle)
+        worksheet.update($cellString, res)
+        worksheet.update($fieldCellString, getfield(resultSingle,field ))
+    end
+    end)    
+end  
+
+confStr= ConfigurtationStruct(dice=true)
+field=Symbol("dice")
+@benchmarkking(confStr, "B2",field , "G2",isTobeSavedToGoogle)
+
+    # # dice # should be 0.757
+    # bench = @benchmark CUDA.@sync calcMetricGlobal(preparedDict,conf,arrGold,arrAlgo,numberToLooFor)
+    # res= Statistics.median(bench).time/1000000
+    # worksheet.update(cellStr, res)
+    # bench
+
 # end
 
 # getBenchmarkInMilisForConfigurationStruct(ConfigurtationStruct(dice=true),"B2",arrGold,arrAlgo,worksheet)
 
-conf = ConfigurtationStruct(jaccard=true)
-cellStr= "B3"
-bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
-res= Statistics.median(bench).time/1000000
-worksheet.update(cellStr, res)
 
+confStr= ConfigurtationStruct(jaccard=true)
+field=Symbol("jaccard")
+@benchmarkking(confStr, "B3",field , "G3",isTobeSavedToGoogle)
 
-conf = ConfigurtationStruct(gce=true)
-cellStr= "B4"
-bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
-res= Statistics.median(bench).time/1000000
-worksheet.update(cellStr, res)
+confStr= ConfigurtationStruct(gce=true)
+field=Symbol("gce")
+@benchmarkking(confStr, "B4",field , "G4",isTobeSavedToGoogle)
 
-conf = ConfigurtationStruct(vol=true)
-cellStr= "B5"
-bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
-res= Statistics.median(bench).time/1000000
-worksheet.update(cellStr, res)
+confStr= ConfigurtationStruct(vol=true)
+field=Symbol("vol")
+@benchmarkking(confStr, "B5",field , "G5",isTobeSavedToGoogle)
 
-conf = ConfigurtationStruct(randInd=true)
-cellStr= "B6"
-bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
-res= Statistics.median(bench).time/1000000
-worksheet.update(cellStr, res)
+confStr= ConfigurtationStruct(randInd=true)
+field=Symbol("randInd")
+@benchmarkking(confStr, "B6",field , "G6",isTobeSavedToGoogle)
 
-# conf = ConfigurtationStruct(ic=true)
-# cellStr= "B7"
-# bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
-# res= Statistics.median(bench).time/1000000
-# worksheet.update(cellStr, res)
+confStr= ConfigurtationStruct(kc=true)
+field=Symbol("kc")
+@benchmarkking(confStr, "B8",field , "G8",isTobeSavedToGoogle)
 
-conf = ConfigurtationStruct(kc=true)
-cellStr= "B8"
-bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
-res= Statistics.median(bench).time/1000000
-worksheet.update(cellStr, res)
+confStr= ConfigurtationStruct(mi=true)
+field=Symbol("mi")
+@benchmarkking(confStr, "B9",field , "G9",isTobeSavedToGoogle)
 
-conf = ConfigurtationStruct(mi=true)
-cellStr= "B9"
-bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
-res= Statistics.median(bench).time/1000000
-worksheet.update(cellStr, res)
+confStr= ConfigurtationStruct(vi=true)
+field=Symbol("vi")
+@benchmarkking(confStr, "B10",field , "G10",isTobeSavedToGoogle)
 
-conf = ConfigurtationStruct(vi=true)
-cellStr= "B10"
-bench = @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,argsB,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
-res= Statistics.median(bench).time/1000000
-worksheet.update(cellStr, res)
-
- #in miliseconds
- 
- ########## first non distance metrics
-
- numberToLooFor = 1
-
- argsMain, threads,blocks, totalNumbOfVoxels=InterClassCorrKernel.prepareInterClassCorrKernel(arrGold ,arrAlgo,numberToLooFor)
- globalICC= InterClassCorrKernel.calculateInterclassCorr(arrGold,arrAlgo,threads,blocks,argsMain)
- 
- bench = @benchmark CUDA.@sync InterClassCorrKernel.calculateInterclassCorr(arrGold,arrAlgo,threads,blocks,argsMain)
- res= Statistics.median(bench).time/1000000
- worksheet.update("B7", res)
-
- # ################ Mahalinobis 
- using Main.MeansMahalinobis
- arrGold = CuArray((onlyLungs))
- arrAlgo = CuArray((onlyBladder))
- sizz= size(onlyBladder)
- sizz= size(onlyLungs)
- 
- args,threads ,blocks= MeansMahalinobis.prepareMahalinobisKernel(arrGold,arrAlgo,numberToLooFor)
- mahalanobisResGlob=  MeansMahalinobis.calculateMalahlinobisDistance(arrGold,arrAlgo,args,threads ,blocks)
-
-
- bench = @benchmark CUDA.@sync MeansMahalinobis.calculateMalahlinobisDistance(arrGold,arrAlgo,args,threads ,blocks)
- res= Statistics.median(bench).time/1000000
- worksheet.update("B11", res)
-
-# includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\aPrfofiling\\profilingProcessMaskData.jl")
- 
-# CUDA.@profile wrapForProfile()
-
-# function clearFunction()
-#     for i in  1:4   
-#         CUDA.fill!(args[i],0)
-#     end   
-    
-#     for i in 1:length(metricsTuplGlobal)    
-#         metricsTuplGlobal[i]=0
-#         #CUDA.fill!(args[11][i],0)
-#     end   
-#     sleep(2)
-#     return (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal)
-# end
-
-
-# function toBench(data)
-#     TpfpfnKernel.getTpfpfnData!(data...)
-# end
-
-# @benchmark toBench(data) setup=(data=clearFunction() )
-
-
-# @benchmark CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal)# setup = (arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal = clearFunction()   )
-# @btime CUDA.@sync TpfpfnKernel.getTpfpfnData!(arrGold ,arrAlgo   ,args,threads,blocks,metricsTuplGlobal) 
-#all 57 ms
+confStr= ConfigurtationStruct(ic=true)
+field=Symbol("ic")
+@benchmarkking(confStr, "B7",field , "G7",isTobeSavedToGoogle)
+#all confusionmatrix metrics
+confStr= ConfigurtationStruct(dice=true,jaccard=true, gce=true,vol=true,randInd=true,kc=true,mi=true,vi=true)
+field=Symbol("dice")
+@benchmarkking(confStr, "B11",field , "G11",isTobeSavedToGoogle)
 
 
 
-# f = h5py.File("mytestfile.hdf5", "w")
-# f.create_dataset("not_translated", data=  not_translated.cpu().detach().numpy())
-# f.create_dataset("translated", data=  translated.cpu().detach().numpy())
-# f.create_dataset("onlyLungs", data=  onlyLungs.cpu().detach().numpy())
-# f.create_dataset("onlyBladder", data=  onlyBladder.cpu().detach().numpy())
+using Main.MeansMahalinobis
+arrGold = CuArray((onlyLungs))
+arrAlgo = CuArray((onlyBladder))
 
-# ```@doc
-# getting example study in a form of 3 dimensional array
-# ```
-# function getExample(typ::Type{Tt}) ::Array{Tt, 3} where Tt
-#      read(g["trainingScans/liver-orig006.mhd"]["liver-orig006.mhd"])
-# end
-# function teEx()
-#     z= 0
-#     grid_handle = this_grid()
+confStr= ConfigurtationStruct(md=true)
+field=Symbol("md")
+@benchmarkking(confStr, "B12",field , "G12",isTobeSavedToGoogle)
 
-#     for j in 1:1000
-#         sync_grid(grid_handle)
-#         z+=1
-#     end 
 
-# end
-
-# #no grid sync 189.548 μs
-
-# @benchmark CUDA.@sync @cuda threads=(32,20) blocks=40  cooperative=true teEx()
