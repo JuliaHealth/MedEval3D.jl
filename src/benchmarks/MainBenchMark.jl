@@ -21,18 +21,12 @@ worksheet=0
 Conda.pip_interop(true)
 Conda.pip("install", "gspread")
 gspread= pyimport("gspread")
-gspread= pyimport("gspread")
-# using PyCall
-# @pyimport pip
-# pip.main(["install","google-api-python-client","google-auth-httplib2","google-auth-oauthlib"])
 
 if(isTobeSavedToGoogle)
     acc= gspread.service_account(filename="C:\\Users\\1\\PycharmProjects\\credentials.json.txt")
     sh= acc.open_by_url("https://docs.google.com/spreadsheets/d/1YBKQ70ghpEN-OQdRLoWAHl5EetDzBoCa6ViNQ1D7zYg/edit#gid=0")
     worksheet = sh.get_worksheet(0)
 end
-# print(sh.sheet1.get("A1"))
-
 
 BenchmarkTools.DEFAULT_PARAMETERS.samples = 300
 BenchmarkTools.DEFAULT_PARAMETERS.seconds =60
@@ -49,7 +43,6 @@ onlyBladder
 sizz= size(not_translated)
 
 sum(onlyBladder)
-
 
 
 ########## first non distance metrics
@@ -144,3 +137,20 @@ field=Symbol("md")
 @benchmarkking(confStr, "B12",field , "G12",isTobeSavedToGoogle)
 
 
+
+
+arrGold = CUDA.ones(3,3,3)
+arrAlgoCPU = ones(3,3,3)
+arrAlgoCPU[1,1,1]=0
+arrAlgoCPU[3,3,3]=0
+arrAlgoCPU[3,2,3]=0
+arrAlgoCPU[3,2,2]=0
+arrAlgo =CuArray(arrAlgoCPU) 
+
+conf= ConfigurtationStruct(md=true)
+numberToLookFor = UInt8(1)
+
+preparedDict=MainAbstractions.prepareMetrics(conf)
+
+res= calcMetricGlobal(preparedDict,conf,arrGold,arrAlgo,numberToLookFor)
+res.md # will give 0.127
