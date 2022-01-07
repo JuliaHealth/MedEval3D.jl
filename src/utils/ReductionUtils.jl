@@ -252,7 +252,7 @@ function sendNonAtomicHelperAndAdd(shmemSum, vars...)
   for index in 1:length(varActTuples)
     varr= vars[index]
       push!(tmp, quote
-     @ifXY $index $index if(shmemSum[1,$index]>0)   @inboundsCUDA.@atomic $varr[]= $shmemSum[1,$(index)] end   
+     @ifXY $index $index if(shmemSum[1,$index]>0)   @inbounds CUDA.@atomic $varr[]= $shmemSum[1,$(index)] end   
   
       end)
   end#for
