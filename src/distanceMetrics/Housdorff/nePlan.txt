@@ -1,0 +1,47 @@
+"""
+Detailed plan
+Prepare kernel
+1) Define MetaData loop where single block will be analyzed by given thread block at one textLinesFromStrings
+2) Define datablock loop where all thread block will go through all og the entries in data block
+3) inside 2) 
+    a) define the min, max of x,y,z of netadatablocks
+    b) define number of fp and fn in each data block
+    c) check is block empty in such case it should be set in metadata as inactive otherwise it should be active
+    d) save information in compact UInt32 format
+
+We limit the size of both metadata and the reduced memory footprint representations of the arrays    
+
+Main kernel
+
+4)first metadata pass
+    a) we define offsets in the result list to have the results organized and avoid ovewriting 
+    b) if metadata block is active we add it in the work queue
+    c) sync grid    
+5)Main block 
+    a) we define the work queue iteration - so we divide complete work queue into parts  and each thread block analyzes its own part - one data block at a textLinesFromStrings
+    b) we load values of data block into shared memory  and immidiately do the bit wise up and down dilatations, and mark booleans needed to establish is the datablock full
+    c) synthreads - left,right, anterior,posterior dilatations...
+    d) add the dilatated info into dilatation array and padding info from dilatation to global memory
+    e) if block is to be validated we check is there is in the point of currently coverd voxel some voxel in other mas if so we add it to the result list and increment local reult counter
+    f) syncgrid()
+6)analyze padding
+    we iterate over work queue as in 5
+    a) we load into shared memory information from padding from blocks all around the block of intrest checking for boundary conditions
+    b) we save data of dilatated voxels into dilatation array making sure to synchronize appropriately in the thread block 
+    c) we analyze the positive entries given the block is to be validated  so we check is such entry is already in dilatation mask if not is it in other mask if first no and second yes we add to the result 
+    d) also given any positive entry we set block as to be activated simple sum reduction should be sufficient
+    e) sync grid
+7)metadata analyze othe passes
+    a) we check is block full, is active, and istobeactivated and on the basis of it all we set the block to the work queue or not
+    b) we check how many entries are in local result counter relative to total result counts, establish and save to metadata is this block should be validated or not
+8) we execute all in loop  at the begining of all loops we clear shared memory, and increment iteration number  
+    we end the loop when we cheched that
+    - is amount of results related to gold mask dilatations is equal to false positives or given percent of them
+    - is amount of results related to other  mask dilatations is equal to false negatives or given percent of them
+    - is amount of workQueue that we will want to analyze now is bigger than 0 
+
+    
+
+
+
+"""
