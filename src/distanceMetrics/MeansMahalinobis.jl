@@ -268,7 +268,7 @@ macro calculateVariancesAdCov(countPerZ,arrToAnalyze,varianceXGlobal,covarianceX
 
             @ifXY 1 7 @inbounds intermedieteRes[6]+=(((z- meanxyz[3])*(z- meanxyz[3])  )*shmemSum[1,6])
             
-            @ifXY 1 7 @inbounds @atomic $varianceZGlobal[]+=((z- meanxyz[3])*(z- meanxyz[3])  )*shmemSum[1,6]
+            @ifXY 1 7 @inbounds CUDA.@atomic $varianceZGlobal[]+=((z- meanxyz[3])*(z- meanxyz[3])  )*shmemSum[1,6]
             ###########remove
             
             # @ifY 2 @unroll for i in 1:5
@@ -291,12 +291,12 @@ macro calculateVariancesAdCov(countPerZ,arrToAnalyze,varianceXGlobal,covarianceX
     sync_threads()
 
     #at this point we should have all variances and covariances in intermedieteRes and we can send it to global results
-    @ifXY 1 1  @inbounds @atomic $varianceXGlobal[]+=intermedieteRes[1]  
-    @ifXY 1 2 @inbounds @atomic $covarianceXYGlobal[]+=intermedieteRes[2]  
-    @ifXY 1 3  @inbounds @atomic $covarianceXZGlobal[]+=intermedieteRes[3] 
-    @ifXY 1 4  @inbounds @atomic $varianceYGlobal[]+=intermedieteRes[4]   
-    @ifXY 1 5 @inbounds @atomic $covarianceYZGlobal[]+=intermedieteRes[5]  
-    #@ifXY 1 7  @inbounds @atomic $varianceZGlobal[]+=intermedieteRes[6]  
+    @ifXY 1 1  @inbounds CUDA.@atomic $varianceXGlobal[]+=intermedieteRes[1]  
+    @ifXY 1 2 @inbounds CUDA.@atomic $covarianceXYGlobal[]+=intermedieteRes[2]  
+    @ifXY 1 3  @inbounds CUDA.@atomic $covarianceXZGlobal[]+=intermedieteRes[3] 
+    @ifXY 1 4  @inbounds CUDA.@atomic $varianceYGlobal[]+=intermedieteRes[4]   
+    @ifXY 1 5 @inbounds CUDA.@atomic $covarianceYZGlobal[]+=intermedieteRes[5]  
+    #@ifXY 1 7  @inboundsCUDA.@atomic $varianceZGlobal[]+=intermedieteRes[6]  
 
 end)#quote 
 end#calculateVariancesAdCov
@@ -574,7 +574,7 @@ end#MeansMahalinobis
 #     if(currVal>1)
 #         #oldLocal = CUDA.atomic_xchg!(pointer(intermediateResCounter), UInt32(1))
 #         intermediateResCounter[1]= UInt32(1)
-#         oldCount::UInt32 = @inbounds @atomic resListCounter[]+=UInt32(currVal-UInt32(1))
+#         oldCount::UInt32 = @inboundsCUDA.@atomic resListCounter[]+=UInt32(currVal-UInt32(1))
 
 #             #pushing from local to global queue
 #             @unroll for i in 1:currVal

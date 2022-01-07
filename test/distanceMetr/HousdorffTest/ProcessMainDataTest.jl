@@ -163,7 +163,7 @@ function paddingIterKernel(singleVal,metaDataDims,refArrGPU,mainArrDims,loopAZFi
     # paddingIter(loopX,loopY,maxXdim, maxYdim,a,b,c , xMetaChange,yMetaChange,zMetaChange, mainArr,refArr, dir,iterNumb,queueNumber,xMeta,yMeta,zMeta)
 
     @paddingIter(loopAZFixed,loopBZfixed,dataBdim[1], dataBdim[2],begin 
-     @atomic singleVal[1]+=1
+    CUDA.@atomic singleVal[1]+=1
 end )
 
 

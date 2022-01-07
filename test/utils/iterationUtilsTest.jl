@@ -136,7 +136,7 @@ end
         #,metricsTuplGlobal
         ,conf,singleSum)
         @iterateLinearlyMultipleBlocks(iterLoop,pixPerSlice,totalNumbOfVoxels,begin 
-            @atomic singleSum[1]+=1
+           CUDA.@atomic singleSum[1]+=1
             #CUDA.@cuprint "i $(i) \n"
         end)
     

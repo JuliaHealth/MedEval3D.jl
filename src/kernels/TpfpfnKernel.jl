@@ -162,9 +162,9 @@ function getBlockTpFpFn(goldGPU#goldBoolGPU
     # if(blockIdxX==1)
     #     getMetrics(tp[1],fp[1], fn[1],(totalNumbOfVoxels-(tp[1] +fn[1]+ fp[1] )) ,metricsTuplGlobal,conf,1 )
     # end
-    #   @ifXY 1 1  @inbounds @atomic tp[]+= shmemSum[1,3]
-#   @ifXY 1 2  @inbounds @atomic fp[]+= shmemSum[1,2]
-#   @ifXY 1 3  @inbounds @atomic fn[]+= shmemSum[1,1]
+    #   @ifXY 1 1  @inboundsCUDA.@atomic tp[]+= shmemSum[1,3]
+#   @ifXY 1 2  @inboundsCUDA.@atomic fp[]+= shmemSum[1,2]
+#   @ifXY 1 3  @inboundsCUDA.@atomic fn[]+= shmemSum[1,1]
     
     
 #     #offset for lloking for values in source arrays 
@@ -213,9 +213,9 @@ function getBlockTpFpFn(goldGPU#goldBoolGPU
 # sync_threads()
 # #no point in calculating anything if we have 0 
 # if((shmemSum[1,3] + shmemSum[1,2] +shmemSum[1,1]) >0)
-#   @ifXY 1 1  @inbounds @atomic tp[]+= shmemSum[1,3]
-#   @ifXY 1 2  @inbounds @atomic fp[]+= shmemSum[1,2]
-#   @ifXY 1 3  @inbounds @atomic fn[]+= shmemSum[1,1]
+#   @ifXY 1 1  @inboundsCUDA.@atomic tp[]+= shmemSum[1,3]
+#   @ifXY 1 2  @inboundsCUDA.@atomic fp[]+= shmemSum[1,2]
+#   @ifXY 1 3  @inboundsCUDA.@atomic fn[]+= shmemSum[1,1]
 # #calculated if we are intrewested in given slice wise metrics
 #   if(conf.sliceWiseMatrics)
 #     @ifXY 1 4  @inbounds sliceMetricsTupl[1][blockIdxX()]=shmemSum[1,3]
@@ -418,7 +418,7 @@ function getMetricsCPU(tp,fp, fn,tn,sliceMetricsTupl,conf,positionToUpdate   )
 #       shmemSum[33,numb] = reduce_warp(shmemSum[lane,numb],32 )
 #       #probably we do not need to sync warp as shfl dow do it for us         
 #       if(lane==1)
-#         @inbounds @atomic singleREs[]+=shmemSum[33,numb]
+#         @inboundsCUDA.@atomic singleREs[]+=shmemSum[33,numb]
 #       end    
 #       if(lane==2)
 

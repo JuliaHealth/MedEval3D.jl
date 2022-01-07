@@ -28,7 +28,7 @@ function kernelFunct(goldBoolGPU::CuDeviceArray{Bool, 3, 1}, segmBoolGPU::CuDevi
 
     # if (goldBoolGPU[i,j,z] & !segmBoolGPU[i,j,z] )
 
-    #     @atomic fn[]+=1    
+    #    CUDA.@atomic fn[]+=1    
 
     #     end
 

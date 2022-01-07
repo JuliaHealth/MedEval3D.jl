@@ -107,7 +107,7 @@ end
     function iter3dOuterKernel(mainArrDims,singleVal,metaDataDims,dataBdim, metaDataLength, loopMeta )
         @iter3dOuter(metaDataDims,loopMeta,metaDataLength,
         begin
-        @ifXY 1 1  @atomic singleVal[]+=1
+        @ifXY 1 1 CUDA.@atomic singleVal[]+=1
      @ifXY 1 1    CUDA.@cuprint " linIdexMeta $(linIdexMeta)  zMeta $(zMeta)  yMeta$(yMeta) xMeta$(xMeta)  idX $(blockIdxX()) \n"   
 
     end)
@@ -155,7 +155,7 @@ end #"iter3dOuter"
         begin 
             @iterDataBlock(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,xMeta,yMeta,zMeta,
             begin
-            @atomic singleVal[1]+=1
+           CUDA.@atomic singleVal[1]+=1
             indices[x,y,z]=true
             #CUDA.@cuprint "x $(x) y $(y) z $(z) zMeta $(zMeta)  yMeta $(yMeta) xMeta $(xMeta)  idX $(blockIdxX()) \n"   
 
@@ -227,7 +227,7 @@ end #iter data block
                         #CUDA.atomic_add!(pointer(localQuesValues, coord),Float32(1))
                         
 
-                    #@inbounds @atomic localQuesValues[coord]+=Float32(1)
+                    #@inboundsCUDA.@atomic localQuesValues[coord]+=Float32(1)
                     #CUDAAtomicUtils.atomicallyAddToSpot(Float32,localQuesValues,getIndexOfQueue(x,y,z,dataBdim,boolSegm),1)
                     #PrepareArrtoBool.@uploadLocalfpFNCounters() 
                     
@@ -822,7 +822,7 @@ function iterDataBlocksKernel(loopMeta,metaDataLength,mainArrDims,singleVal,meta
     begin 
         @iterDataBlockZdeepest(mainArrDims,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ,xMeta,yMeta,zMeta,
         begin
-        @atomic singleVal[1]+=1
+       CUDA.@atomic singleVal[1]+=1
         indices[x,y,z]=true
         #CUDA.@cuprint "x $(x) y $(y) z $(z) zMeta $(zMeta)  yMeta $(yMeta) xMeta $(xMeta)  idX $(blockIdxX()) \n"   
 

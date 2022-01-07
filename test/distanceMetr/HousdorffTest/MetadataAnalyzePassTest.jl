@@ -31,7 +31,7 @@ function metaDataWarpIterKernel(singleVal,metaDataDims,loopWarpMeta,metaDataLeng
   
     MetadataAnalyzePass.@metaDataWarpIter(metaDataDims,loopWarpMeta,metaDataLength,
     begin
-      @ifY 1 if(isInRange) @atomic singleVal[]+=1 end
+      @ifY 1 if(isInRange) CUDA.@atomic singleVal[]+=1 end
       #if(linIdexMeta>7000) 
       #@ifY 1 CUDA.@cuprint "linIdexMeta $(linIdexMeta) offset = $(((blockIdxX()-1)*loopWarpMeta*blockDimX()))  xMeta $(xMeta)  yMeta $(yMeta)  zMeta $(zMeta) isInRange $(isInRange) id  idX $(blockIdxX()) \n"   
       #end  
@@ -68,7 +68,7 @@ resCounter= CUDA.zeros(Int32,1)
 numbOfLoops = 200
 function exOnWarpKernelA(resCounter,numbOfLoops)
   for i in 1:numbOfLoops
-      @exOnWarp i @ifX 1  @atomic resCounter[1]+=1
+      @exOnWarp i @ifX 1 CUDA.@atomic resCounter[1]+=1
       # MetadataAnalyzePass.@exOnWarp i @ifX 1  CUDA.@cuprint "i $(i)  mod $(mod(i,blockDimY() ))  idY   $(threadIdxY()) \n"   #@atomic resCounter[1]+=1
       
   end
@@ -94,11 +94,11 @@ end
 # function exOnWarpIfBoolKernelA(resCounter)
 #     #bool true
 #   for i in 1:200
-#       MetadataAnalyzePass.@exOnWarpIfBool true i @ifX 1 @atomic resCounter[1]+=1
+#       MetadataAnalyzePass.@exOnWarpIfBool true i @ifX 1CUDA.@atomic resCounter[1]+=1
 #   end
 #   #bool false
 #     for i in 1:200
-#       MetadataAnalyzePass.@exOnWarpIfBool false i @ifX 1 @atomic resCounter[1]+=1
+#       MetadataAnalyzePass.@exOnWarpIfBool false i @ifX 1CUDA.@atomic resCounter[1]+=1
 #   end
 #   return
 # end 

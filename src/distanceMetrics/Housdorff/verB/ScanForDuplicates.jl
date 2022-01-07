@@ -129,7 +129,7 @@ export @getIsToVal,@loadAndScanForDuplicates,@setIsToBeValidated, @scanForDuplic
 #                 #we need also to remember that we can have only 2 copies of the same result entry  we will keep only first one and second one we will remove
 #                 if( ( scannedVal == shmemSum[threadIdxX(),innerWarpNumb]) &&  (tempCount>  ((scanIter*32) + threadIdxX()))   )
 #                     #incrementing shared memory to later actualize counter
-#                     @atomic shmemSum[36,innerWarpNumb]+=1
+#                    CUDA.@atomic shmemSum[36,innerWarpNumb]+=1
 #                     #if we have repeated value one entry in ids we set to 0
 #                     resListIndicies[resListCurrIndex]=0
 #                 end
@@ -283,7 +283,7 @@ end#module
 #     #                     $locArr+=$offsetIter
 #     #                     #TODO (try to do warp reduction below instead of atomic... )
 #     #                     if(($offsetIter)>0)
-#     #                         @atomic alreadyCoveredInQueues[innerWarpNumb]+=($offsetIter)
+#     #                        CUDA.@atomic alreadyCoveredInQueues[innerWarpNumb]+=($offsetIter)
 #     #                     end                       
 #     #                     #@redOnlyStepOne(locOffset, shmemSum, $locArr, +)
 #     #                     #now we have warp reduced value on first thread

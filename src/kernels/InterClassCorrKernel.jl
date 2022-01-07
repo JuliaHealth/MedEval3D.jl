@@ -382,8 +382,8 @@ end
 #     #  #   now we have sums in first threads of the warp we need to pass it to shared memory
 #     #     if(threadIdxX()==1)
 #     #       #TODO() try to do full reduction without those atomics 
-#     #         @inbounds @atomic sswTotal[1]+=locValA
-#     #         @inbounds @atomic ssbTotal[1]+=locValB
+#     #         @inboundsCUDA.@atomic sswTotal[1]+=locValA
+#     #         @inboundsCUDA.@atomic ssbTotal[1]+=locValB
 #     #     end
 #         # sync_threads()
 
@@ -465,8 +465,8 @@ end#InterClassCorrKernel
 #     end  
 #     sync_threads()sswTotal,ssbTotal
       #now in   shmemSum[1,1] we should have ssw and in  shmemSum[1,2] ssb
-#       @ifXY 1 1  @inbounds @atomic sswTotal[]+= shmemSum[1,1]
-#       @ifXY 1 2  @inbounds @atomic ssbTotal[]+= shmemSum[1,2]
+#       @ifXY 1 1  @inboundsCUDA.@atomic sswTotal[]+= shmemSum[1,1]
+#       @ifXY 1 2  @inboundsCUDA.@atomic ssbTotal[]+= shmemSum[1,2]
 #       @ifXY 1 3  begin
 #         sswInner = shmemSum[1,2]/totalNumbOfVoxels;
 #         ssbInner = shmemSum[1,1]/(totalNumbOfVoxels-1) * 2
@@ -572,8 +572,8 @@ end#InterClassCorrKernel
        
 # #       #now in   shmemSum[1,1] we should have sum of values complying with our predicate in gold mask and in shmemSum[1,2] values of other mask
 # #       #we need to add now those to the globals  
-# #       @ifXY 1 1  @inbounds @atomic sumOfGold[]+= shmemSum[1,1]
-# #       @ifXY 1 2  @inbounds @atomic sumOfSegm[]+= shmemSum[1,2]
+# #       @ifXY 1 1  @inboundsCUDA.@atomic sumOfGold[]+= shmemSum[1,1]
+# #       @ifXY 1 2  @inboundsCUDA.@atomic sumOfSegm[]+= shmemSum[1,2]
 
 #     return nothing
 # end

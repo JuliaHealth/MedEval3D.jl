@@ -233,8 +233,8 @@ function getBoolCubeKernel(goldBoolGPU3d
    """
    function incrementAtomFPifTrue(bool,fp,fn)
         if(bool)
-            @atomic @inbounds fp[]+=1
+            CUDA.@atomic @inbounds fp[]+=1
         end        
-        @atomic @inbounds fn[]+=1
+        CUDA.@atomic @inbounds fn[]+=1
 
    end

@@ -93,7 +93,7 @@ function iterateOverWorkQueueKernel(indexesArr,workQueauecounter,workQueaue,gold
     shmemSum =  @cuStaticSharedMem(UInt32,(36,14)) # we need this additional spots
     MainLoopKernel.@iterateOverWorkQueue(workQueauecounter,workQueaue,goldToBeDilatated, segmToBeDilatated,shmemSumLengthMaxDiv4,begin 
 
-    @ifXY 1 1 @atomic singleVal[1]+=1
+    @ifXY 1 1 CUDA.@atomic singleVal[1]+=1
     end) 
 
  return
