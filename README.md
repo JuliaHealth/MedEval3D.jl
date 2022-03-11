@@ -2,10 +2,19 @@
 
 Project with set of CUDA accelerated  medical segmentation metrics.Mathemathical basis for metrics calculations are based on the work of the Taha et al. [1].
 
+```
+]add MedEval3D
+```
+
 # Example
 
 Example for calculating Mahalinobis distance
 ```
+
+using MedEval3D
+using MedEval3D.BasicStructs
+using MedEval3D.MainAbstractions
+
 arrGold = CUDA.ones(3,3,3)
 arrAlgoCPU = ones(3,3,3)
 arrAlgoCPU[1,1,1]=0
