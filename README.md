@@ -103,6 +103,37 @@ mutable struct ResultMetrics
 end      
     
 ```
+# Benchmarks 
+All experiments were conducted on Windows PC (Intel Core I9 10th gen., GeforceRTX 3080),
+and Data from CT-ORG [9] dataset, on image of size (512×512×826). Time needed to calculate
+metrics was estimated in case of Julia code using BenchamrkTools.jl [10]. For testing python
+libraries internal python module timeit was utilized. Results of experiments mentioned above
+are summarized in Figure 1, and in Table 1. In all cases data was already in RAM memory for
+CPU computation or in GPU memory for CUDA computations - hence memory transfer times
+were not included.
+As visible in the implementation of CUDA acceleration of described package in most cases
+led to from 40 up to 214 times shorter execution times. The only exception is in case of CUDA
+accelerated Monai Dice metric algorithm MedEval3D is slower (24.1 ms vs 52.8 ms) . However
+from all of the metrics described Monai implements only Dice metric, although admittedly most
+of others could be potentially calculated from Monai confusion matrix. What is also worth
+pointing out is a field in a table named ”all Conf metr based” this tested calculating all of the
+metrics jointly apart from interclass correlation and mahalanobis distance - time of execution
+in such case both in case of MedEval3d and Pymia algorithms was similar to calculation of
+just one of those metrics. This can be explained by the fact that in all of those cases the most
+computation intensive work is related to calculation of confusion matrix, and this calculation is
+reused in both packages between diffrent metrics.
+11
+
+
+![image](https://user-images.githubusercontent.com/53857487/159354927-8d4907f5-0137-4773-bc75-53134a76440e.png)
+Figure 1: Comparison of median times needed to calculate given metrics in log scale,
+for Monai only CUDA accelerated algorithm was taken into account. Dimensionality
+of data was (512x512x826)
+
+
+
+![image](https://user-images.githubusercontent.com/53857487/159355084-45608f86-89dd-4018-bca3-3eb3507f1109.png)
+
 
 
 [1] Taha, A.A., Hanbury, A. Metrics for evaluating 3D medical image segmentation: analysis, selection, and tool. BMC Med Imaging 15, 29 (2015). https://doi.org/10.1186/s12880-015-0068-x
