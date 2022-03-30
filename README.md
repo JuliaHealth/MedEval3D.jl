@@ -135,6 +135,26 @@ of data was (512x512x826)
 ![image](https://user-images.githubusercontent.com/53857487/159355084-45608f86-89dd-4018-bca3-3eb3507f1109.png)
 
 
+If You will find usefull my work please cite it
+
+```
+@Article{Mitura2021,
+  author   = {Mitura, Jakub and Chrapko, Beata E.},
+  journal  = {Zeszyty Naukowe WWSI},
+  title    = {{3D Medical Segmentation Visualization in Julia with MedEye3d}},
+  year     = {2021},
+  number   = {25},
+  pages    = {57--67},
+  volume   = {15},
+  doi      = {10.26348/znwwsi.25.57},
+  keywords = {OpenGl, Computer Tomagraphy, PET/CT, medical image annotation, medical image visualization},
+}
+
+
+```
+
+
+
 
 [1] Taha, A.A., Hanbury, A. Metrics for evaluating 3D medical image segmentation: analysis, selection, and tool. BMC Med Imaging 15, 29 (2015). https://doi.org/10.1186/s12880-015-0068-x
 
