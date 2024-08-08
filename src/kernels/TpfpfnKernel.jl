@@ -64,7 +64,7 @@ conf- adapted ConfigurtationStruct - used to pass information what metrics shoul
 """
 function getTpfpfnData!(goldGPU
     , segmGPU
-    ,args,threads,blocks,metricsTuplGlobal,numberToLooFor,conf) where T
+    ,args,threads,blocks,metricsTuplGlobal,numberToLooFor,conf)
 
 for i in  1:4   
     CUDA.fill!(args[i],0)
