@@ -17,7 +17,7 @@ using CUDA
 
 @testset "allocateMomory" begin 
     arrGold = CUDA.zeros(1024,200,800);
-    @test  size(..SimplerHousdorff.allocateMomory(size(arrGold))) == (32, cld(200,32), cld(800,32),6)
+    @test  size(SimplerHousdorff.allocateMemory(size(arrGold))) == (32, cld(200,32), cld(800,32),6)
     CUDA.reclaim()# just to destroy from gpu our dummy data
 
 end # 

@@ -11,19 +11,17 @@ giving set of constant associated with  the image that will be usefull for calcu
     I - image the we are trying to segment - 3 dimensional array of supplied type imageNumb
     return ImageConstants - some constants related to image iself (nor masks)
     """
-function getImageConstants(::Type{imageNumb} 
-                      I::Array{imageNumb, 3})
-                      ::ImageConstants
+function getImageConstants(::Type{imageNumb}, 
+                      I::Array{imageNumb, 3})::ImageConstants
                       where{imageNumb}
 
 
   return ImageConstants(
-            mvspx = # Voxelspacing x 
-            mvspy= # Voxelspacing y
-            mvspz= #mean Voxelspacing z
-            isZConst = # true if slices thickness is the same in all image
-            numberOfVox= # number of voxels in image
-
+            mvspx = 1.0, # Voxelspacing x 
+            mvspy = 1.0, # Voxelspacing y
+            mvspz = 1.0, # mean Voxelspacing z
+            isZConst = true, # true if slices thickness is the same in all image
+            numberOfVox = length(I) # number of voxels in image
   )
 
 end #getImageConstants
@@ -46,22 +44,24 @@ function getTnTpFpFn(::Type{maskNumb}
     )::Vector{Float64}
      where{maskNumb}
     
-    x1::Float64 =((double)values_f[i])/((double)PIXEL_VALUE_RANGE_MAX)
-    y1::Float64  =1-x1
-    x2::Float64 =1-x2
-    tn += min(y1,y2)
-    tp += min(x1,x2)
-    fn += x1>x2 ? x1-x2 : 0
-    fp += x2>x1 ? x2-x1 : 0
-    
-	look inot https://github.com/JuliaArrays/StructArrays.jl
-	
-return [tn,tp,fp,fn ] 
-end   #TnTpFpFn
+    tn = 0.0
+    tp = 0.0
+    fn = 0.0
+    fp = 0.0
 
+    for i in eachindex(G)
+        x1 = float(G[i]) / float(typemax(maskNumb))
+        y1 = 1 - x1
+        x2 = float(T[i]) / float(typemax(maskNumb))
+        y2 = 1 - x2
+        tn += min(y1, y2)
+        tp += min(x1, x2)
+        fn += x1 > x2 ? x1 - x2 : 0
+        fp += x2 > x1 ? x2 - x1 : 0
+    end
 
-
-
+    return [tn, tp, fp, fn]
+end   #getTnTpFpFn
 
 """
 calculating  a,b,c,d constants - needed for some particulary pairwise comparison metrics WITHOUT voxel volume correction

@@ -26,4 +26,4 @@ B
 V = view(B, :, :,1)
 Base.iscontiguous(V)
 
-
+end
