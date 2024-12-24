@@ -124,13 +124,12 @@
 ###########loadMainValues
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+includet("./test/includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 using ..BitWiseUtils,..ResultListUtils, ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils, ..ScanForDuplicates
 
 
 mainArrGPU= CUDA.zeros(UInt32, 50,50,20)
-
 dataBdim= (32,10,32)
 
 xMeta,yMeta,zMeta = 1,1,1
@@ -327,7 +326,7 @@ end
 
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+includet("./test/includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 using ..Housdorff,..ProcessMainDataVerB,..MainLoopKernel,..BitWiseUtils,..ResultListUtils, ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils, ..ScanForDuplicates
 
@@ -380,7 +379,6 @@ refArr[(dataBdim[1])+2 ,(dataBdim[2])+1,dataBdim[3]+5]=2 #from left
 
 refArr[(dataBdim[1])*2 ,(dataBdim[2]*2)-1,dataBdim[3]+5]=2 #from anterior
 refArr[(dataBdim[1])+1 ,(dataBdim[2])+2,dataBdim[3]+5]=2 #from posterior
-
 
 
 
@@ -799,19 +797,3 @@ Int64(sum(uu))
 # for entry in shouldBeInResultSet
 #   @test checkIsInResList(resList,entry[1],entry[2],entry[3],entry[5])
 # end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

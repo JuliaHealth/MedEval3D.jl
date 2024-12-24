@@ -9,10 +9,10 @@ module MainOverlapTest
 
 
 using Distances, Test, Revise 
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\overLap\\MainOverlap.jl")
+includet("./src/kernelEvolutions.jl")
+includet("./src/utils/CUDAGpuUtils.jl")
+includet("./src/structs/BasicStructs.jl")
+includet("./src/overLap/MainOverlap.jl")
 using ..BasicStructs
 using ..BasicPreds, ..CUDAGpuUtils,Cthulhu,BenchmarkTools , CUDA, ..MainOverlap
 

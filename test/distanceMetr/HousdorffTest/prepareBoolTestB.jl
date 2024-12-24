@@ -1,12 +1,10 @@
 
     using Revise, Parameters, Logging, Test
     using CUDA
-    includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+    includet("./test/includeAllUseFullForTest.jl")
     using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils, ..PrepareArrtoBool, ..BitWiseUtils
     using ..ResultListUtils, ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils, ..ScanForDuplicates, ..Housdorff
     
-
-
     mainArrDims= (512,512,500)
 
     arrGold = zeros(Int32,mainArrDims);
@@ -125,12 +123,10 @@ Int64(reducedGoldA[3,18,1])
  
  using Revise, Parameters, Logging, Test
  using CUDA
- includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+ includet("./test/includeAllUseFullForTest.jl")
  using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils, ..PrepareArrtoBool, ..BitWiseUtils
  using ..ResultListUtils, ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils, ..ScanForDuplicates, ..Housdorff
  
-
-
  mainArrDims= (60,60,60);
 
  mainArrCPU= zeros(UInt8,mainArrDims);
@@ -160,5 +156,3 @@ refArrCPU[10:50,10:50,30].= 1;
      Int64(sum(mainArrCPU))
      Int64(fn[])
      @test Int64(fn[])==Int64(sum(mainArrCPU))
-     
-    

@@ -1,7 +1,7 @@
 using Test,Revise
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
+includet("./src/utils/CUDAGpuUtils.jl")
 
-includet("C:/GitHub/GitHub/NuclearMedEval/src/distanceMetrics/SimplerHousdorff.jl")
+includet("./src/distanceMetrics/SimplerHousdorff.jl")
 using ..SimplerHousdorff, ..CUDAGpuUtils
 using CUDA
 

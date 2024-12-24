@@ -1,6 +1,6 @@
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+includet("./test/includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 using ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils
 using ..MainLoopKernel, ..WorkQueueUtils, ..Housdorff

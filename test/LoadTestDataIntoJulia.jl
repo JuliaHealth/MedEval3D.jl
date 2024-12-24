@@ -2,7 +2,7 @@
 #module LoadTestDataIntoJulia
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+includet("./test/includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils, ..BasicStructs
 using ..ResultListUtils, ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils, ..ScanForDuplicates
 using ..MainOverlap, ..RandIndex , ..ProbabilisticMetrics , ..VolumeMetric ,..InformationTheorhetic
@@ -25,9 +25,9 @@ pymEval = pyimport("pymia.evaluation.evaluator")
 pymWrite = pyimport("pymia.evaluation.writer")
 np= pyimport("numpy")
 
-data_dir = "C:\\GitHub\\GitHub\\NuclearMedEval\\test\\data\\exampleForTestsData"
-result_file = "C:\\GitHub\\GitHub\\NuclearMedEval\\test\\data\\pymiaOutput\\results.csv"
-result_summary_file = "C:\\GitHub\\GitHub\\NuclearMedEval\\test\\data\\pymiaOutput\\results_summary.csv"
+data_dir = "./test/data/exampleForTestsData"
+result_file = "./test/data/pymiaOutput/results.csv"
+result_summary_file = "./test/data/pymiaOutput/results_summary.csv"
 
 
 #given directory it gives all mhd file names concateneted with path - to get full file path and second in subarray will be file name

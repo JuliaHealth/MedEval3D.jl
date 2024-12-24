@@ -1,6 +1,6 @@
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+includet("./test/includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 using ..ResultListUtils, ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils, ..ScanForDuplicates
 
@@ -21,11 +21,9 @@ mappedB = map(ind-> getResLinIndex(ind[1],ind[2],ind[3],0, (200,200,200)) ,carts
 #################  addResult
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+includet("./test/includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 using ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils,..ResultListUtils
-
-
 
 threads=(32,5);
 blocks =2;

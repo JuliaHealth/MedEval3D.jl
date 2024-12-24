@@ -1,11 +1,10 @@
 using CUDA
-include("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
-include("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
+include("./src/kernelEvolutions.jl")
+includet("./src/utils/CUDAGpuUtils.jl")
 using ..BasicPreds, ..CUDAGpuUtils,Cthulhu,BenchmarkTools , CUDA
 
 
 goldBoolGPU= CuArray(trues(16,16,16));
-
 segmBoolGPU= CuArray(trues(16,16,16));
 
 fn = CuArray([0])
@@ -44,7 +43,7 @@ function kernelFunct(goldBoolGPU::CuDeviceArray{Bool, 3, 1}, segmBoolGPU::CuDevi
 
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+includet("./test/includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 using ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils,..ResultListUtils, ..Housdorff
 
