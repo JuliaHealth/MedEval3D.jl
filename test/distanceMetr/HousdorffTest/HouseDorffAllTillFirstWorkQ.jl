@@ -1,7 +1,7 @@
 ####################3 idea is to have a test that covers all till the very very first work queue is established from the very begining
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+includet("./test/includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 using ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils,..ResultListUtils, ..Housdorff
 
@@ -64,6 +64,5 @@ function getHousedorffOnlyWorkQueue(goldGPUa,segmGPUa,boolKernelArgs,mainKernelA
     
     """
     function simpleWorkQueue()
-
 
     end    

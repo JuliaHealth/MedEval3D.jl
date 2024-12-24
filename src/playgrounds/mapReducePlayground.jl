@@ -2,12 +2,12 @@
 
 using Revise, Parameters, Logging
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernelEvolutions.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\structs\\BasicStructs.jl")
+includet("./src/kernelEvolutions.jl")
+includet("./src/utils/CUDAGpuUtils.jl")
+includet("./src/structs/BasicStructs.jl")
 
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\kernels\\TpfpfnKernel.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\overLap\\MainOverlap.jl")
+includet("./src/kernels/TpfpfnKernel.jl")
+includet("./src/overLap/MainOverlap.jl")
 using ..BasicPreds, ..CUDAGpuUtils,Cthulhu,BenchmarkTools , CUDA
 using ..MainOverlap, ..TpfpfnKernel
 
@@ -58,5 +58,3 @@ tpNew = (9*9*9)*2 +18
 ## using occupancy API to calculate  threads number, block number etc...
 #args = (FlattGoldGPU,FlattSegGPU,tp,tn,fp,fn, intermediateResTp,intermediateResFp,intermediateResFn)
 calcBlocks,valcThreads,maxBlocks = computeBlocksFromOccupancy(args,3 )
-
-

@@ -38,7 +38,7 @@ def main(url: str, data_dir: str):
                 continue
             zip_.extract(member, data_dir)
 """
-py"main"("https://github.com/rundherum/pymia-example-data/releases/download/v0.1.0/example-data.zip", "C:\\GitHub\\GitHub\\NuclearMedEval\\test\\data\\exampleForTestsData")
+py"main"("https://github.com/rundherum/pymia-example-data/releases/download/v0.1.0/example-data.zip", "./test/data/exampleForTestsData")
 
 
 py"""
@@ -50,9 +50,9 @@ import pymia.evaluation.metric as metric
 import pymia.evaluation.evaluator as eval_
 import pymia.evaluation.writer as writer
 import SimpleITK as sitk
-data_dir = 'C:\\GitHub\\GitHub\\NuclearMedEval\\test\\data\\exampleForTestsData'
-result_file = 'C:\\GitHub\\GitHub\\NuclearMedEval\\test\\data\\pymiaOutput\\results.csv'
-result_summary_file = 'C:\\GitHub\\GitHub\\NuclearMedEval\\test\\data\\pymiaOutput\\results_summary.csv'
+data_dir = './test/data/exampleForTestsData'
+result_file = './test/data/pymiaOutput/results.csv'
+result_summary_file = './test/data/pymiaOutput/results_summary.csv'
 
 def downloadd(url: str, data_dir: str):
     metrics = [metric.DiceCoefficient(), metric.HausdorffDistance(percentile=95, metric='HDRFDST95'), metric.VolumeSimilarity()]
@@ -75,23 +75,19 @@ def downloadd(url: str, data_dir: str):
 
 
 
- py"main"()
+    py"main"()
 
-# print('\nSubject-wise results...')
-# writer.ConsoleWriter().write(evaluator.results)
+    # print('\nSubject-wise results...')
+    # writer.ConsoleWriter().write(evaluator.results)
+end
 """
 
+data_dir = "./test/data/exampleForTestsData"
+result_file = "./test/data/pymiaOutput/results.csv"
+result_summary_file = "./test/data/pymiaOutput/results_summary.csv"
 
-
-data_dir = 'C:\\GitHub\\GitHub\\NuclearMedEval\\test\\data\\exampleForTestsData'
-result_file = 'C:\\GitHub\\GitHub\\NuclearMedEval\\test\\data\\pymiaOutput\\results.csv'
-result_summary_file = 'C:\\GitHub\\GitHub\\NuclearMedEval\\test\\data\\pymiaOutput\\results_summary.csv'
-
-
-
-
-end#TestUtils
-
-
+end # module TestUtils
+end
+end
 # Pkg.build("HDF5")
 # using HDF5

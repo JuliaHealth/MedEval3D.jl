@@ -1,20 +1,14 @@
 using  Test, Revise 
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAGpuUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\mainHouseDorffKernel\\HFUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\distanceMetrics\\Housdorff\\mainHouseDorffKernel\\ProcessMainData.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\GPUtestUtils.jl")
+includet("./src/utils/CUDAGpuUtils.jl")
+includet("./src/distanceMetrics/Housdorff/mainHouseDorffKernel/HFUtils.jl")
+includet("./src/distanceMetrics/Housdorff/mainHouseDorffKernel/ProcessMainData.jl")
+includet("./test/GPUtestUtils.jl")
 
 using ..HFUtils
 using ..CUDAGpuUtils,BenchmarkTools , CUDA, StaticArrays
 
 using ..HFUtils, ..ProcessMainData,CUDA,..CUDAGpuUtils,StaticArrays
 using ..CUDAGpuUtils,BenchmarkTools , CUDA, StaticArrays
-
-
-
-
-
-
 
 testArrIn = CUDA.ones(Bool,32,32,32);
 referenceArray= CUDA.ones(Bool,32,32,32);
@@ -23,8 +17,6 @@ resArraysCounter=CUDA.ones(UInt32,1);
 isMaskFull = Ref(false)
 isMaskEmpty = Ref(false)
 locArr = Ref(Int32(0))
-
-
 
 
 function testprocessMaskData(testArrInn::CuDeviceArray{Bool, 3, 1},resArray,referenceArray,resArraysCounter,isMaskFull::CUDA.CuRefValue{Bool},isMaskEmpty::CUDA.CuRefValue{Bool},locArr)
@@ -55,4 +47,3 @@ return
 end#testprocessMaskData
 
 @cuda threads=(32,32) blocks=1 testprocessMaskData(testArrIn,resArray,referenceArray,resArraysCounter,isMaskFull,isMaskEmpty,locArr) 
-

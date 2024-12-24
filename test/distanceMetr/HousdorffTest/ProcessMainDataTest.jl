@@ -1,10 +1,8 @@
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+includet("./test/includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 using ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils
-
-
 
 ##### iter data block
 threads=(32,5);
@@ -53,12 +51,9 @@ end
 ########## loadMainValues
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+includet("./test/includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 using ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils
-
-
-
 
 threads=(32,5);
 blocks =17;
@@ -91,8 +86,6 @@ function processDataKernel(mainArrGPU,sourceShmem,resShmem,mainArrDims,metaDataD
     return
 end
 
-
-
 @cuda threads=threads blocks=blocks processDataKernel(mainArrGPU,sourceShmem,resShmem,mainArrDims,metaDataDims,loopXMeta,loopYZMeta,dataBdim, inBlockLoopX,inBlockLoopY,inBlockLoopZ )
 @test  resShmem[5+1,5+1,5+1]==false
 @test  resShmem[7,6,6]==true
@@ -110,20 +103,12 @@ end
 
 filter(cart-> resShmem[cart], CartesianIndices(resShmem)  )
 
-
-
-
-
-
-
 #################  paddingIter
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+includet("./test/includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 using ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils,..ResultListUtils
-
-
 
 threads=(32,5);
 blocks =1;
@@ -176,11 +161,9 @@ end
 #################  paddingProcessCombined
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+includet("./test/includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 using ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils,..ResultListUtils
-
-
 
 threads=(32,5);
 blocks =1;
@@ -230,24 +213,12 @@ end
 @test Int64(sum(resListIndicies))>0
 @test  Int64.(Array(resList[8,:]))==[dataBdim[1]+2,dataBdim[2]+2,dataBdim[3]+1,1,5,3]
 
-
-
-
-
-
-
-
-
-
-
 ######### process padding
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+includet("./test/includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 using ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils,..ResultListUtils
-
-
 
 threads=(32,5);
 blocks =1;
@@ -503,11 +474,9 @@ metaCorrZ = 2
 ### data 1 
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+includet("./test/includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 using ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils,..ResultListUtils
-
-
 
 threads=(32,5);
 blocks =1;
@@ -741,11 +710,9 @@ metaCorrZ = 2
 
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+includet("./test/includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 using ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils,..ResultListUtils
-
-
 
 threads=(32,5);
 blocks =1;
@@ -754,10 +721,7 @@ dataBdim = (10,10,10)
 mainArrCPU= falses(mainArrDims);
 
 mainArrCPU[17,17,17]= true;
-
-
 refArrCPU = falses(mainArrDims);
-
 
 metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
 metaDataDims= size(metaData);
@@ -813,18 +777,13 @@ metaCorrZ = 2
 @test Int64(metaData[metaCorrX,metaCorrY,metaCorrZ,getNewCountersBeg()+13])==6
 
 length(filter(it->it>0,resListIndicies))
-
-
 ########## data 3
-
 
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+includet("./test/includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 using ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils,..ResultListUtils
-
-
 
 threads=(32,5);
 blocks =1;
@@ -833,10 +792,7 @@ dataBdim = (10,10,10)
 mainArrCPU= trues(mainArrDims);
 
 mainArrCPU[17,17,17]= true;
-
-
 refArrCPU = falses(mainArrDims);
-
 
 metaData = MetaDataUtils.allocateMetadata(mainArrDims,dataBdim);
 metaDataDims= size(metaData);

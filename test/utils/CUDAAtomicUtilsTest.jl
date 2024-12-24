@@ -6,7 +6,7 @@ using CUDA
 # includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\IterationUtils.jl")
 # includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\ReductionUtils.jl")
 # includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\MemoryUtils.jl")
-includet("C:\\GitHub\\GitHub\\NuclearMedEval\\src\\utils\\CUDAAtomicUtils.jl")
+includet("./src/utils/CUDAAtomicUtils.jl")
 
 #using ..BasicPreds, ..CUDAGpuUtils , ..IterationUtils,..ReductionUtils , ..MemoryUtils, ..CUDAAtomicUtils
 using ..CUDAAtomicUtils

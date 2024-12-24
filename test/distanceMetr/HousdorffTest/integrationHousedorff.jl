@@ -3,7 +3,7 @@
     # julia -g 2 C:\GitHub\GitHub\NuclearMedEval\test\distanceMetr\HousdorffTest\integrationHousedorff.jl
     using Revise, Parameters, Logging, Test
     using CUDA
-    includet("C:\\GitHub\\GitHub\\NuclearMedEval\\test\\includeAllUseFullForTest.jl")
+    includet("./test/includeAllUseFullForTest.jl")
     using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
     using ..MainLoopKernel,..PrepareArrtoBool,..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils,..ResultListUtils, ..Housdorff
 

@@ -7,9 +7,9 @@ import pymia.evaluation.evaluator as eval_
 import pymia.evaluation.writer as writer
 import SimpleITK as sitk
 
-data_dir = "C:\\GitHub\\GitHub\\NuclearMedEval\\test\\data\\exampleForTestsData"
-result_file = "C:\\GitHub\\GitHub\\NuclearMedEval\\test\\data\\pymiaOutput\\results.csv"
-result_summary_file = "C:\\GitHub\\GitHub\\NuclearMedEval\\test\\data\\pymiaOutput\\results_summary.csv"
+data_dir = "./test/data/exampleForTestsData"
+result_file = "./test/data/pymiaOutput/results.csv"
+result_summary_file = "./test/data/pymiaOutput/results_summary.csv"
 
 
 
