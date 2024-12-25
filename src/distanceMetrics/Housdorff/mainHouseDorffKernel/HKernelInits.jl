@@ -28,9 +28,4 @@ function memoryAllocations()
 
 end#initializeMemory
 
-
-
-
-
-
 end#HKernelInits

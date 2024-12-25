@@ -1,5 +1,3 @@
-
-
 """
 new optimazation idea  - try to put all data in boolean arrays in shared memory  when getting means
 next we would need only to read shared memory - yet first one need to check wheather there would be enough shmem on device
@@ -13,8 +11,7 @@ module MeansMahalinobis
 using ..CUDAGpuUtils, CUDA, ..IterationUtils, ..ReductionUtils, ..MemoryUtils
 export meansMahalinobisKernel,prepareMahalinobisKernel
 
-
-
+using KernelAbstractions
 
 """
 prepares all equired arguments and gives back the  arguments and thread and block configuration 
@@ -451,7 +448,6 @@ macro getFinalResults()
 
 
 
-
     end)
 end
 
@@ -473,168 +469,54 @@ covarianceGlobal (just one column but entries exactly the same as above)
 mahalanobisResGlobal - global result of Mahalinobis distance
 mahalanobisResSliceWise - global result of Mahalinobis distance
 """
-function meansMahalinobisKernel(goldArr,segmArr
-    ,numberToLooFor
-    ,loopYdim::UInt32
-    ,loopXdim::UInt32
-    ,loopZdim::UInt32
-    ,arrDims::Tuple{UInt32,UInt32,UInt32}
-    ,totalXGold,totalYGold,totalZGold,totalCountGold
-    ,totalXSegm,totalYSegm,totalZSegm,totalCountSegm
-    ,countPerZGold,countPerZSegm
-    ,varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
-    ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
-    ,mahalanobisResGlobal   )
-
-    grid_handle = this_grid()
+@kernel function meansMahalanobisKernel(
+    goldArr, segmArr, numberToLooFor, loopYdim::UInt32, loopXdim::UInt32, loopZdim::UInt32, arrDims::Tuple{UInt32,UInt32,UInt32},
+    totalXGold, totalYGold, totalZGold, totalCountGold, totalXSegm, totalYSegm, totalZSegm, totalCountSegm,
+    countPerZGold, countPerZSegm,
+    varianceXGlobalGold, covarianceXYGlobalGold, covarianceXZGlobalGold, varianceYGlobalGold, covarianceYZGlobalGold, varianceZGlobalGold,
+    varianceXGlobalSegm, covarianceXYGlobalSegm, covarianceXZGlobalSegm, varianceYGlobalSegm, covarianceYZGlobalSegm, varianceZGlobalSegm,
+    mahalanobisResGlobal
+)
     # keeping counter of old z value - in order to be able to get slicewise z counter
-    oldZVal= @cuStaticSharedMem(Float32, (1))
-    #summing coordinates of all voxels we are intrested in 
-    sumX,sumY,sumZ,count = Float32(0),Float32(0),Float32(0),Float32(0)
-    #count how many voxels of intrest there are so we will get means
-    #for storing results from warp reductions
-    shmemSum= @cuStaticSharedMem(Float32, (32,6))   
+    oldZVal = @StaticSharedMem(Float32, (1,))
+    # summing coordinates of all voxels we are interested in
+    sumX, sumY, sumZ, count = Float32(0), Float32(0), Float32(0), Float32(0)
+    # count how many voxels of interest there are so we will get means
+    # for storing results from warp reductions
+    shmemSum = @StaticSharedMem(Float32, (32, 6))
     clearSharedMemWarpLong(shmemSum, UInt8(6), Float32(0.0))
-    @ifXY 1 1 oldZVal[1]=0
-    #just needed for reductions
+    if @index(Global) == 1
+        oldZVal[1] = 0
+    end
+    # just needed for reductions
     offsetIter = UInt8(1)
     #### first we analyze gold standard array
-    sync_threads()
+    @synchronize
 
-    @iterateForMeans(countPerZGold,goldArr)
-  
+    @iterateForMeans(countPerZGold, goldArr)
+end
 
-    #now we have needed values in  shmemSum[1,1] - sumX  shmemSum[1,2] - sumY shmemSum[1,3] - sumZ and in shmemSum[1,4] - offsetIter
-    #important we need to send values to the atomics on the same warps as we did reduction 
-    #so we can avoid thread synchronization in such situation
-    @addAtomic(shmemSum,totalXGold, totalYGold ,totalZGold,totalCountGold)
-    
-    sync_threads()
-    ### now analyzing segmentation array
-    #resetting variables
-    sumX,sumY,sumZ = Float32(0),Float32(0),Float32(0)
-    count= Float32(0)
-    clearSharedMemWarpLong(shmemSum, UInt8(6), Float32(0.0))
-    @ifXY 1 1 oldZVal[1]=0
-    sync_threads()
-    #iterations
+# function executeMeansMahalanobisKernel(
+#     goldArr, segmArr, numberToLooFor, loopYdim::UInt32, loopXdim::UInt32, loopZdim::UInt32, arrDims::Tuple{UInt32,UInt32,UInt32},
+#     totalXGold, totalYGold, totalZGold, totalCountGold, totalXSegm, totalYSegm, totalZSegm, totalCountSegm,
+#     countPerZGold, countPerZSegm,
+#     varianceXGlobalGold, covarianceXYGlobalGold, covarianceXZGlobalGold, varianceYGlobalGold, covarianceYZGlobalGold, varianceZGlobalGold,
+#     varianceXGlobalSegm, covarianceXYGlobalSegm, covarianceXZGlobalSegm, varianceYGlobalSegm, covarianceYZGlobalSegm, varianceZGlobalSegm,
+#     mahalanobisResGlobal
+# )
+#     threads = (32, 32)
+#     blocks = (cld(arrDims[1], threads[1]), cld(arrDims[2], threads[2]), cld(arrDims[3], threads[3]))
 
-    @iterateForMeans(countPerZSegm,segmArr)
-
-    @addAtomic(shmemSum,totalXSegm, totalYSegm ,totalZSegm,totalCountSegm)
-
-
-    sync_grid(grid_handle)
-##################### getting covariances
-  
-##first gold mask
-    #first prepare all needed memory
-    # we are using shared memory to hold means of 1)x 2)y and 3)z 
-    meanxyz= @cuStaticSharedMem(Float32, (3))
-    #for storing intermediate results in shared memory
-    #1)variance x    2)cov xy     3)cov xz     4)var y    5)cov yz      6)var z 
-    intermedieteRes= @cuStaticSharedMem(Float32, (6))
-    #reset required memory
-    @resetForVarAndCov(totalXGold,totalYGold, totalZGold, totalCountGold)
-    sync_threads()
-    #calculate means and covariances
-    @calculateVariancesAdCov(countPerZGold,goldArr,varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold)
-    
-    ######### other mask
-    sync_threads()
-    @resetForVarAndCov(totalXSegm,totalYSegm,totalZSegm,totalCountSegm)
-    sync_threads()
-    @calculateVariancesAdCov(countPerZSegm,segmArr,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm)
-    
-###################### getting final results
-
-
-
-sync_grid(grid_handle)
-    #preparing space
-    sumX,sumY,sumZ,count = Float32(0),Float32(0),Float32(0),Float32(0)
-    clearSharedMemWarpLong(shmemSum, UInt8(6), Float32(0.0))
-    sync_threads()
-    #calculate final results
-    @getFinalResults()
-
-end#meansMahalinobisKernel
-
-end#MeansMahalinobis
-
-
-
-
-# """
-# in order to avoid overfilling of local result list we need to from time to time push it into the global 
-# and clear it
-# """
-# function pushlocalResToGlobal(intermidiateResX, intermidiateResY, intermidiateResZ,intermediateResCounter, resList, resListCounter,currVal )
-#     #opdate the counter for the global list use old as offset where we start to put our results
-#     if(currVal>1)
-#         #oldLocal = CUDA.atomic_xchg!(pointer(intermediateResCounter), UInt32(1))
-#         intermediateResCounter[1]= UInt32(1)
-#         oldCount::UInt32 = @inboundsCUDA.@atomic resListCounter[]+=UInt32(currVal-UInt32(1))
-
-#             #pushing from local to global queue
-#             @unroll for i in 1:currVal
-#                 @inbounds  resList[oldCount+i,1] = intermidiateResX[i]
-#                 @inbounds  resList[oldCount+i,2] = intermidiateResY[i]
-#                 @inbounds  resList[oldCount+i,3] = intermidiateResZ[i]
-#                 CUDA.@cuprint "intermidiateRes[i,1] $(intermidiateResX[i])  intermidiateRes[i,2] $(intermidiateResY[i]) intermidiateRes[i,3] $(intermidiateResZ[i])  \n "
-
-#             end#for z dim    
-#         #reset local counter
-#     end    
+#     kernel = meansMahalanobisKernel(CPU(), threads, blocks)
+#     kernel(
+#         goldArr, segmArr, numberToLooFor, loopYdim, loopXdim, loopZdim, arrDims,
+#         totalXGold, totalYGold, totalZGold, totalCountGold, totalXSegm, totalYSegm, totalZSegm, totalCountSegm,
+#         countPerZGold, countPerZSegm,
+#         varianceXGlobalGold, covarianceXYGlobalGold, covarianceXZGlobalGold, varianceYGlobalGold, covarianceYZGlobalGold, varianceZGlobalGold,
+#         varianceXGlobalSegm, covarianceXYGlobalSegm, covarianceXZGlobalSegm, varianceYGlobalSegm, covarianceYZGlobalSegm, varianceZGlobalSegm,
+#         mahalanobisResGlobal,
+#         ndrange = blocks
+#     )
 # end
 
-
-
-# function meansMahalinobisKernel(goldArr,segmArr
-#     ,numberToLooFor
-#     ,loopYdim::UInt32
-#     ,loopXdim::UInt32
-#     ,loopZdim::UInt32
-#     ,arrDims::Tuple{UInt32,UInt32,UInt32}
-#     ,totalXGold,totalYGold,totalZGold,totalCountGold
-#     ,totalXSegm,totalYSegm,totalZSegm,totalCountSegm  )
-
-#     #summing coordinates of all voxels we are intrested in 
-#     sumX,sumY,sumZ = UInt64(0),UInt64(0),UInt64(0)
-#     #count how many voxels of intrest there are so we will get means
-#     count::UInt16 = UInt16(0)
-#     #for storing results from warp reductions
-#     shmemSum= @cuStaticSharedMem(UInt32, (32,4))   
-#     clearSharedMemWarpLong(shmemSum, UInt8(4))
-#     #just needed for reductions
-#     offsetIter = UInt8(1)
-#     #### first we analyze gold standard array
-#     @iter3d arrDims loopXdim loopYdim  loopZdim if(  @inbounds(goldArr[x,y,z])  ==numberToLooFor)
-#         #updating variables needed to calculate means
-#         sumX+=UInt64(x) ;  sumY+=UInt64(y)  ; sumZ+=UInt64(z)   ; count+=UInt16(1)   
-#     end#if bool in arr  
-
-#     #tell what variables are to be reduced and by what operation
-#     @redWitAct(offsetIter,shmemSum,  sumX,+,     sumY,+    ,sumZ,+   ,count,+)
-#     #now we have needed values in  shmemSum[1,1] - sumX  shmemSum[1,2] - sumY shmemSum[1,3] - sumZ and in shmemSum[1,4] - offsetIter
-#     #important we need to send values to the atomics on the same warps as we did reduction 
-#     #so we can avoid thread synchronization in such situation
-#     @addAtomic(shmemSum,totalXGold, totalYGold ,totalZGold,totalCountGold)
-
-#     ### now analyzing segmentation array
-#     #resetting variables
-#     sumX,sumY,sumZ = UInt64(0),UInt64(0),UInt64(0)
-#     count= UInt16(0)
-#     clearSharedMemWarpLong(shmemSum, UInt8(4))
-#     offsetIter = UInt8(1)
-
-#     @iter3d arrDims loopXdim loopYdim  loopZdim if(  @inbounds(segmArr[x,y,z])  ==numberToLooFor)
-#         sumX+=UInt64(x) ;  sumY+=UInt64(y)  ; sumZ+=UInt64(z)   ; count+=UInt16(1)   
-#     end#if bool in arr  
-#     @redWitAct(offsetIter,shmemSum,  sumX,+,     sumY,+    ,sumZ,+   ,count,+)
-#     @addAtomic(shmemSum,totalXSegm, totalYSegm ,totalZSegm,totalCountSegm)
-
-#     return  
-#     end#meansMahalinobisKernel
-
-# end#MeansMahalinobis
+end#MeansMahalinobis
