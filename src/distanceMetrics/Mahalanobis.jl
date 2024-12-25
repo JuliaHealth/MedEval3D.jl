@@ -148,8 +148,3 @@ not finished experiments on using WMMA tensor cores
 	 
 # # 		 return
 # # 	end
-
-
-
-
-

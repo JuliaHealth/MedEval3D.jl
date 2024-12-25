@@ -92,6 +92,7 @@ To maximize occupancy the blocks will concurrently work on both passes at once -
 """
 module SimplerHousdorff
 using CUDA, ..CUDAGpuUtils, Logging
+using KernelAbstractions
 """
 Metadata
 divide array into blocks and assigns the metadata for each 
@@ -117,7 +118,7 @@ As we start from place where x,y,z is 0 and we will proceed (concurrently from h
 """
 function getBlockMetaData(arrGold, arrSegm,maxThrPerB::Int64=1024)
     arrGoldDims= size(arrGold)
-    metadata = allocateMomory(arrGoldDims)
+    metadata = allocateMemory(arrGoldDims)
     metaDataDims = size(metadata)
     blocks,threadNumPerBlock = getBlockNumb(metaDataDims)# for metadata kernel 
     @info "blocks " blocks
@@ -144,31 +145,27 @@ arrGoldDims - dimensions of the main array
 dimOfThreadBlock - how big is the edge of a cube describing data block - for example for 1024 threads - we will have 32x32x32 size hence dimOfThreadBlock= 32
 we will have in basic type 32x32 threads and work on 32x32x32 data block 
 """
-function housedorffMetadataKernel(matadata
-                                ,arrGold
-                                ,arrSegm
-                                ,arrGoldDims::Tuple{Int64, Int64, Int64}
-                                ,iterationNumber::UInt16
-                                ,debugginArr
-                                ,dimOfThreadBlock::UInt16 )
-
-
-    #initializing shared array (remember this is autmatically initated to semi random numbers)
-    shemm= CuDynamicSharedArray(Bool,(dimOfThreadBlock,dimOfThreadBlock,dimOfThreadBlock) )
-    #as we constructed data dimensions o be always multiple of 32 we do not need to do bound checks
-    @unroll for k in 1:32
-        shemm[blockIdx().x,blockIdx().y,k]=  [ (blockIdx().x-1)*dimOfThreadBlock+threadIdxX(),(blockIdx().y-1)*dimOfThreadBlock+threadIdxY(),(blockIdx().z-1)*dimOfThreadBlock+k]
-    end#for
-
-                                # each lane will be responsible for one meta data  
-    # @unroll for k in 0:metadataDims[1]
-    #     matadata[threadIdxX(),k+1, blockIdx().x,1]=(threadIdxX()-1)*32   #min x
-    #     matadata[threadIdxX(),k+1, blockIdx().x,2]=min(threadIdxX()*32,arrGoldDims[1])   #max x
-    #     matadata[threadIdxX(),k+1, blockIdx().x,3]=k*32   #min y
-    #     matadata[threadIdxX(),k+1, blockIdx().x,4]=min((k+1)*32,arrGoldDims[2] )   #max y
-    #     matadata[threadIdxX(),k+1, blockIdx().x,5]=(blockIdx().x-1)*32   #min z
-    #     matadata[threadIdxX(),k+1, blockIdx().x,6]=min((blockIdx().x)*32,arrGoldDims[3])   #max z
-    # end#for
+@kernel function housedorffMetadataKernel(matadata, arrGold, arrSegm, arrGoldDims::NTuple{3, Int64}, iterationNumber::UInt16, debugginArr, dimOfThreadBlock::UInt16)
+    # initializing shared array (remember this is automatically initiated to semi-random numbers)
+    shemm = @StaticSharedMem(Bool, (dimOfThreadBlock, dimOfThreadBlock, dimOfThreadBlock))
+    
+    # as we constructed data dimensions to be always multiple of 32 we do not need to do bound checks
+    for k in 1:32
+        shemm[blockIdx().x, blockIdx().y, k] = (blockIdx().x - 1) * dimOfThreadBlock + threadIdx().x,
+                                               (blockIdx().y - 1) * dimOfThreadBlock + threadIdx().y,
+                                               (blockIdx().z - 1) * dimOfThreadBlock + k
+    end
+    
+    # each lane will be responsible for one meta data
+    # Uncomment and adapt the following lines if needed
+    # for k in 0:metadataDims[1]
+    #     matadata[threadIdx().x, k + 1, blockIdx().x, 1] = (threadIdx().x - 1) * 32   # min x
+    #     matadata[threadIdx().x, k + 1, blockIdx().x, 2] = min(threadIdx().x * 32, arrGoldDims[1])   # max x
+    #     matadata[threadIdx().x, k + 1, blockIdx().x, 3] = k * 32   # min y
+    #     matadata[threadIdx().x, k + 1, blockIdx().x, 4] = min((k + 1) * 32, arrGoldDims[2])   # max y
+    #     matadata[threadIdx().x, k + 1, blockIdx().x, 5] = (blockIdx().x - 1) * 32   # min z
+    #     matadata[threadIdx().x, k + 1, blockIdx().x, 6] = min((blockIdx().x) * 32, arrGoldDims[3])   # max z
+    # end
 end #housedorffMetadataKernel
 
 
