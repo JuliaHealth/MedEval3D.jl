@@ -13,13 +13,14 @@ using KernelAbstractions
 using KernelAbstractions.Extras: @unroll
 using CUDA
 using Statistics
+using Atomix
 
 export prepareInterClassCorrKernel, calculateInterclassCorr
 
 # Kernel definition for interclass correlation
 @kernel function kernel_interclass_corr!(
-    @Const(flat_gold), 
-    @Const(flat_segm),
+    flat_gold, 
+    flat_segm,
     sum_of_gold,
     sum_of_segm,
     ssw_total,
@@ -31,11 +32,11 @@ export prepareInterClassCorrKernel, calculateInterclassCorr
     idx = @index(Global)
     
     # Shared memory for local reductions
-    local_sum_gold = @localmem Float32 (32,)
-    local_sum_segm = @localmem Float32 (32,)
-    local_ssw = @localmem Float32 (32,)
-    local_ssb = @localmem Float32 (32,)
-    
+    local_sum_gold = @localmem(Float32, 32)
+    local_sum_segm = @localmem(Float32, 32)
+    local_ssw = @localmem(Float32, 32)
+    local_ssb = @localmem(Float32, 32)
+
     # Initialize local values
     tid = @index(Local, Linear)
     local_sum_gold[tid] = 0f0
@@ -44,7 +45,7 @@ export prepareInterClassCorrKernel, calculateInterclassCorr
     local_ssb[tid] = 0f0
     
     @synchronize
-    
+
     # First pass: calculate sums
     if idx <= length(flat_gold)
         local_sum_gold[tid] += Float32(flat_gold[idx] == number_to_look_for)
@@ -59,42 +60,47 @@ export prepareInterClassCorrKernel, calculateInterclassCorr
             local_sum_gold[tid] += local_sum_gold[tid + stride]
             local_sum_segm[tid] += local_sum_segm[tid + stride]
         end
-        @synchronize
     end
     
-    # Write results to global memory
-    if tid == 1
-        @atomic sum_of_gold[] += local_sum_gold[1]
-        @atomic sum_of_segm[] += local_sum_segm[1]
+    @synchronize
+    
+    # Accumulate global sums
+    if tid == 0
+        Atomix.@atomic sum_of_gold[] += local_sum_gold[1]
+        Atomix.@atomic sum_of_segm[] += local_sum_segm[1]
+    end
+
+    @synchronize
+    
+    # Calculate grand mean
+    if idx == 1
+        grand_mean[1] = (sum_of_gold[1] + sum_of_segm[1]) / (2 * length(flat_gold))
     end
     
     @synchronize
     
     # Second pass: calculate SSW and SSB
     if idx <= length(flat_gold)
-        m = (Float32(flat_gold[idx] == number_to_look_for) + 
-             Float32(flat_segm[idx] == number_to_look_for)) / 2f0
-        
-        local_ssw[tid] += ((Float32(flat_gold[idx] == number_to_look_for) - m)^2 + 
-                          (Float32(flat_segm[idx] == number_to_look_for) - m)^2)
-        local_ssb[tid] += (m - grand_mean[])^2
+        m = (Float32(flat_gold[idx] == number_to_look_for) + Float32(flat_segm[idx] == number_to_look_for)) / 2
+        local_ssw[tid] += ((Float32(flat_gold[idx] == number_to_look_for) - m)^2 + (Float32(flat_segm[idx] == number_to_look_for) - m)^2)
+        local_ssb[tid] += (m - grand_mean[1])^2
     end
     
     @synchronize
     
-    # Reduce SSW and SSB within workgroup
+    # Reduce within workgroup
     @unroll for stride in (16, 8, 4, 2, 1)
         if tid <= stride
             local_ssw[tid] += local_ssw[tid + stride]
             local_ssb[tid] += local_ssb[tid + stride]
         end
-        @synchronize
     end
+    @synchronize
     
-    # Write final results to global memory
-    if tid == 1
-        @atomic ssw_total[] += local_ssw[1]
-        @atomic ssb_total[] += local_ssb[1]
+    # Accumulate global SSW and SSB
+    if tid == 0
+        Atomix.@atomic ssw_total[] += local_ssw[1]
+        Atomix.@atomic ssb_total[] += local_ssb[1]
     end
 end
 
@@ -418,11 +424,7 @@ end
 
 
 # end
-
-
-
-
-end#InterClassCorrKernel
+# module InterClassCorrKernel
 
 
 

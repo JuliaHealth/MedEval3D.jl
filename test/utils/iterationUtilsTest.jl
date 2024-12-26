@@ -1,12 +1,12 @@
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("./src/kernelEvolutions.jl")
-includet("./src/structs/BasicStructs.jl")
-includet("./src/utils/CUDAGpuUtils.jl")
-includet("./src/utils/IterationUtils.jl")
-includet("./src/utils/ReductionUtils.jl")
-includet("./src/utils/MemoryUtils.jl")
-includet("./src/distanceMetrics/MeansMahalinobis.jl")
+# includet("./src/kernelEvolutions.jl")
+includet("../../src/structs/BasicStructs.jl")
+includet("../../src/utils/CUDAGpuUtils.jl")
+includet("../../src/utils/IterationUtils.jl")
+includet("../../src/utils/ReductionUtils.jl")
+includet("../../src/utils/MemoryUtils.jl")
+includet("../../src/distanceMetrics/MeansMahalinobis.jl")
 
 using ..BasicPreds, ..CUDAGpuUtils , ..MeansMahalinobis, ..IterationUtils,..ReductionUtils , ..MemoryUtils
 
@@ -102,7 +102,7 @@ end
 
     using Revise, Parameters, Logging, Test
     using CUDA
-    includet("./test/includeAllUseFullForTest.jl")
+    includet("../includeAllUseFullForTest.jl")
     using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils, ..BasicStructs
     using ..ResultListUtils, ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils, ..ScanForDuplicates
     using ..MainOverlap, ..RandIndex , ..ProbabilisticMetrics , ..VolumeMetric ,..InformationTheorhetic

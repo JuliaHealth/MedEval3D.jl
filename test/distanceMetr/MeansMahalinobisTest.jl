@@ -1,11 +1,11 @@
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("./src/structs/BasicStructs.jl")
-includet("./src/utils/CUDAGpuUtils.jl")
-includet("./src/utils/IterationUtils.jl")
-includet("./src/utils/ReductionUtils.jl")
-includet("./src/utils/MemoryUtils.jl")
-includet("./src/distanceMetrics/MeansMahalinobis.jl")
+includet("../../src/structs/BasicStructs.jl")
+includet("../../src/utils/CUDAGpuUtils.jl")
+includet("../../src/utils/IterationUtils.jl")
+includet("../../src/utils/ReductionUtils.jl")
+includet("../../src/utils/MemoryUtils.jl")
+includet("../../src/distanceMetrics/MeansMahalinobis.jl")
 
 using  ..CUDAGpuUtils , ..MeansMahalinobis, ..IterationUtils,..ReductionUtils , ..MemoryUtils
 nx=512 ; ny=512 ; nz=317

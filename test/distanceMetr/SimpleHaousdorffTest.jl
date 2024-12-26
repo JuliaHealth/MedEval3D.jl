@@ -1,7 +1,7 @@
 using Test,Revise
-includet("./src/utils/CUDAGpuUtils.jl")
+includet("../../src/utils/CUDAGpuUtils.jl")
 
-includet("./src/distanceMetrics/SimplerHousdorff.jl")
+includet("../../src/distanceMetrics/Housdorff/SimplerHousdorff.jl")
 using ..SimplerHousdorff, ..CUDAGpuUtils
 using CUDA
 
@@ -14,7 +14,6 @@ using CUDA
 #     CUDA.reclaim()# just to destroy from gpu our dummy data
 # end # 
     
-
 @testset "allocateMomory" begin 
     arrGold = CUDA.zeros(1024,200,800);
     @test  size(SimplerHousdorff.allocateMemory(size(arrGold))) == (32, cld(200,32), cld(800,32),6)

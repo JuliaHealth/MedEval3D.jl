@@ -11,8 +11,6 @@ data_dir = "./test/data/exampleForTestsData"
 result_file = "./test/data/pymiaOutput/results.csv"
 result_summary_file = "./test/data/pymiaOutput/results_summary.csv"
 
-
-
 metrics = [metric.InterclassCorrelation()]
 
 
@@ -48,8 +46,3 @@ functions = {'MEAN': np.mean, 'STD': np.std}
 writer.CSVStatisticsWriter(result_summary_file, functions=functions).write(evaluator.results)
 print('\nAggregated statistic results...')
 writer.ConsoleStatisticsWriter(functions=functions).write(evaluator.results)
-
-
-
-
-
