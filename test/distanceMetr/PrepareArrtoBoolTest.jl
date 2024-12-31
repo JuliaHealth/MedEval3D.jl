@@ -1,7 +1,7 @@
 
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("./test/includeAllUseFullForTest.jl")
+includet("../includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils, ..PrepareArrtoBool
 using ..ResultListUtils, ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils, ..ScanForDuplicates
 

@@ -2,12 +2,12 @@
 
 using Revise, Parameters, Logging
 using CUDA
-includet("./src/kernelEvolutions.jl")
-includet("./src/utils/CUDAGpuUtils.jl")
-includet("./src/structs/BasicStructs.jl")
+# includet("./src/kernelEvolutions.jl")
+includet("../../src/utils/CUDAGpuUtils.jl")
+includet("../../src/structs/BasicStructs.jl")
 
-includet("./src/kernels/TpfpfnKernel.jl")
-includet("./src/overLap/MainOverlap.jl")
+includet("../../src/kernels/TpfpfnKernel.jl")
+includet("../../src/overLap/MainOverlap.jl")
 using ..BasicPreds, ..CUDAGpuUtils,Cthulhu,BenchmarkTools , CUDA
 using ..MainOverlap, ..TpfpfnKernel
 

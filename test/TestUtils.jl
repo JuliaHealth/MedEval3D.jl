@@ -59,12 +59,11 @@ def downloadd(url: str, data_dir: str):
     labels = {1: 'WHITEMATTER',2: 'GREYMATTER'  }
     # get subjects to evaluate
     subject_dirs = [subject for subject in glob.glob(os.path.join(data_dir, '*')) if os.path.isdir(subject) and os.path.basename(subject).startswith('Subject')]
-    return subject_dirs
-"""  
 
     for subject_dir in subject_dirs:
 
-        subject_id = os.path.basename(subject_dir);ground_truth = sitk.ReadImage(os.path.join(subject_dir, f'{subject_id}_GT.mha'))
+        subject_id = os.path.basename(subject_dir)
+        ground_truth = sitk.ReadImage(os.path.join(subject_dir, f'{subject_id}_GT.mha'))
 
         prediction = ground_truth
 
@@ -73,13 +72,10 @@ def downloadd(url: str, data_dir: str):
             prediction = sitk.BinaryErode(prediction, [1,1,1], sitk.sitkBall, 0, label_val)
 """
 
-
-
-    py"main"()
+    main()
 
     # print('\nSubject-wise results...')
     # writer.ConsoleWriter().write(evaluator.results)
-end
 """
 
 data_dir = "./test/data/exampleForTestsData"
@@ -87,7 +83,7 @@ result_file = "./test/data/pymiaOutput/results.csv"
 result_summary_file = "./test/data/pymiaOutput/results_summary.csv"
 
 end # module TestUtils
-end
-end
 # Pkg.build("HDF5")
 # using HDF5
+"""
+end

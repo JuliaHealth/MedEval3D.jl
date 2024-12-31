@@ -1,5 +1,4 @@
 using CUDA
-include("./src/kernelEvolutions.jl")
 includet("./src/utils/CUDAGpuUtils.jl")
 using ..BasicPreds, ..CUDAGpuUtils,Cthulhu,BenchmarkTools , CUDA
 
@@ -43,7 +42,7 @@ function kernelFunct(goldBoolGPU::CuDeviceArray{Bool, 3, 1}, segmBoolGPU::CuDevi
 
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("./test/includeAllUseFullForTest.jl")
+includet("../../test/includeAllUseFullForTest.jl")
 using ..CUDAGpuUtils ,..IterationUtils,..ReductionUtils , ..MemoryUtils,..CUDAAtomicUtils
 using ..MetadataAnalyzePass,..MetaDataUtils,..WorkQueueUtils,..ProcessMainDataVerB,..HFUtils,..ResultListUtils, ..Housdorff
 

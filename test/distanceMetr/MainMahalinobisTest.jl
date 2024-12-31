@@ -1,13 +1,13 @@
 using Revise, Parameters, Logging, Test
 using CUDA
-includet("./src/kernelEvolutions.jl")
-includet("./src/structs/BasicStructs.jl")
-includet("./src/utils/CUDAGpuUtils.jl")
-includet("./src/utils/IterationUtils.jl")
-includet("./src/utils/ReductionUtils.jl")
-includet("./src/utils/MemoryUtils.jl")
-includet("./src/distanceMetrics/MeansMahalinobis.jl")
-includet("./src/distanceMetrics/Mahalanobis.jl")
+# includet("../../src/kernels/kernelEvolutions.jl")
+includet("../../src/structs/BasicStructs.jl")
+includet("../../src/utils/CUDAGpuUtils.jl")
+includet("../../src/utils/IterationUtils.jl")
+includet("../../src/utils/ReductionUtils.jl")
+includet("../../src/utils/MemoryUtils.jl")
+includet("../../src/distanceMetrics/MeansMahalinobis.jl")
+includet("../../src/distanceMetrics/Mahalanobis.jl")
 using ..BasicPreds, ..CUDAGpuUtils , ..Mahalanobis, ..MeansMahalinobis, ..IterationUtils,..ReductionUtils , ..MemoryUtils
 nx=512 ; ny=512 ; nz=317
 #first we initialize the metrics on CPU so we will modify them easier

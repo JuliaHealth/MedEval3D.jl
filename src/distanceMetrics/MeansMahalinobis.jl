@@ -478,12 +478,12 @@ mahalanobisResSliceWise - global result of Mahalinobis distance
     mahalanobisResGlobal
 )
     # keeping counter of old z value - in order to be able to get slicewise z counter
-    oldZVal = @StaticSharedMem(Float32, (1,))
+    oldZVal = @localmem(Float32, 1)
     # summing coordinates of all voxels we are interested in
     sumX, sumY, sumZ, count = Float32(0), Float32(0), Float32(0), Float32(0)
     # count how many voxels of interest there are so we will get means
     # for storing results from warp reductions
-    shmemSum = @StaticSharedMem(Float32, (32, 6))
+    shmemSum = @localmem(Float32, (32, 6))
     clearSharedMemWarpLong(shmemSum, UInt8(6), Float32(0.0))
     if @index(Global) == 1
         oldZVal[1] = 0
