@@ -469,7 +469,7 @@ covarianceGlobal (just one column but entries exactly the same as above)
 mahalanobisResGlobal - global result of Mahalinobis distance
 mahalanobisResSliceWise - global result of Mahalinobis distance
 """
-@kernel function meansMahalanobisKernel(
+@kernel function meansMahalinobisKernel(
     goldArr, segmArr, numberToLooFor, loopYdim::UInt32, loopXdim::UInt32, loopZdim::UInt32, arrDims::Tuple{UInt32,UInt32,UInt32},
     totalXGold, totalYGold, totalZGold, totalCountGold, totalXSegm, totalYSegm, totalZSegm, totalCountSegm,
     countPerZGold, countPerZSegm,

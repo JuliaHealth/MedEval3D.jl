@@ -12,9 +12,7 @@ arrGold = CUDA.ones(UInt8, (dimx,dimy,dimz) )
 arrAlgo = CUDA.ones(UInt8, (dimx,dimy,dimz) )
 numberToLooFor = UInt8(1)
 argsMain, threadsMain,  blocksMain,threadsMean,blocksMean,argsMean, totalNumbOfVoxels=InterClassCorrKernel.prepareInterClassCorrKernel(arrGold ,arrAlgo,numberToLooFor)
-
 globalICC=calculateInterclassCorr(arrGold,arrAlgo,argsMain, threadsMain,  blocksMain,threadsMean,blocksMean,argsMean, totalNumbOfVoxels)::Float64
-
 
 Int64(argsMain[1][1]-dimx*dimy*dimz)
 argsMain[2][1]==dimx*dimy*dimz

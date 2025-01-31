@@ -1,6 +1,5 @@
 using Revise, Parameters, Logging, Test
 using CUDA
-# includet("../../src/kernels/kernelEvolutions.jl")
 includet("../../src/structs/BasicStructs.jl")
 includet("../../src/utils/CUDAGpuUtils.jl")
 includet("../../src/utils/IterationUtils.jl")
@@ -8,7 +7,7 @@ includet("../../src/utils/ReductionUtils.jl")
 includet("../../src/utils/MemoryUtils.jl")
 includet("../../src/distanceMetrics/MeansMahalinobis.jl")
 includet("../../src/distanceMetrics/Mahalanobis.jl")
-using ..BasicPreds, ..CUDAGpuUtils , ..Mahalanobis, ..MeansMahalinobis, ..IterationUtils,..ReductionUtils , ..MemoryUtils
+using ..CUDAGpuUtils , ..MeansMahalinobis, ..IterationUtils,..ReductionUtils , ..MemoryUtils
 nx=512 ; ny=512 ; nz=317
 #first we initialize the metrics on CPU so we will modify them easier
 goldBoolCPU= zeros(Float32,nx,ny,nz); #mimicks gold standard mask
