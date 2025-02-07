@@ -8,11 +8,11 @@ using ..CUDAAtomicUtils, ..TpfpfnKernel, ..InterClassCorrKernel
 dimx = 529
 dimy = 556
 dimz = 339
-arrGold = CUDA.ones(UInt8, (dimx,dimy,dimz) )
-arrAlgo = CUDA.ones(UInt8, (dimx,dimy,dimz) )
+arrGold = CUDA.fill(UInt8(1), (dimx, dimy, dimz))
+arrAlgo = CUDA.fill(UInt8(1), (dimx, dimy, dimz))
 numberToLooFor = UInt8(1)
-argsMain, threadsMain,  blocksMain,threadsMean,blocksMean,argsMean, totalNumbOfVoxels=InterClassCorrKernel.prepareInterClassCorrKernel(arrGold ,arrAlgo,numberToLooFor)
-globalICC=calculateInterclassCorr(arrGold,arrAlgo,argsMain, threadsMain,  blocksMain,threadsMean,blocksMean,argsMean, totalNumbOfVoxels)::Float64
+args, workgroup_size, num_workgroups, total_num_voxels=InterClassCorrKernel.prepareInterClassCorrKernel(arrGold ,arrAlgo,numberToLooFor)
+globalICC = InterClassCorrKernel.calculateInterclassCorr(arrGold, arrAlgo, numberToLooFor)
 
-Int64(argsMain[1][1]-dimx*dimy*dimz)
-argsMain[2][1]==dimx*dimy*dimz
+Int64(args[1][1] - dimx * dimy * dimz)
+args[1][2] == dimx * dimy * dimz

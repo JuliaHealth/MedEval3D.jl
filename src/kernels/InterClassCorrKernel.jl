@@ -26,142 +26,103 @@ export prepareInterClassCorrKernel, calculateInterclassCorr
     ssw_total,
     ssb_total,
     number_to_look_for,
-    grand_mean)
-
-    # Get global thread ID
+    grand_mean
+)
     idx = @index(Global)
-    
-    # Shared memory for local reductions
-    local_sum_gold = @localmem(Float32, 32)
-    local_sum_segm = @localmem(Float32, 32)
-    local_ssw = @localmem(Float32, 32)
-    local_ssb = @localmem(Float32, 32)
+    stride = @index(Global)  # Get the total number of threads
 
-    # Initialize local values
     tid = @index(Local, Linear)
+    
+    # Shared memory allocation
+    local_sum_gold = @localmem(Float32, 256)
+    local_sum_segm = @localmem(Float32, 256)
+    local_ssw = @localmem(Float32, 256)
+    local_ssb = @localmem(Float32, 256)
+
+    # Initialize shared memory
     local_sum_gold[tid] = 0f0
     local_sum_segm[tid] = 0f0
     local_ssw[tid] = 0f0
     local_ssb[tid] = 0f0
-    
+
     @synchronize
 
-    # First pass: calculate sums
-    if idx <= length(flat_gold)
-        local_sum_gold[tid] += Float32(flat_gold[idx] == number_to_look_for)
-        local_sum_segm[tid] += Float32(flat_segm[idx] == number_to_look_for)
+    # Loop over data in a grid-stride fashion
+    for i in idx:stride:length(flat_gold)
+        local_sum_gold[tid] += Float32(flat_gold[i] == number_to_look_for)
+        local_sum_segm[tid] += Float32(flat_segm[i] == number_to_look_for)
     end
-    
+
     @synchronize
-    
+
     # Reduce within workgroup
-    @unroll for stride in (16, 8, 4, 2, 1)
-        if tid <= stride
+    @unroll for stride in (128, 64, 32, 16, 8, 4, 2, 1)
+        if tid + stride < 256
             local_sum_gold[tid] += local_sum_gold[tid + stride]
             local_sum_segm[tid] += local_sum_segm[tid + stride]
         end
     end
-    
+
     @synchronize
-    
+
     # Accumulate global sums
     if tid == 0
         Atomix.@atomic sum_of_gold[] += local_sum_gold[1]
         Atomix.@atomic sum_of_segm[] += local_sum_segm[1]
     end
-
-    @synchronize
-    
-    # Calculate grand mean
-    if idx == 1
-        grand_mean[1] = (sum_of_gold[1] + sum_of_segm[1]) / (2 * length(flat_gold))
-    end
-    
-    @synchronize
-    
-    # Second pass: calculate SSW and SSB
-    if idx <= length(flat_gold)
-        m = (Float32(flat_gold[idx] == number_to_look_for) + Float32(flat_segm[idx] == number_to_look_for)) / 2
-        local_ssw[tid] += ((Float32(flat_gold[idx] == number_to_look_for) - m)^2 + (Float32(flat_segm[idx] == number_to_look_for) - m)^2)
-        local_ssb[tid] += (m - grand_mean[1])^2
-    end
-    
-    @synchronize
-    
-    # Reduce within workgroup
-    @unroll for stride in (16, 8, 4, 2, 1)
-        if tid <= stride
-            local_ssw[tid] += local_ssw[tid + stride]
-            local_ssb[tid] += local_ssb[tid + stride]
-        end
-    end
-    @synchronize
-    
-    # Accumulate global SSW and SSB
-    if tid == 0
-        Atomix.@atomic ssw_total[] += local_ssw[1]
-        Atomix.@atomic ssb_total[] += local_ssb[1]
-    end
 end
 
-"""
-Preparation for the interclass correlation kernel
-"""
-function prepareInterClassCorrKernel()
-    main_arr_dims = (2, 2, 2)
-    
-    # Initialize arrays on GPU
-    sum_of_gold = zeros(Float32, 1)
-    sum_of_segm = zeros(Float32, 1)
-    ssw_total = zeros(Float32, 1)
-    ssb_total = zeros(Float32, 1)
-    grand_mean = zeros(Float32, 1)
-    
-    number_to_look_for = 1
-    total_num_voxels = prod(main_arr_dims)
-    
-    # Define workgroup size and number of workgroups
-    workgroup_size = 256
-    num_workgroups = cld(total_num_voxels, workgroup_size)
-    
-    args = (sum_of_gold, sum_of_segm, ssw_total, ssb_total, number_to_look_for, grand_mean)
-    
-    return args, workgroup_size, num_workgroups, total_num_voxels
-end
 
 """
-Calculates global interclass correlation metric
+Prepare the interclass correlation kernel execution
 """
-function calculateInterclassCorr(
-    flat_gold,
-    flat_segm,
-    workgroup_size,
-    num_workgroups,
-    args,
-    number_to_look_for)::Float64
-    
-    # Reset arrays
-    for arr in args[1:4]
-        CUDA.fill!(arr, 0f0)
-    end
-    
-    # Create kernel instance
-    kernel! = kernel_interclass_corr!(CUDADevice(), workgroup_size)
-    
-    # Launch kernel
-    kernel!(flat_gold, flat_segm, args...; ndrange=size(flat_gold))
-    KernelAbstractions.synchronize(CUDADevice())
-    
-    # Calculate final results
+function prepareInterClassCorrKernel(flat_gold, flat_segm, number_to_look_for)
     total_voxels = length(flat_gold)
-    ssw = args[3][] / total_voxels
-    ssb = args[4][] / (total_voxels - 1) * 2
-    
+
+    # GPU memory allocations
+    sum_of_gold = CUDA.zeros(Float32, 1)
+    sum_of_segm = CUDA.zeros(Float32, 1)
+    ssw_total = CUDA.zeros(Float32, 1)
+    ssb_total = CUDA.zeros(Float32, 1)
+    grand_mean = CUDA.zeros(Float32, 1)
+
+    # Workgroup and grid size setup
+    workgroup_size = min(256, total_voxels)
+    num_workgroups = cld(total_voxels, workgroup_size)
+
+    return sum_of_gold, sum_of_segm, ssw_total, ssb_total, grand_mean, workgroup_size, num_workgroups, total_voxels
+end
+
+"""
+Calculate global interclass correlation metric
+"""
+function calculateInterclassCorr(flat_gold, flat_segm, number_to_look_for)::Float64
+    # Prepare kernel execution parameters
+    sum_of_gold, sum_of_segm, ssw_total, ssb_total, grand_mean, workgroup_size, num_workgroups, total_voxels = 
+        prepareInterClassCorrKernel(flat_gold, flat_segm, number_to_look_for)
+
+    # Reset GPU memory
+    CUDA.fill!(sum_of_gold, 0f0)
+    CUDA.fill!(sum_of_segm, 0f0)
+    CUDA.fill!(ssw_total, 0f0)
+    CUDA.fill!(ssb_total, 0f0)
+    CUDA.fill!(grand_mean, 0f0)
+
+    # Launch the kernel
+    ndrange = (num_workgroups * workgroup_size,)
+    kernel_interclass_corr!(CUDABackend(), ndrange, workgroup_size)(
+        flat_gold, flat_segm, sum_of_gold, sum_of_segm, ssw_total, ssb_total, number_to_look_for, grand_mean
+    )
+    KernelAbstractions.synchronize()
+
+    # Retrieve final results safely
+    ssw = CUDA.@allowscalar ssw_total[]
+    ssb = CUDA.@allowscalar ssb_total[]
+
     return (ssb - ssw) / (ssb + ssw)
 end
 
-end
-
+end  # End of module
 
 # function kernel_InterClassCorr(flatGold
 #     ,flatSegm,
@@ -586,4 +547,3 @@ end
 
 #     return nothing
 # end
-
