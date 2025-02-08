@@ -3,8 +3,6 @@
 new optimazation idea  - try to put all data in boolean arrays in shared memory  when getting means
 next we would need only to read shared memory - yet first one need to check wheather there would be enough shmem on device
 
-
-
 calculating intercalss correlation
 """
 module InterClassCorrKernel
@@ -16,6 +14,8 @@ using Statistics
 using Atomix
 
 export prepareInterClassCorrKernel, calculateInterclassCorr
+
+backend = CUDABackend()
 
 @kernel function kernel_interclass_corr!(
     flat_gold, 
@@ -82,11 +82,11 @@ function prepareInterClassCorrKernel(flat_gold, flat_segm, number_to_look_for)
     total_elements = length(flat_gold)
 
     # GPU memory allocations
-    sum_of_gold = CUDA.zeros(Float32, 1)
-    sum_of_segm = CUDA.zeros(Float32, 1)
-    ssw_total = CUDA.zeros(Float32, 1)
-    ssb_total = CUDA.zeros(Float32, 1)
-    grand_mean = CUDA.zeros(Float32, 1)
+    sum_of_gold = KernelAbstractions.zeros(backend, Float32, 1)
+    sum_of_segm = KernelAbstractions.zeros(backend, Float32, 1)
+    ssw_total = KernelAbstractions.zeros(backend, Float32, 1)
+    ssb_total = KernelAbstractions.zeros(backend, Float32, 1)
+    grand_mean = KernelAbstractions.zeros(backend, Float32, 1)
 
     # Configure thread blocks - respect hardware limits
     threads_per_block = 256  # Using 256 threads per block for better occupancy
