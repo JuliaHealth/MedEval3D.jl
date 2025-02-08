@@ -17,7 +17,6 @@ using Atomix
 
 export prepareInterClassCorrKernel, calculateInterclassCorr
 
-# Kernel definition for interclass correlation
 @kernel function kernel_interclass_corr!(
     flat_gold, 
     flat_segm,
@@ -26,12 +25,14 @@ export prepareInterClassCorrKernel, calculateInterclassCorr
     ssw_total,
     ssb_total,
     number_to_look_for,
-    grand_mean
+    grand_mean,
+    total_elements
 )
-    idx = @index(Global)
-    stride = @index(Global)  # Get the total number of threads
-
-    tid = @index(Local, Linear)
+    # Get block and thread indices
+    block_idx = (blockIdx().x - 1) * blockDim().x
+    idx = block_idx + threadIdx().x
+    
+    tid = threadIdx().x
     
     # Shared memory allocation
     local_sum_gold = @localmem(Float32, 256)
@@ -47,37 +48,38 @@ export prepareInterClassCorrKernel, calculateInterclassCorr
 
     @synchronize
 
-    # Loop over data in a grid-stride fashion
-    for i in idx:stride:length(flat_gold)
-        local_sum_gold[tid] += Float32(flat_gold[i] == number_to_look_for)
-        local_sum_segm[tid] += Float32(flat_segm[i] == number_to_look_for)
-    end
-
-    @synchronize
-
-    # Reduce within workgroup
-    @unroll for stride in (128, 64, 32, 16, 8, 4, 2, 1)
-        if tid + stride < 256
-            local_sum_gold[tid] += local_sum_gold[tid + stride]
-            local_sum_segm[tid] += local_sum_segm[tid + stride]
+    # Process elements in a grid-stride loop
+    stride = blockDim().x * gridDim().x
+    for i in idx:stride:total_elements
+        if i <= total_elements
+            gold_val = Float32(flat_gold[i] == number_to_look_for)
+            segm_val = Float32(flat_segm[i] == number_to_look_for)
+            
+            local_sum_gold[tid] += gold_val
+            local_sum_segm[tid] += segm_val
         end
     end
 
     @synchronize
 
-    # Accumulate global sums
-    if tid == 0
-        Atomix.@atomic sum_of_gold[] += local_sum_gold[1]
-        Atomix.@atomic sum_of_segm[] += local_sum_segm[1]
+    # Reduce within workgroup
+    @unroll for s in (128, 64, 32, 16, 8, 4, 2, 1)
+        if tid <= s
+            local_sum_gold[tid] += local_sum_gold[tid + s]
+            local_sum_segm[tid] += local_sum_segm[tid + s]
+        end
+        @synchronize
+    end
+
+    # Only first thread in block writes results
+    if tid == 1
+        Atomix.@atomic sum_of_gold[1] += local_sum_gold[1]
+        Atomix.@atomic sum_of_segm[1] += local_sum_segm[1]
     end
 end
 
-
-"""
-Prepare the interclass correlation kernel execution
-"""
 function prepareInterClassCorrKernel(flat_gold, flat_segm, number_to_look_for)
-    total_voxels = length(flat_gold)
+    total_elements = length(flat_gold)
 
     # GPU memory allocations
     sum_of_gold = CUDA.zeros(Float32, 1)
@@ -86,19 +88,29 @@ function prepareInterClassCorrKernel(flat_gold, flat_segm, number_to_look_for)
     ssb_total = CUDA.zeros(Float32, 1)
     grand_mean = CUDA.zeros(Float32, 1)
 
-    # Workgroup and grid size setup
-    workgroup_size = min(256, total_voxels)
-    num_workgroups = cld(total_voxels, workgroup_size)
+    # Configure thread blocks - respect hardware limits
+    threads_per_block = 256  # Using 256 threads per block for better occupancy
+    max_blocks = 65535  # Maximum blocks per grid dimension
+    
+    # Calculate number of blocks needed
+    blocks = min(max_blocks, cld(total_elements, threads_per_block))
 
-    return sum_of_gold, sum_of_segm, ssw_total, ssb_total, grand_mean, workgroup_size, num_workgroups, total_voxels
+    return sum_of_gold, sum_of_segm, ssw_total, ssb_total, grand_mean, threads_per_block, blocks, total_elements
 end
 
 """
-Calculate global interclass correlation metric
+Helper function to safely retrieve values from GPU arrays
 """
+function get_gpu_values(ssw_total::CuArray{Float32,1}, ssb_total::CuArray{Float32,1})
+    # Use CUDA.@allowscalar macro to safely access GPU array elements
+    ssw = CUDA.@allowscalar ssw_total[1]
+    ssb = CUDA.@allowscalar ssb_total[1]
+    return ssw, ssb
+end
+
 function calculateInterclassCorr(flat_gold, flat_segm, number_to_look_for)::Float64
     # Prepare kernel execution parameters
-    sum_of_gold, sum_of_segm, ssw_total, ssb_total, grand_mean, workgroup_size, num_workgroups, total_voxels = 
+    sum_of_gold, sum_of_segm, ssw_total, ssb_total, grand_mean, threads_per_block, blocks, total_elements = 
         prepareInterClassCorrKernel(flat_gold, flat_segm, number_to_look_for)
 
     # Reset GPU memory
@@ -108,21 +120,34 @@ function calculateInterclassCorr(flat_gold, flat_segm, number_to_look_for)::Floa
     CUDA.fill!(ssb_total, 0f0)
     CUDA.fill!(grand_mean, 0f0)
 
-    # Launch the kernel
-    ndrange = (num_workgroups * workgroup_size,)
-    kernel_interclass_corr!(CUDABackend(), ndrange, workgroup_size)(
-        flat_gold, flat_segm, sum_of_gold, sum_of_segm, ssw_total, ssb_total, number_to_look_for, grand_mean
+    # Launch kernel with corrected configuration
+    backend = CUDABackend()
+    kernel = kernel_interclass_corr!(backend)
+    kernel(
+        flat_gold, flat_segm, sum_of_gold, sum_of_segm, ssw_total, ssb_total, 
+        number_to_look_for, grand_mean, total_elements;
+        ndrange=blocks * threads_per_block,
+        workgroupsize=threads_per_block
     )
-    KernelAbstractions.synchronize()
+    
+    # Synchronize with the backend
+    KernelAbstractions.synchronize(backend)
 
-    # Retrieve final results safely
-    ssw = CUDA.@allowscalar ssw_total[]
-    ssb = CUDA.@allowscalar ssb_total[]
+    # Calculate means using sum_of_gold and sum_of_segm
+    g_sum = CUDA.@allowscalar sum_of_gold[1]
+    s_sum = CUDA.@allowscalar sum_of_segm[1]
+    n = Float32(total_elements)
+    
+    # Calculate SSW and SSB on GPU
+    mean_gold = g_sum / n
+    mean_segm = s_sum / n
+    ssw = abs(g_sum - s_sum)
+    ssb = abs(g_sum + s_sum)
 
-    return (ssb - ssw) / (ssb + ssw)
+    return Float64((ssb - ssw) / (ssb + ssw))
 end
 
-end  # End of module
+end
 
 # function kernel_InterClassCorr(flatGold
 #     ,flatSegm,
