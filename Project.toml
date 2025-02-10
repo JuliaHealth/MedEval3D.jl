@@ -1,7 +1,7 @@
 name = "MedEval3D"
 uuid = "07fe485e-7252-451c-a484-d20a4cdbbf79"
 authors = ["Jakub Mitura <53857487+jakubMitura14@users.noreply.github.com>"]
-version = "0.2.0"
+version = "1.0.0"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
