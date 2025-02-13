@@ -6,159 +6,137 @@ includet("../../src/utils/IterationUtils.jl")
 includet("../../src/utils/ReductionUtils.jl")
 includet("../../src/utils/MemoryUtils.jl")
 includet("../../src/distanceMetrics/MeansMahalinobis.jl")
+using KernelAbstractions
+using ..CUDAGpuUtils, ..MeansMahalinobis, ..IterationUtils, ..ReductionUtils, ..MemoryUtils
 
-using  ..CUDAGpuUtils , ..MeansMahalinobis, ..IterationUtils,..ReductionUtils , ..MemoryUtils
-nx=512 ; ny=512 ; nz=317
-#first we initialize the metrics on CPU so we will modify them easier
-goldBoolCPU= zeros(Float32,nx,ny,nz); #mimicks gold standard mask
-segmBoolCPU= zeros(Float32,nx,ny,nz); #mimicks other  mask
+nx = 512; ny = 512; nz = 317
+# Initialize arrays with Float32
+goldBoolCPU = zeros(Float32, nx, ny, nz)
+segmBoolCPU = zeros(Float32, nx, ny, nz)
 
-#cartTrueGold =  collect(vec(CartesianIndices(zeros(11,4,16) ).+CartesianIndex(70,71,78)))
-cartTrueGold =  unique(vcat(collect(vec(CartesianIndices(zeros(8,15,5) ).+CartesianIndex(5,5,5)))
-         ,collect(vec(CartesianIndices(zeros(14,19,25) ).+CartesianIndex(100,99,88)))
-         ,collect(vec(CartesianIndices(zeros(81,87,84) ).+CartesianIndex(100,99,210)))
-         )) ;
-goldBoolCPU[cartTrueGold].=Float32(1.0);
+cartTrueGold = unique(vcat(
+    collect(vec(CartesianIndices(zeros(8,15,5)).+CartesianIndex(5,5,5))),
+    collect(vec(CartesianIndices(zeros(14,19,25)).+CartesianIndex(100,99,88))),
+    collect(vec(CartesianIndices(zeros(81,87,84)).+CartesianIndex(100,99,210))))
+)
+goldBoolCPU[cartTrueGold] .= Float32(1.0)
 
-cartTrueSegm =  CartesianIndices(zeros(34,235,76) ).+CartesianIndex(100,100,100);
+cartTrueSegm = CartesianIndices(zeros(34,235,76)).+CartesianIndex(100,100,100)
+segmBoolCPU[cartTrueSegm] .= Float32(1.0)
 
-segmBoolCPU[cartTrueSegm].=Float32(1.0);
+numberToLooFor = Float32(1.0)
+goldBoolGPU = CuArray(goldBoolCPU)
+segmBoolGPU = CuArray(segmBoolCPU)
 
-numberToLooFor= Float32(1.0);
-goldBoolGPU = CuArray(goldBoolCPU);
-segmBoolGPU = CuArray(segmBoolCPU);
+# Initialize loop dimensions
+loopXdim = UInt32(1)
+loopYdim = UInt32(1)
+loopZdim = UInt32(1)
+sizz = size(goldBoolCPU)
+maxX = UInt32(sizz[1])
+maxY = UInt32(sizz[2])
+maxZ = UInt32(sizz[3])
 
+# Initialize all arrays as Float32
+totalXGold = CuArray{Float32}([0.0f0])
+totalYGold = CuArray{Float32}([0.0f0])
+totalZGold = CuArray{Float32}([0.0f0])
+totalCountGold = CuArray{Float32}([0.0f0])
 
+totalXSegm = CuArray{Float32}([0.0f0])
+totalYSegm = CuArray{Float32}([0.0f0])
+totalZSegm = CuArray{Float32}([0.0f0])
+totalCountSegm = CuArray{Float32}([0.0f0])
 
-#we will fill it after we work with launch configuration
-loopXdim = UInt32(1);loopYdim = UInt32(1) ;loopZdim = UInt32(1) ;
-sizz = size(goldBoolCPU);maxX = UInt32(sizz[1]);maxY = UInt32(sizz[2]);maxZ = UInt32(sizz[3])
-#gold
-totalXGold= CuArray([0.0]);
-totalYGold= CuArray([0.0]);
-totalZGold= CuArray([0.0]);
-totalCountGold= CuArray([0]);
-#segm
-totalXSegm= CuArray([0.0]);
-totalYSegm= CuArray([0.0]);
-totalZSegm= CuArray([0.0]);
+# Initialize variance and covariance arrays as Float32
+varianceXGlobalGold = CuArray{Float32}([0.0f0])
+covarianceXYGlobalGold = CuArray{Float32}([0.0f0])
+covarianceXZGlobalGold = CuArray{Float32}([0.0f0])
+varianceYGlobalGold = CuArray{Float32}([0.0f0])
+covarianceYZGlobalGold = CuArray{Float32}([0.0f0])
+varianceZGlobalGold = CuArray{Float32}([0.0f0])
 
-varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
-varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
+varianceXGlobalSegm = CuArray{Float32}([0.0f0])
+covarianceXYGlobalSegm = CuArray{Float32}([0.0f0])
+covarianceXZGlobalSegm = CuArray{Float32}([0.0f0])
+varianceYGlobalSegm = CuArray{Float32}([0.0f0])
+covarianceYZGlobalSegm = CuArray{Float32}([0.0f0])
+varianceZGlobalSegm = CuArray{Float32}([0.0f0])
 
-totalCountSegm= CuArray([0]);
-totalCountGold
+countPerZGold = CUDA.zeros(Float32, sizz[3]+1)
+countPerZSegm = CUDA.zeros(Float32, sizz[3]+1)
+mahalanobisResGlobal = CUDA.zeros(Float32, 1)
 
-countPerZGold= CUDA.zeros(Float32,sizz[3]+1);
-countPerZSegm= CUDA.zeros(Float32,sizz[3]+1);
+args = (goldBoolGPU, segmBoolGPU, numberToLooFor,
+    loopYdim, loopXdim, loopZdim,
+    (maxX, maxY, maxZ),
+    totalXGold, totalYGold, totalZGold, totalCountGold,
+    totalXSegm, totalYSegm, totalZSegm, totalCountSegm,
+    countPerZGold, countPerZSegm,
+    varianceXGlobalGold, covarianceXYGlobalGold, covarianceXZGlobalGold,
+    varianceYGlobalGold, covarianceYZGlobalGold, varianceZGlobalGold,
+    varianceXGlobalSegm, covarianceXYGlobalSegm, covarianceXZGlobalSegm,
+    varianceYGlobalSegm, covarianceYZGlobalSegm, varianceZGlobalSegm,
+    mahalanobisResGlobal
+)
 
-# covariancesSliceWiseGold= CUDA.zeros(Float32,6,sizz[3]+1);
-# covariancesSliceWiseSegm= CUDA.zeros(Float32,6,sizz[3]+1);
+# First define thread and block configuration
+backend = CUDABackend()
 
-covariancesSliceWiseGold= CUDA.zeros(Float32,6,500);
-covariancesSliceWiseSegm= CUDA.zeros(Float32,6,500);
-
-covarianceGlobal= CUDA.zeros(Float32,12,1);
-
-mahalanobisResGlobal= CUDA.zeros(1);
-mahalanobisResSliceWise= CUDA.zeros(sizz[3]+1);
-#mahalanobisResSliceWise= CUDA.zeros(sizz[3]);
-
-args = (goldBoolGPU,segmBoolGPU,numberToLooFor
-,loopYdim,loopXdim,loopZdim
-,(maxX, maxY,maxZ)
-,totalXGold,totalYGold,totalZGold,totalCountGold
-,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,countPerZGold
-, countPerZSegm,
-# ,covariancesSliceWiseGold, covariancesSliceWiseSegm,
-varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
-    ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
-    ,mahalanobisResGlobal
-    # , mahalanobisResSliceWise
-    )
-
-    # calculate the amount of dynamic shared memory for a 2D block size
-    get_shmem(threads) = (sizeof(UInt32)*3*4)
+# Calculate initial thread/block configuration
+get_shmem(threads) = (sizeof(UInt32) * 3 * 4)
     
-    function get_threads(threads)
-        threads_x = 32
-        threads_y = cld(threads,threads_x )
-        return (threads_x, threads_y)
-    end
+function get_threads(threads)
+    threads_x = 32
+    threads_y = 32
+    return (threads_x, threads_y)
+end
 
-    kernel = @cuda launch=false MeansMahalinobis.meansMahalinobisKernel(args...)
-   
-    config = launch_configuration(kernel.fun, shmem=threads->get_shmem(get_threads(threads)))
+threads = (32, 32)  # Default thread configuration
+blocks = cld(nx * ny * nz, prod(threads))  
 
-   # convert to 2D block size and figure out appropriate grid size
-    threads = get_threads(config.threads)
-    blocks = UInt32(config.blocks)
-    loopXdim = UInt32(fld(maxX, threads[1]))
-    loopYdim = UInt32(fld(maxY, threads[2])) 
-    loopZdim = UInt32(fld(maxZ,blocks )) 
+kernel = MeansMahalinobis.meansMahalinobisKernel!(backend)
 
-#covariancesSliceWise= CUDA.zeros(Float32,12,sizz[3]+1);
-covariancesSliceWiseGold= CUDA.zeros(Float32,6,sizz[3]+1);
-covariancesSliceWiseSegm= CUDA.zeros(Float32,6,sizz[3]+1);
+# Launch kernel with corrected ndrange
+event = kernel(
+    goldBoolGPU, segmBoolGPU, numberToLooFor,
+    loopYdim, loopXdim, loopZdim,
+    (maxX, maxY, maxZ),
+    totalXGold, totalYGold, totalZGold, totalCountGold,
+    totalXSegm, totalYSegm, totalZSegm, totalCountSegm,
+    countPerZGold, countPerZSegm,
+    varianceXGlobalGold, covarianceXYGlobalGold, covarianceXZGlobalGold,
+    varianceYGlobalGold, covarianceYZGlobalGold, varianceZGlobalGold,
+    varianceXGlobalSegm, covarianceXYGlobalSegm, covarianceXZGlobalSegm,
+    varianceYGlobalSegm, covarianceYZGlobalSegm, varianceZGlobalSegm,
+    mahalanobisResGlobal;
+    ndrange=(blocks * threads[1], threads[2]), # Make ndrange 2D to match workgroupsize
+    workgroupsize=threads
+)
 
-#gold
-totalXGold= CuArray([0.0]);
-totalYGold= CuArray([0.0]);
-totalZGold= CuArray([0.0]);
-totalCountGold= CuArray([0]);
-#segm
-totalXSegm= CuArray([0.0]);
-totalYSegm= CuArray([0.0]);
-totalZSegm= CuArray([0.0]);
-totalCountSegm= CuArray([0]);
+KernelAbstractions.synchronize(backend)
 
+mahalanobisResGlobal[1]
 
+# totalCountGold[1]
 
-varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
-varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
+# totalCountSegm[1]
+Int64(round(totalXGold[1]))
+Int64(round(totalYGold[1]))
+aa= Int64(round(varianceXGlobalSegm[1]))
+bb=  Int64(round(varianceXGlobalGold[1]))
+aa+bb
+@test totalCountGold[1]==length(cartTrueGold)
 
-
-args = (goldBoolGPU,segmBoolGPU,numberToLooFor
-,loopYdim,loopXdim,loopZdim
-,(maxX, maxY,maxZ)
-,totalXGold,totalYGold,totalZGold,totalCountGold
-,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,countPerZGold
-, countPerZSegm,
-# ,covariancesSliceWiseGold, covariancesSliceWiseSegm,
-varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
-    ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
-    ,mahalanobisResGlobal
-    # , mahalanobisResSliceWise
-    ,1
-    )
-
-    
-    @cuda cooperative=true threads=threads blocks=blocks MeansMahalinobis.meansMahalinobisKernel(args...)
-    
-    mahalanobisResGlobal[1]
-
-    # totalCountGold[1]
-
-
-
-    # totalCountSegm[1]
-    Int64(round(totalXGold[1]))
-    Int64(round(totalYGold[1]))
-   aa= Int64(round(varianceXGlobalSegm[1]))
-   bb=  Int64(round(varianceXGlobalGold[1]))
-    aa+bb
-    @test totalCountGold[1]==length(cartTrueGold)
-
-    varianceX= (varianceXGlobalGold[1]+ varianceXGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
-    covarianceXY= (covarianceXYGlobalGold[1]+ covarianceXYGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
-    covarianceXZ= (covarianceXZGlobalGold[1]+ covarianceXZGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
-    varianceY= (varianceYGlobalGold[1]+ varianceYGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
-    covarianceYZ= (covarianceYZGlobalGold[1]+ covarianceYZGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
-    varianceZ= (varianceZGlobalGold[1]+ varianceZGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
-    meanX = (totalXGold[1]/totalCountGold[1]) - (totalXSegm[1]/totalCountSegm[1] )
-    meanY = (totalYGold[1]/totalCountGold[1]) - (totalYSegm[1]/totalCountSegm[1] )
-    meanZ = (totalZGold[1]/totalCountGold[1]) - (totalZSegm[1]/totalCountSegm[1] )
-
+varianceX= (varianceXGlobalGold[1]+ varianceXGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
+covarianceXY= (covarianceXYGlobalGold[1]+ covarianceXYGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
+covarianceXZ= (covarianceXZGlobalGold[1]+ covarianceXZGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
+varianceY= (varianceYGlobalGold[1]+ varianceYGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
+covarianceYZ= (covarianceYZGlobalGold[1]+ covarianceYZGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
+varianceZ= (varianceZGlobalGold[1]+ varianceZGlobalSegm[1])/ (totalCountGold[1]+ totalCountSegm[1])
+meanX = (totalXGold[1]/totalCountGold[1]) - (totalXSegm[1]/totalCountSegm[1] )
+meanY = (totalYGold[1]/totalCountGold[1]) - (totalYSegm[1]/totalCountSegm[1] )
+meanZ = (totalZGold[1]/totalCountGold[1]) - (totalZSegm[1]/totalCountSegm[1] )
 
 a = sqrt(varianceX) #18.205059
 b = (covarianceXY)/a
@@ -172,12 +150,11 @@ yc= (meanZ-yb*d-ya* c)/sqrt(varianceZ - c*c -d*d )
 #taking square euclidean distance
 sqrt(ya*ya+yb*yb+yc*yc)
 
-
- Int64(maximum(covariancesSliceWiseGold[:,1,1,1,1,1]))
- Int64(maximum(covariancesSliceWiseSegm[:,1,1,1,1,1]))
+Int64(maximum(covariancesSliceWiseGold[:,1,1,1,1,1]))
+Int64(maximum(covariancesSliceWiseSegm[:,1,1,1,1,1]))
 
 @testset " mahalinobis tests " begin
-      @test totalCountGold[1]==length(cartTrueGold)
+    @test totalCountGold[1]==length(cartTrueGold)
     @test totalXGold[1]== sum(map(ind->ind[1],cartTrueGold))
     @test totalYGold[1]== sum(map(ind->ind[2],cartTrueGold))
     @test totalZGold[1]== sum(map(ind->ind[3],cartTrueGold))
@@ -199,7 +176,7 @@ sqrt(ya*ya+yb*yb+yc*yc)
     @test isapprox(covarianceXYGlobalGold[1],sum(map(ind->(( ind[1] -meanX )*( ind[2] -meanY )) ,cartTrueGold)); atol = 50)
     @test isapprox(covarianceXZGlobalGold[1],sum(map(ind->(( ind[1] -meanX )*( ind[3] -meanZ )) ,cartTrueGold)); atol = 50)
     
-   Int64(round( covarianceXZGlobalGold[1]- sum(map(ind->(( ind[1] -meanX )*( ind[3] -meanZ )) ,cartTrueGold))))
+    Int64(round( covarianceXZGlobalGold[1]- sum(map(ind->(( ind[1] -meanX )*( ind[3] -meanZ )) ,cartTrueGold))))
 
     @test isapprox(varianceYGlobalGold[1],sum(map(ind->(( ind[2] -meanY )^2) ,cartTrueGold)); atol = 50)
 
@@ -227,23 +204,17 @@ sqrt(ya*ya+yb*yb+yc*yc)
 end
 
 ### can be put in getFinalResults macro to check is it working
-            # @ifXY 1 numb CUDA.@cuprint "th 1   res $(sumX/(sumY+sumZ))  correct 331.42417036764425\n "
-        # @ifXY 3 numb CUDA.@cuprint "th 3  res $(sumX/(sumY+sumZ))  correct 14.653258176782604  \n "
-        # @ifXY 5 numb CUDA.@cuprint "th 5  res $(sumX/(sumY+sumZ))  correct  43.483690662640186 \n "
-        # @ifXY 7 numb  CUDA.@cuprint "th 7   res $(sumX/(sumY+sumZ))  correct  2640.6032539591756 \n "
-        # @ifXY 10 numb  CUDA.@cuprint "th 10  res $(sumX/(sumY+sumZ))   correct 43.71496394540232 \n "
-        # @ifXY 12 numb  CUDA.@cuprint "th 12 res $(sumX/(sumY+sumZ)) correct 685.3852392889322  \n "
-        # @ifXY 14 numb  CUDA.@cuprint "th 14   res $(sumX/(sumY))  correct 140.4965 \n "
-        # @ifXY 16 numb  CUDA.@cuprint "th 16   res $(sumX/(sumY))  correct 142.492 \n "
-        # @ifXY 18 numb  CUDA.@cuprint "th 18  res $(sumX/(sumY))   correct  250.57380 \n "
-        # @ifXY 20 numb CUDA.@cuprint "th 20   res $(sumX/(sumZ))  correct 117.5\n "
-        # @ifXY 22 numb  CUDA.@cuprint "th 22  res $(sumX/(sumZ))  correct 218.0 \n "
-        # @ifXY 24 numb  CUDA.@cuprint "th 24   res $(sumX/(sumZ))  correct 138.5 \n "  
+# @ifXY 1 numb CUDA.@cuprint "th 1   res $(sumX/(sumY+sumZ))  correct 331.42417036764425\n "
+# @ifXY 3 numb CUDA.@cuprint "th 3  res $(sumX/(sumY+sumZ))  correct 14.653258176782604  \n "
+# @ifXY 5 numb CUDA.@cuprint "th 5  res $(sumX/(sumY+sumZ))  correct  43.483690662640186 \n "
+# @ifXY 7 numb  CUDA.@cuprint "th 7   res $(sumX/(sumY+sumZ))  correct  2640.6032539591756 \n "
+# @ifXY 10 numb  CUDA.@cuprint "th 10  res $(sumX/(sumY+sumZ))   correct 43.71496394540232 \n "
+# @ifXY 12 numb  CUDA.@cuprint "th 12 res $(sumX/(sumY+sumZ)) correct 685.3852392889322  \n "
+# @ifXY 14 numb  CUDA.@cuprint "th 14   res $(sumX/(sumY))  correct 140.4965 \n "
+# @ifXY 16 numb  CUDA.@cuprint "th 16   res $(sumX/(sumY))  correct 142.492 \n "
+# @ifXY 18 numb  CUDA.@cuprint "th 18  res $(sumX/(sumY))   correct  250.57380 \n "
+# @ifXY 20 numb CUDA.@cuprint "th 20   res $(sumX/(sumZ))  correct 117.5\n "
+# @ifXY 22 numb  CUDA.@cuprint "th 22  res $(sumX/(sumZ))  correct 218.0 \n "
+# @ifXY 24 numb  CUDA.@cuprint "th 24   res $(sumX/(sumZ))  correct 138.5 \n "
 
-
-
-
-
-    # @device_code_warntype interactive=true @cuda MeansMahalinobis.meansMahalinobisKernel(args...)
-
-
+# @device_code_warntype interactive=true @cuda MeansMahalinobis.meansMahalinobisKernel(args...)

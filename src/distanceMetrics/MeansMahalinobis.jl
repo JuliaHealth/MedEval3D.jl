@@ -8,142 +8,123 @@ varianceZGlobal - should be reduced atomically in the end with all other variabl
 """
 
 module MeansMahalinobis
-using ..CUDAGpuUtils, CUDA, ..IterationUtils, ..ReductionUtils, ..MemoryUtils
-export meansMahalinobisKernel,prepareMahalinobisKernel
-
+using ..CUDAGpuUtils, ..IterationUtils, ..ReductionUtils, ..MemoryUtils
+export meansMahalinobisKernel, prepareMahalinobisKernel
+using CUDA
 using KernelAbstractions
+using Atomix
+using KernelAbstractions.Extras: @unroll
+
+backend = CUDABackend()
 
 """
 prepares all equired arguments and gives back the  arguments and thread and block configuration 
 for calculation of Mahalanobis distance - the latter is based on the occupancy API
 """
 function prepareMahalinobisKernel()
-   
-    
-    numberToLooFor=1
-    #we will fill it after we work with launch configuration
-    loopXdim = UInt32(1);loopYdim = UInt32(1) ;loopZdim = UInt32(1) ;
-    sizz = (2,2,2);maxX = UInt32(sizz[1]);maxY = UInt32(sizz[2]);maxZ = UInt32(sizz[3])
-    #gold
-    totalXGold= CuArray([0.0]);
-    totalYGold= CuArray([0.0]);
-    totalZGold= CuArray([0.0]);
-    totalCountGold= CuArray([0]);
-    #segm
-    totalXSegm= CuArray([0.0]);
-    totalYSegm= CuArray([0.0]);
-    totalZSegm= CuArray([0.0]);
+    numberToLooFor = Float32(1)  # Changed to Float32
+    loopXdim = UInt32(1)
+    loopYdim = UInt32(1)
+    loopZdim = UInt32(1)
+    sizz = (2, 2, 2)
+    maxX = UInt32(sizz[1])
+    maxY = UInt32(sizz[2])
+    maxZ = UInt32(sizz[3])
 
-    varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
-    varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm= CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]),CuArray([0.0]);
+    # Change all CuArray initializations to Float32
+    totalXGold = CuArray{Float32}([0.0f0])
+    totalYGold = CuArray{Float32}([0.0f0])
+    totalZGold = CuArray{Float32}([0.0f0])
+    totalCountGold = CuArray{Float32}([0.0f0])  # Changed from Int to Float32
+    totalXSegm = CuArray{Float32}([0.0f0])
+    totalYSegm = CuArray{Float32}([0.0f0])
+    totalZSegm = CuArray{Float32}([0.0f0])
+    totalCountSegm = CuArray{Float32}([0.0f0])  # Changed from Int to Float32
 
-    totalCountSegm= CuArray([0]);
-    totalCountGold= CuArray([0]);
+    varianceXGlobalGold = CuArray{Float32}([0.0f0])
+    covarianceXYGlobalGold = CuArray{Float32}([0.0f0])
+    covarianceXZGlobalGold = CuArray{Float32}([0.0f0])
+    varianceYGlobalGold = CuArray{Float32}([0.0f0])
+    covarianceYZGlobalGold = CuArray{Float32}([0.0f0])
+    varianceZGlobalGold = CuArray{Float32}([0.0f0])
+    varianceXGlobalSegm = CuArray{Float32}([0.0f0])
+    covarianceXYGlobalSegm = CuArray{Float32}([0.0f0])
+    covarianceXZGlobalSegm = CuArray{Float32}([0.0f0])
+    varianceYGlobalSegm = CuArray{Float32}([0.0f0])
+    covarianceYZGlobalSegm = CuArray{Float32}([0.0f0])
+    varianceZGlobalSegm = CuArray{Float32}([0.0f0])
 
-    countPerZGold= CUDA.zeros(Float32,sizz[3]+1);
-    countPerZSegm= CUDA.zeros(Float32,sizz[3]+1);
+    countPerZGold = CUDA.zeros(Float32, sizz[3] + 1)
+    countPerZSegm = CUDA.zeros(Float32, sizz[3] + 1)
+    covarianceGlobal = CUDA.zeros(Float32, 12, 1)
+    mahalanobisResGlobal = CUDA.zeros(Float32, 1)  # Changed to Float32
 
-    # covariancesSliceWiseGold= CUDA.zeros(Float32,6,sizz[3]+1);
-    # covariancesSliceWiseSegm= CUDA.zeros(Float32,6,sizz[3]+1);
-
-
-    covarianceGlobal= CUDA.zeros(Float32,12,1);
-
-    mahalanobisResGlobal= CUDA.zeros(1);
-
-
-    args = (numberToLooFor
-    ,loopYdim,loopXdim,loopZdim
-    ,(maxX, maxY,maxZ)
-    ,totalXGold,totalYGold,totalZGold,totalCountGold
-    ,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,
+    args = (
+        numberToLooFor, loopYdim, loopXdim, loopZdim, (maxX, maxY, maxZ),
+        totalXGold, totalYGold, totalZGold, totalCountGold,
+        totalXSegm, totalYSegm, totalZSegm, totalCountSegm,
         countPerZGold, countPerZSegm,
-        #,covariancesSliceWiseGold, covariancesSliceWiseSegm,
-    varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
-        ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
-        ,mahalanobisResGlobal
-        #, mahalanobisResSliceWise
+        varianceXGlobalGold, covarianceXYGlobalGold, covarianceXZGlobalGold, varianceYGlobalGold, covarianceYZGlobalGold, varianceZGlobalGold,
+        varianceXGlobalSegm, covarianceXYGlobalSegm, covarianceXZGlobalSegm, varianceYGlobalSegm, covarianceYZGlobalSegm, varianceZGlobalSegm,
+        mahalanobisResGlobal
     )
-        
-        
-        get_shmem(threads) = (sizeof(UInt32)*3*4)
-    
-    threads ,blocks  = getThreadsAndBlocksNumbForKernel(get_shmem,meansMahalinobisKernel,(CUDA.zeros(2,2,2),CUDA.zeros(2,2,2),args...))
 
-        loopXdim = UInt32(fld(maxX, threads[1]))
-        loopYdim = UInt32(fld(maxY, threads[2])) 
-        loopZdim = UInt32(fld(maxZ,blocks )) 
-        
+    get_shmem(threads) = (sizeof(UInt32) * 3 * 4)
+    threads, blocks = getThreadsAndBlocksNumbForKernel(get_shmem, meansMahalinobisKernel, (CUDA.zeros(Float32, 2, 2, 2), CUDA.zeros(Float32, 2, 2, 2), args...))
 
-    args = (numberToLooFor
-    ,loopYdim,loopXdim,loopZdim
-    ,(maxX, maxY,maxZ)
-    ,totalXGold,totalYGold,totalZGold,totalCountGold
-    ,totalXSegm,totalYSegm,totalZSegm,totalCountSegm
-        ,countPerZGold, countPerZSegm,
-        #,covariancesSliceWiseGold, covariancesSliceWiseSegm,
-    varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
-        ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
-        ,mahalanobisResGlobal
-        #, mahalanobisResSliceWise
-    
+    loopXdim = UInt32(fld(maxX, threads[1]))
+    loopYdim = UInt32(fld(maxY, threads[2]))
+    loopZdim = UInt32(fld(maxZ, blocks))
+
+    args = (
+        numberToLooFor, loopYdim, loopXdim, loopZdim, (maxX, maxY, maxZ),
+        totalXGold, totalYGold, totalZGold, totalCountGold,
+        totalXSegm, totalYSegm, totalZSegm, totalCountSegm,
+        countPerZGold, countPerZSegm,
+        varianceXGlobalGold, covarianceXYGlobalGold, covarianceXZGlobalGold, varianceYGlobalGold, covarianceYZGlobalGold, varianceZGlobalGold,
+        varianceXGlobalSegm, covarianceXYGlobalSegm, covarianceXZGlobalSegm, varianceYGlobalSegm, covarianceYZGlobalSegm, varianceZGlobalSegm,
+        mahalanobisResGlobal
     )
-        
-    
-  
-  return(args,threads ,blocks)
+    return args, threads, blocks
 end
-
-
 
 """
 executed after prepareMahalinobisKernel - will execute on given arrays 
     and return the Mahalinobis distance between gold standard mask and the result of segmentation
 """
-function calculateMalahlinobisDistance(goldGPU,segmGPU,args,threads ,blocks,numberToLooFor)
+function calculateMalahlinobisDistance(goldGPU, segmGPU, args, threads, blocks, numberToLooFor)
+    for i in 6:28
+        CUDA.fill!(args[i], 0)
+    end
 
-# setting main arays
+    numbToLooFor, loopYdima, loopXdima, loopZdima, dims, totalXGold, totalYGold, totalZGold, totalCountGold, totalXSegm, totalYSegm, totalZSegm, totalCountSegm, countPerZGold, countPerZSegm, varianceXGlobalGold, covarianceXYGlobalGold, covarianceXZGlobalGold, varianceYGlobalGold, covarianceYZGlobalGold, varianceZGlobalGold, varianceXGlobalSegm, covarianceXYGlobalSegm, covarianceXZGlobalSegm, varianceYGlobalSegm, covarianceYZGlobalSegm, varianceZGlobalSegm, mahalanobisResGlobal = args
 
-##### setting to 0 all entries that require it    
-for i in 6:28    
-    CUDA.fill!(args[i],0)
-end 
+    sizz = size(goldGPU)
+    maxX = UInt32(sizz[1])
+    maxY = UInt32(sizz[2])
+    maxZ = UInt32(sizz[3])
+    loopXdim = UInt32(fld(maxX, threads[1]))
+    loopYdim = UInt32(fld(maxY, threads[2]))
+    loopZdim = UInt32(fld(maxZ, blocks))
+    countPerZGold = CUDA.zeros(Float32, sizz[3] + 1)
+    countPerZSegm = CUDA.zeros(Float32, sizz[3] + 1)
 
-numbToLooFor,loopYdima,loopXdima,loopZdima,dims,totalXGold,totalYGold,totalZGold,totalCountGold,totalXSegm,totalYSegm,totalZSegm,totalCountSegm,countPerZGold, countPerZSegm,varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm,mahalanobisResGlobal=args
+    args = (
+        numberToLooFor, loopYdim, loopXdim, loopZdim, (maxX, maxY, maxZ),
+        totalXGold, totalYGold, totalZGold, totalCountGold,
+        totalXSegm, totalYSegm, totalZSegm, totalCountSegm,
+        countPerZGold, countPerZSegm,
+        varianceXGlobalGold, covarianceXYGlobalGold, covarianceXZGlobalGold, varianceYGlobalGold, covarianceYZGlobalGold, varianceZGlobalGold,
+        varianceXGlobalSegm, covarianceXYGlobalSegm, covarianceXZGlobalSegm, varianceYGlobalSegm, covarianceYZGlobalSegm, varianceZGlobalSegm,
+        mahalanobisResGlobal
+    )
 
-numberToLooFor
-sizz = size(goldGPU)
+    kernel = meansMahalinobisKernel(backend, threads, blocks)
+    kernel(goldGPU, segmGPU, args...; ndrange=blocks * threads, workgroupsize=threads)
+    KernelAbstractions.synchronize(backend)
 
-maxX = UInt32(sizz[1]);maxY = UInt32(sizz[2]);maxZ = UInt32(sizz[3])
-loopXdim = UInt32(fld(maxX, threads[1]))
-loopYdim = UInt32(fld(maxY, threads[2]))
-loopZdim = UInt32(fld(maxZ,blocks )) 
-countPerZGold= CUDA.zeros(Float32,sizz[3]+1);
-countPerZSegm= CUDA.zeros(Float32,sizz[3]+1);
-# println( "loopXdim $(loopXdim) loopYdim $(loopYdim)  loopZdim $(loopZdim) maxX $(maxX) maxY $(maxY) maxZ $(maxZ) \n")
-args = (numberToLooFor
-,loopYdim,loopXdim,loopZdim
-,(maxX, maxY,maxZ)
-,totalXGold,totalYGold,totalZGold,totalCountGold
-,totalXSegm,totalYSegm,totalZSegm,totalCountSegm
-    ,countPerZGold, countPerZSegm,
-    #,covariancesSliceWiseGold, covariancesSliceWiseSegm,
-varianceXGlobalGold,covarianceXYGlobalGold,covarianceXZGlobalGold,varianceYGlobalGold,covarianceYZGlobalGold,varianceZGlobalGold
-    ,varianceXGlobalSegm,covarianceXYGlobalSegm,covarianceXZGlobalSegm,varianceYGlobalSegm,covarianceYZGlobalSegm,varianceZGlobalSegm
-    ,mahalanobisResGlobal
-    #, mahalanobisResSliceWise
-
-)
-
-@cuda cooperative=true threads=threads blocks=blocks meansMahalinobisKernel(goldGPU,segmGPU,args...)
-
-return  args[28][1]
+    return args[28][1]
 end
-
-
-
-
-
 
 """
 part of the above kernel that will be executed in order to get means
@@ -469,32 +450,236 @@ covarianceGlobal (just one column but entries exactly the same as above)
 mahalanobisResGlobal - global result of Mahalinobis distance
 mahalanobisResSliceWise - global result of Mahalinobis distance
 """
-@kernel function meansMahalinobisKernel(
-    goldArr, segmArr, numberToLooFor, loopYdim::UInt32, loopXdim::UInt32, loopZdim::UInt32, arrDims::Tuple{UInt32,UInt32,UInt32},
-    totalXGold, totalYGold, totalZGold, totalCountGold, totalXSegm, totalYSegm, totalZSegm, totalCountSegm,
-    countPerZGold, countPerZSegm,
-    varianceXGlobalGold, covarianceXYGlobalGold, covarianceXZGlobalGold, varianceYGlobalGold, covarianceYZGlobalGold, varianceZGlobalGold,
-    varianceXGlobalSegm, covarianceXYGlobalSegm, covarianceXZGlobalSegm, varianceYGlobalSegm, covarianceYZGlobalSegm, varianceZGlobalSegm,
+@kernel function meansMahalinobisKernel!(
+    goldArr, 
+    segmArr,
+    numberToLooFor,
+    loopYdim,
+    loopXdim,
+    loopZdim,
+    arrDims,
+    totalXGold,
+    totalYGold,
+    totalZGold,
+    totalCountGold,
+    totalXSegm,
+    totalYSegm,
+    totalZSegm,
+    totalCountSegm,
+    countPerZGold,
+    countPerZSegm,
+    varianceXGlobalGold,
+    covarianceXYGlobalGold,
+    covarianceXZGlobalGold,
+    varianceYGlobalGold,
+    covarianceYZGlobalGold,
+    varianceZGlobalGold,
+    varianceXGlobalSegm,
+    covarianceXYGlobalSegm,
+    covarianceXZGlobalSegm,
+    varianceYGlobalSegm,
+    covarianceYZGlobalSegm,
+    varianceZGlobalSegm,
     mahalanobisResGlobal
 )
-    # keeping counter of old z value - in order to be able to get slicewise z counter
-    oldZVal = @localmem(Float32, 1)
-    # summing coordinates of all voxels we are interested in
-    sumX, sumY, sumZ, count = Float32(0), Float32(0), Float32(0), Float32(0)
-    # count how many voxels of interest there are so we will get means
-    # for storing results from warp reductions
-    shmemSum = @localmem(Float32, (32, 6))
-    clearSharedMemWarpLong(shmemSum, UInt8(6), Float32(0.0))
-    if @index(Global) == 1
-        oldZVal[1] = 0
+    idx = @index(Global, Linear)
+    tid = @index(Local, Linear)
+
+    # Shared memory allocation
+    local_sum = @localmem Float32 (32, 6)
+    old_z_val = @localmem Float32 (1)
+    mean_xyz = @localmem Float32 (3)
+    intermediate_res = @localmem Float32 (6)
+
+    # Initialize shared memory
+    if tid <= 32
+        for i in 1:6
+            local_sum[tid, i] = 0f0
+        end
     end
-    # just needed for reductions
-    offsetIter = UInt8(1)
-    #### first we analyze gold standard array
+    if idx == 1
+        old_z_val[1] = 0f0
+    end
+
     @synchronize
 
-    @iterateForMeans(countPerZGold, goldArr)
+    # Initialize local variables
+    sum_x = 0f0
+    sum_y = 0f0
+    sum_z = 0f0
+    count = 0f0
+
+    for z in 1:arrDims[3]
+        for y in 1:arrDims[2]
+            for x in 1:arrDims[1]
+                if x <= arrDims[1] && y <= arrDims[2] && z <= arrDims[3]
+                    if goldArr[x, y, z] == numberToLooFor
+                        sum_x += Float32(x)
+                        sum_y += Float32(y)
+                        sum_z += Float32(z)
+                        count += 1f0
+                    end
+                end
+            end
+        end
+
+        @synchronize
+        
+        # Reduce within workgroup for this slice
+        if z <= arrDims[3]
+            # Store count for this slice
+            if tid == 1
+                countPerZGold[z] = count - old_z_val[1]
+                old_z_val[1] = count
+            end
+        end
+        @synchronize
+    end
+    
+    # Final reduction for gold standard
+    if tid == 1
+        # Use @atomic macro from KernelAbstractions
+        Atomix.@atomic totalXGold[] += sum_x
+        Atomix.@atomic totalYGold[] += sum_y
+        Atomix.@atomic totalZGold[] += sum_z
+        Atomix.@atomic totalCountGold[] += count
+    end
+
+    @synchronize
+
+    sum_x = 0f0
+    sum_y = 0f0
+    sum_z = 0f0
+    count = 0f0
+    if idx == 1
+        old_z_val[1] = 0f0
+    end
+    
+    @synchronize
+
+    for z in 1:arrDims[3]
+        for y in 1:arrDims[2]
+            for x in 1:arrDims[1]
+                if x <= arrDims[1] && y <= arrDims[2] && z <= arrDims[3]
+                    if segmArr[x, y, z] == numberToLooFor
+                        sum_x += Float32(x)
+                        sum_y += Float32(y)
+                        sum_z += Float32(z)
+                        count += 1f0
+                    end
+                end
+            end
+        end
+        
+        @synchronize
+        
+        if z <= arrDims[3]
+            if tid == 1
+                countPerZSegm[z] = count - old_z_val[1]
+                old_z_val[1] = count
+            end
+        end
+        
+        @synchronize
+    end
+
+    if tid == 1
+        Atomix.@atomic totalXSegm[] += sum_x
+        Atomix.@atomic totalYSegm[] += sum_y
+        Atomix.@atomic totalZSegm[] += sum_z
+        Atomix.@atomic totalCountSegm[] += count
+    end
+    
+    @synchronize
+
+    if tid == 1
+        # Calculate means
+        mean_xyz[1] = totalXGold[1] / totalCountGold[1]
+        mean_xyz[2] = totalYGold[1] / totalCountGold[1]
+        mean_xyz[3] = totalZGold[1] / totalCountGold[1]
+        
+        # Calculate variances and covariances
+        local_sum[1, 1] = varianceXGlobalGold[1] / totalCountGold[1]
+        local_sum[1, 2] = covarianceXYGlobalGold[1] / totalCountGold[1]
+        local_sum[1, 3] = covarianceXZGlobalGold[1] / totalCountGold[1]
+        local_sum[1, 4] = varianceYGlobalGold[1] / totalCountGold[1]
+        local_sum[1, 5] = covarianceYZGlobalGold[1] / totalCountGold[1]
+        local_sum[1, 6] = varianceZGlobalGold[1] / totalCountGold[1]
+        
+        # Calculate Mahalanobis distance
+        a = sqrt(local_sum[1, 1])
+        b = local_sum[1, 2] / a
+        c = local_sum[1, 3] / a
+        e = sqrt(local_sum[1, 4] - b * b)
+        d = (local_sum[1, 5] - c * b) / e
+        f = sqrt(local_sum[1, 6] - c * c - d * d)
+        
+        # Calculate final result
+        dx = (mean_xyz[1] - totalXSegm[1] / totalCountSegm[1]) / a
+        dy = ((mean_xyz[2] - totalYSegm[1] / totalCountSegm[1]) - b * dx) / e
+        dz = ((mean_xyz[3] - totalZSegm[1] / totalCountSegm[1]) - c * dx - d * dy) / f
+        
+        mahalanobisResGlobal[1] = sqrt(dx * dx + dy * dy + dz * dz)
+    end
 end
+
+function executeMeansMahalinobisKernel(
+    goldArr, 
+    segmArr, 
+    args...;
+    threads=(32, 32),
+    backend=CUDABackend()
+)
+    # Calculate total elements from array dimensions
+    total_elements = prod(size(goldArr))
+    blocks = cld(total_elements, prod(threads))
+
+    # Create and launch kernel
+    kernel = meansMahalinobisKernel!(backend)
+    event = kernel(
+        goldArr, segmArr, args...;
+        ndrange=blocks*prod(threads),
+        workgroupsize=threads
+    )
+    
+    wait(event)
+    KernelAbstractions.synchronize(backend)
+end
+
+nx = 512
+ny = 512
+nz = 317
+
+# Initialize CPU arrays with zeros
+goldBoolCPU = zeros(Float32, nx, ny, nz)
+segmBoolCPU = zeros(Float32, nx, ny, nz)
+
+# Create some test patterns
+# For gold standard - create multiple blocks of ones
+cartTrueGold = unique(vcat(
+    collect(vec(CartesianIndices(zeros(8,15,5)) .+ CartesianIndex(5,5,5))),
+    collect(vec(CartesianIndices(zeros(14,19,25)) .+ CartesianIndex(100,99,88))),
+    collect(vec(CartesianIndices(zeros(81,87,84)) .+ CartesianIndex(100,99,210))))
+)
+goldBoolCPU[cartTrueGold] .= Float32(1.0)
+
+# For segmentation - create a single block of ones
+cartTrueSegm = CartesianIndices(zeros(34,235,76)) .+ CartesianIndex(100,100,100)
+segmBoolCPU[cartTrueSegm] .= Float32(1.0)
+
+# Transfer to GPU
+goldArr = CuArray(goldBoolCPU)
+segmArr = CuArray(segmBoolCPU)
+
+# Get kernel arguments and configuration
+args = MeansMahalinobis.prepareMahalinobisKernel()
+
+# Execute the kernel
+result = MeansMahalinobis.executeMeansMahalinobisKernel(goldArr, segmArr, args...)
+
+# Print result
+println("Mahalanobis distance: ", result)
+
 
 # function executeMeansMahalanobisKernel(
 #     goldArr, segmArr, numberToLooFor, loopYdim::UInt32, loopXdim::UInt32, loopZdim::UInt32, arrDims::Tuple{UInt32,UInt32,UInt32},
