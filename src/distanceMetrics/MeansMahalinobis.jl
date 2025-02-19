@@ -9,13 +9,203 @@ varianceZGlobal - should be reduced atomically in the end with all other variabl
 
 module MeansMahalinobis
 using ..CUDAGpuUtils, ..IterationUtils, ..ReductionUtils, ..MemoryUtils
-export meansMahalinobisKernel, prepareMahalinobisKernel
+export meansMahalinobisKernel!, prepareMahalinobisKernel
 using CUDA
 using KernelAbstractions
 using Atomix
 using KernelAbstractions.Extras: @unroll
 
 backend = CUDABackend()
+
+"""
+IMPORTANT x dim of threadblock needs to be always 32 
+goldArr,segmArr  - arrays we analyze 
+numberToLooFor - number we are intrested in in the array
+loopYdim, loopXdim, loopZdim - number of times we nned to loop over those dimensions in order to cover all - important we start iteration from 0 hence we should use fld ...
+maxX, maxY ,maxZ- maximum possible x and y - used for bound checking
+totalX,totalY,totalZ - holding the results of summation of x,y and z's
+totalCount - total number of non 0 entries
+countPerZ - count of non empty entries per slice - particularly usefull in case it is 0
+covariancesSliceWiseGold,covariancesSliceWiseSegm  - slice wise covariances - needed in case we want slice wise results - a matrix where each row entry is 
+        I)gold standard mask values
+        1)variance x    2)cov xy     3)cov xz     4)var y    5)cov yz      6)var z 
+       
+covarianceGlobal (just one column but entries exactly the same as above)
+mahalanobisResGlobal - global result of Mahalinobis distance
+mahalanobisResSliceWise - global result of Mahalinobis distance
+"""
+@kernel function meansMahalinobisKernel!(
+    goldArr, 
+    segmArr,
+    numberToLooFor,
+    loopYdim,
+    loopXdim,
+    loopZdim,
+    arrDims,
+    totalXGold,
+    totalYGold,
+    totalZGold,
+    totalCountGold,
+    totalXSegm,
+    totalYSegm,
+    totalZSegm,
+    totalCountSegm,
+    countPerZGold,
+    countPerZSegm,
+    varianceXGlobalGold,
+    covarianceXYGlobalGold,
+    covarianceXZGlobalGold,
+    varianceYGlobalGold,
+    covarianceYZGlobalGold,
+    varianceZGlobalGold,
+    varianceXGlobalSegm,
+    covarianceXYGlobalSegm,
+    covarianceXZGlobalSegm,
+    varianceYGlobalSegm,
+    covarianceYZGlobalSegm,
+    varianceZGlobalSegm,
+    mahalanobisResGlobal
+)
+    idx = @index(Global, Linear)
+    tid = @index(Local, Linear)
+
+    # Shared memory allocation
+    local_sum = @localmem Float32 (32, 6)
+    old_z_val = @localmem Float32 (1)
+    mean_xyz = @localmem Float32 (3)
+    intermediate_res = @localmem Float32 (6)
+
+    # Initialize shared memory
+    if tid <= 32
+        for i in 1:6
+            local_sum[tid, i] = 0f0
+        end
+    end
+    if idx == 1
+        old_z_val[1] = 0f0
+    end
+
+    @synchronize
+
+    # Initialize local variables
+    sum_x = 0f0
+    sum_y = 0f0
+    sum_z = 0f0
+    count = 0f0
+
+    for z in 1:arrDims[3]
+        for y in 1:arrDims[2]
+            for x in 1:arrDims[1]
+                if x <= arrDims[1] && y <= arrDims[2] && z <= arrDims[3]
+                    if goldArr[x, y, z] == numberToLooFor
+                        sum_x += Float32(x)
+                        sum_y += Float32(y)
+                        sum_z += Float32(z)
+                        count += 1f0
+                    end
+                end
+            end
+        end
+
+        @synchronize
+        
+        # Reduce within workgroup for this slice
+        if z <= arrDims[3]
+            # Store count for this slice
+            if tid == 1
+                countPerZGold[z] = count - old_z_val[1]
+                old_z_val[1] = count
+            end
+        end
+        @synchronize
+    end
+    
+    # Final reduction for gold standard
+    if tid == 1
+        # Use @atomic macro from KernelAbstractions
+        Atomix.@atomic totalXGold[] += sum_x
+        Atomix.@atomic totalYGold[] += sum_y
+        Atomix.@atomic totalZGold[] += sum_z
+        Atomix.@atomic totalCountGold[] += count
+    end
+
+    @synchronize
+
+    sum_x = 0f0
+    sum_y = 0f0
+    sum_z = 0f0
+    count = 0f0
+    if idx == 1
+        old_z_val[1] = 0f0
+    end
+    
+    @synchronize
+
+    for z in 1:arrDims[3]
+        for y in 1:arrDims[2]
+            for x in 1:arrDims[1]
+                if x <= arrDims[1] && y <= arrDims[2] && z <= arrDims[3]
+                    if segmArr[x, y, z] == numberToLooFor
+                        sum_x += Float32(x)
+                        sum_y += Float32(y)
+                        sum_z += Float32(z)
+                        count += 1f0
+                    end
+                end
+            end
+        end
+        
+        @synchronize
+        
+        if z <= arrDims[3]
+            if tid == 1
+                countPerZSegm[z] = count - old_z_val[1]
+                old_z_val[1] = count
+            end
+        end
+        
+        @synchronize
+    end
+
+    if tid == 1
+        Atomix.@atomic totalXSegm[] += sum_x
+        Atomix.@atomic totalYSegm[] += sum_y
+        Atomix.@atomic totalZSegm[] += sum_z
+        Atomix.@atomic totalCountSegm[] += count
+    end
+    
+    @synchronize
+
+    if tid == 1
+        # Calculate means
+        mean_xyz[1] = totalXGold[1] / totalCountGold[1]
+        mean_xyz[2] = totalYGold[1] / totalCountGold[1]
+        mean_xyz[3] = totalZGold[1] / totalCountGold[1]
+        
+        # Calculate variances and covariances
+        local_sum[1, 1] = varianceXGlobalGold[1] / totalCountGold[1]
+        local_sum[1, 2] = covarianceXYGlobalGold[1] / totalCountGold[1]
+        local_sum[1, 3] = covarianceXZGlobalGold[1] / totalCountGold[1]
+        local_sum[1, 4] = varianceYGlobalGold[1] / totalCountGold[1]
+        local_sum[1, 5] = covarianceYZGlobalGold[1] / totalCountGold[1]
+        local_sum[1, 6] = varianceZGlobalGold[1] / totalCountGold[1]
+        
+        # Calculate Mahalanobis distance
+        a = sqrt(local_sum[1, 1])
+        b = local_sum[1, 2] / a
+        c = local_sum[1, 3] / a
+        e = sqrt(local_sum[1, 4] - b * b)
+        d = (local_sum[1, 5] - c * b) / e
+        f = sqrt(local_sum[1, 6] - c * c - d * d)
+        
+        # Calculate final result
+        dx = (mean_xyz[1] - totalXSegm[1] / totalCountSegm[1]) / a
+        dy = ((mean_xyz[2] - totalYSegm[1] / totalCountSegm[1]) - b * dx) / e
+        dz = ((mean_xyz[3] - totalZSegm[1] / totalCountSegm[1]) - c * dx - d * dy) / f
+        
+        mahalanobisResGlobal[1] = sqrt(dx * dx + dy * dy + dz * dz)
+    end
+end
 
 """
 prepares all equired arguments and gives back the  arguments and thread and block configuration 
@@ -54,10 +244,10 @@ function prepareMahalinobisKernel()
     covarianceYZGlobalSegm = CuArray{Float32}([0.0f0])
     varianceZGlobalSegm = CuArray{Float32}([0.0f0])
 
-    countPerZGold = CUDA.zeros(Float32, sizz[3] + 1)
-    countPerZSegm = CUDA.zeros(Float32, sizz[3] + 1)
-    covarianceGlobal = CUDA.zeros(Float32, 12, 1)
-    mahalanobisResGlobal = CUDA.zeros(Float32, 1)  # Changed to Float32
+    countPerZGold = KernelAbstractions.zeros(backend, Float32, sizz[3] + 1)
+    countPerZSegm = KernelAbstractions.zeros(backend, Float32, sizz[3] + 1)
+    covarianceGlobal = KernelAbstractions.zeros(backend, Float32, 12, 1)
+    mahalanobisResGlobal = KernelAbstractions.zeros(backend, Float32, 1)  # Changed to Float32
 
     args = (
         numberToLooFor, loopYdim, loopXdim, loopZdim, (maxX, maxY, maxZ),
@@ -70,7 +260,7 @@ function prepareMahalinobisKernel()
     )
 
     get_shmem(threads) = (sizeof(UInt32) * 3 * 4)
-    threads, blocks = getThreadsAndBlocksNumbForKernel(get_shmem, meansMahalinobisKernel, (CUDA.zeros(Float32, 2, 2, 2), CUDA.zeros(Float32, 2, 2, 2), args...))
+    threads, blocks = getThreadsAndBlocksNumbForKernel(get_shmem, meansMahalinobisKernel!, (CUDA.zeros(Float32, 2, 2, 2), CUDA.zeros(Float32, 2, 2, 2), args...))
 
     loopXdim = UInt32(fld(maxX, threads[1]))
     loopYdim = UInt32(fld(maxY, threads[2]))
@@ -430,197 +620,6 @@ macro getFinalResults()
 
 
     end)
-end
-
-
-"""
-IMPORTANT x dim of threadblock needs to be always 32 
-goldArr,segmArr  - arrays we analyze 
-numberToLooFor - number we are intrested in in the array
-loopYdim, loopXdim, loopZdim - number of times we nned to loop over those dimensions in order to cover all - important we start iteration from 0 hence we should use fld ...
-maxX, maxY ,maxZ- maximum possible x and y - used for bound checking
-totalX,totalY,totalZ - holding the results of summation of x,y and z's
-totalCount - total number of non 0 entries
-countPerZ - count of non empty entries per slice - particularly usefull in case it is 0
-covariancesSliceWiseGold,covariancesSliceWiseSegm  - slice wise covariances - needed in case we want slice wise results - a matrix where each row entry is 
-        I)gold standard mask values
-        1)variance x    2)cov xy     3)cov xz     4)var y    5)cov yz      6)var z 
-       
-covarianceGlobal (just one column but entries exactly the same as above)
-mahalanobisResGlobal - global result of Mahalinobis distance
-mahalanobisResSliceWise - global result of Mahalinobis distance
-"""
-@kernel function meansMahalinobisKernel!(
-    goldArr, 
-    segmArr,
-    numberToLooFor,
-    loopYdim,
-    loopXdim,
-    loopZdim,
-    arrDims,
-    totalXGold,
-    totalYGold,
-    totalZGold,
-    totalCountGold,
-    totalXSegm,
-    totalYSegm,
-    totalZSegm,
-    totalCountSegm,
-    countPerZGold,
-    countPerZSegm,
-    varianceXGlobalGold,
-    covarianceXYGlobalGold,
-    covarianceXZGlobalGold,
-    varianceYGlobalGold,
-    covarianceYZGlobalGold,
-    varianceZGlobalGold,
-    varianceXGlobalSegm,
-    covarianceXYGlobalSegm,
-    covarianceXZGlobalSegm,
-    varianceYGlobalSegm,
-    covarianceYZGlobalSegm,
-    varianceZGlobalSegm,
-    mahalanobisResGlobal
-)
-    idx = @index(Global, Linear)
-    tid = @index(Local, Linear)
-
-    # Shared memory allocation
-    local_sum = @localmem Float32 (32, 6)
-    old_z_val = @localmem Float32 (1)
-    mean_xyz = @localmem Float32 (3)
-    intermediate_res = @localmem Float32 (6)
-
-    # Initialize shared memory
-    if tid <= 32
-        for i in 1:6
-            local_sum[tid, i] = 0f0
-        end
-    end
-    if idx == 1
-        old_z_val[1] = 0f0
-    end
-
-    @synchronize
-
-    # Initialize local variables
-    sum_x = 0f0
-    sum_y = 0f0
-    sum_z = 0f0
-    count = 0f0
-
-    for z in 1:arrDims[3]
-        for y in 1:arrDims[2]
-            for x in 1:arrDims[1]
-                if x <= arrDims[1] && y <= arrDims[2] && z <= arrDims[3]
-                    if goldArr[x, y, z] == numberToLooFor
-                        sum_x += Float32(x)
-                        sum_y += Float32(y)
-                        sum_z += Float32(z)
-                        count += 1f0
-                    end
-                end
-            end
-        end
-
-        @synchronize
-        
-        # Reduce within workgroup for this slice
-        if z <= arrDims[3]
-            # Store count for this slice
-            if tid == 1
-                countPerZGold[z] = count - old_z_val[1]
-                old_z_val[1] = count
-            end
-        end
-        @synchronize
-    end
-    
-    # Final reduction for gold standard
-    if tid == 1
-        # Use @atomic macro from KernelAbstractions
-        Atomix.@atomic totalXGold[] += sum_x
-        Atomix.@atomic totalYGold[] += sum_y
-        Atomix.@atomic totalZGold[] += sum_z
-        Atomix.@atomic totalCountGold[] += count
-    end
-
-    @synchronize
-
-    sum_x = 0f0
-    sum_y = 0f0
-    sum_z = 0f0
-    count = 0f0
-    if idx == 1
-        old_z_val[1] = 0f0
-    end
-    
-    @synchronize
-
-    for z in 1:arrDims[3]
-        for y in 1:arrDims[2]
-            for x in 1:arrDims[1]
-                if x <= arrDims[1] && y <= arrDims[2] && z <= arrDims[3]
-                    if segmArr[x, y, z] == numberToLooFor
-                        sum_x += Float32(x)
-                        sum_y += Float32(y)
-                        sum_z += Float32(z)
-                        count += 1f0
-                    end
-                end
-            end
-        end
-        
-        @synchronize
-        
-        if z <= arrDims[3]
-            if tid == 1
-                countPerZSegm[z] = count - old_z_val[1]
-                old_z_val[1] = count
-            end
-        end
-        
-        @synchronize
-    end
-
-    if tid == 1
-        Atomix.@atomic totalXSegm[] += sum_x
-        Atomix.@atomic totalYSegm[] += sum_y
-        Atomix.@atomic totalZSegm[] += sum_z
-        Atomix.@atomic totalCountSegm[] += count
-    end
-    
-    @synchronize
-
-    if tid == 1
-        # Calculate means
-        mean_xyz[1] = totalXGold[1] / totalCountGold[1]
-        mean_xyz[2] = totalYGold[1] / totalCountGold[1]
-        mean_xyz[3] = totalZGold[1] / totalCountGold[1]
-        
-        # Calculate variances and covariances
-        local_sum[1, 1] = varianceXGlobalGold[1] / totalCountGold[1]
-        local_sum[1, 2] = covarianceXYGlobalGold[1] / totalCountGold[1]
-        local_sum[1, 3] = covarianceXZGlobalGold[1] / totalCountGold[1]
-        local_sum[1, 4] = varianceYGlobalGold[1] / totalCountGold[1]
-        local_sum[1, 5] = covarianceYZGlobalGold[1] / totalCountGold[1]
-        local_sum[1, 6] = varianceZGlobalGold[1] / totalCountGold[1]
-        
-        # Calculate Mahalanobis distance
-        a = sqrt(local_sum[1, 1])
-        b = local_sum[1, 2] / a
-        c = local_sum[1, 3] / a
-        e = sqrt(local_sum[1, 4] - b * b)
-        d = (local_sum[1, 5] - c * b) / e
-        f = sqrt(local_sum[1, 6] - c * c - d * d)
-        
-        # Calculate final result
-        dx = (mean_xyz[1] - totalXSegm[1] / totalCountSegm[1]) / a
-        dy = ((mean_xyz[2] - totalYSegm[1] / totalCountSegm[1]) - b * dx) / e
-        dz = ((mean_xyz[3] - totalZSegm[1] / totalCountSegm[1]) - c * dx - d * dy) / f
-        
-        mahalanobisResGlobal[1] = sqrt(dx * dx + dy * dy + dz * dz)
-    end
 end
 
 function executeMeansMahalinobisKernel(
