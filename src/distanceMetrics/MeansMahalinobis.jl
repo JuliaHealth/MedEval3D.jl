@@ -8,6 +8,7 @@ varianceZGlobal - should be reduced atomically in the end with all other variabl
 """
 
 module MeansMahalinobis
+using ..CUDAGpuUtils, ..IterationUtils, ..ReductionUtils, ..MemoryUtils
 using KernelAbstractions
 using KernelAbstractions.Extras: @unroll
 using Atomix
