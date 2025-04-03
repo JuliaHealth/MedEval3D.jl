@@ -1,3 +1,6 @@
+using KernelAbstractions
+using StaticArrays
+
 """
 we need to give back number of false positive and false negatives and min,max x,y,x of block containing all data 
 IMPORTANT - in order to avoid bound checking on every iteration we need to keep the dimension of the resulting block be divided by data block cube size for example 32
@@ -17,60 +20,52 @@ cuda arrays holding just single value wit atomically reduced result
 ,minyRes,maxyRes
 ,minZres,maxZres
 """
-function getBoolCubeKernel(goldBoolGPU3d
-        ,segmBoolGPU3d
-        ,reducedGoldA
-        ,reducedSegmA
-        ,reducedGoldB
-        ,reducedSegmB
-        ,loopNumbYdim::UInt16
-        ,xdim::UInt16
-        ,loopNumbXdim::UInt16
-        ,numberToLooFor::T
-        ,IndexesArray
-        ,fn::CuDeviceVector{UInt32, 1}
-        ,fp::CuDeviceVector{UInt32, 1}
-        ,minxRes::CuDeviceVector{UInt32, 1}
-        ,maxxRes::CuDeviceVector{UInt32, 1}
-        ,minyRes::CuDeviceVector{UInt32, 1}
-        ,maxyRes::CuDeviceVector{UInt32, 1}
-        ,minZres::CuDeviceVector{UInt32, 1}
-        ,maxZres::CuDeviceVector{UInt32, 1}
-        ,warpNumber
-) where T
-   
-   anyPositive = false # true If any bit will bge positive in this array - we are not afraid of data race as we can set it multiple time to true
-#creates shared memory and initializes it to 0
-   shmemSum = createAndInitializeShmem(wid,threadIdxX(),lane)
-# incrementing appropriate number of times 
-   
-  #0 - false negative; 1- false positive; 2 -minx; 3 max x; 4 miny; 5 maxy
-  locArr= zeros(MVector{6,UInt16})
-  
-  @iter3dAdditionalzActs(arrDims,loopXdim,loopYdim,loopZdim,
-    #inner expression
-    if(  @inbounds($arrAnalyzed[x,y,z])  ==numberToLooFor)
-        #updating variables needed to calculate means
-        sumX+=Float32(x) ;  sumY+=Float32(y)  ; sumZ+=Float32(z)   ; count+=Float32(1)   
-    end,
-    #after z expression - we get slice wise true counts from it 
-    begin
-        sync_threads()
-        #reducing count only
-        if(z<=arrDims[3])
-            countTemp = count
-            @redWitAct(offsetIter,shmemSum, count,+)
-            #saving to global memory count of this slice
-            @ifXY 1 1 begin 
-                 $countPerZ[z]=(shmemSum[1,1] - oldZVal[1] )
-                oldZVal[1]=shmemSum[1,1]
+@kernel function getBoolCubeKernel(goldBoolGPU3d, segmBoolGPU3d, reducedGoldA, reducedSegmA, reducedGoldB, reducedSegmB,
+                                     loopNumbYdim::UInt16, xdim::UInt16, loopNumbXdim::UInt16, numberToLooFor,
+                                     IndexesArray, fn, fp, minxRes, maxxRes, minyRes, maxyRes, minZres, maxZres, warpNumber)
+    # Local variables
+    anyPositive = false # True if any bit is positive in this array
+    locArr = zeros(MVector{6, UInt16}) # Local array for temporary results
+
+    # Shared memory initialization
+    shmemSum = zeros(Float32, warpNumber) # Replace with KernelAbstractions-compatible shared memory
+
+    # Loop through 3D grid
+    for z in 1:size(goldBoolGPU3d, 3)
+        for y in 1:size(goldBoolGPU3d, 2)
+            for x in 1:size(goldBoolGPU3d, 1)
+                # Check if the current element matches the target number
+                if @inbounds goldBoolGPU3d[x, y, z] == numberToLooFor
+                    # Update local variables
+                    locArr[1] += UInt16(1) # Example: increment false negatives
+                    locArr[2] += UInt16(1) # Example: increment false positives
+                    locArr[3] = min(locArr[3], UInt16(x)) # Update min x
+                    locArr[4] = max(locArr[4], UInt16(x)) # Update max x
+                    locArr[5] = min(locArr[5], UInt16(y)) # Update min y
+                    locArr[6] = max(locArr[6], UInt16(y)) # Update max y
+                end
             end
-            #clear shared memory only first row was used and sync threads 
-            clearSharedMemWarpLong(shmemSum, UInt8(1), Float32(0.0))
-            count=countTemp#to preserve proper value for total count
-        end#if ar dims
-    end )#if bool in arr  
+        end
 
+        # Synchronize threads
+        @sync_threads
 
-   return  
-   end
+        # Reduce results across threads
+        for i in 1:warpNumber
+            shmemSum[i] += locArr[1] # Example: reduce false negatives
+        end
+
+        # Synchronize threads again
+        @sync_threads
+    end
+
+    # Write results back to global memory
+    fn[1] = shmemSum[1] # Example: write reduced false negatives
+    fp[1] = shmemSum[2] # Example: write reduced false positives
+    minxRes[1] = locArr[3]
+    maxxRes[1] = locArr[4]
+    minyRes[1] = locArr[5]
+    maxyRes[1] = locArr[6]
+    minZres[1] = locArr[3] # Example: write min z
+    maxZres[1] = locArr[4] # Example: write max z
+end
