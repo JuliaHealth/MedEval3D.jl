@@ -1,101 +1,90 @@
 using Test
-using KernelAbstractions
-include("../src/losses/Loss.jl")
-using Statistics
 using Random
-using PyCall
 using CUDA
+using KernelAbstractions
+using Statistics
+using PyCall
 
-# Import MONAI modules
-monai = pyimport("monai.losses")
-torch = pyimport("torch")
-np = pyimport("numpy")
+# Import MONAI for comparison
+const monai = PyCall.pyimport("monai.losses")
+const torch = PyCall.pyimport("torch")
 
-# Set random seeds
+# Set random seed for reproducibility
 Random.seed!(42)
-np.random.seed(42)
-torch.manual_seed(42)
 
-@testset "MONAI Comparison Tests" begin
+@testset "Loss Functions - GPU" begin
     # Test configurations for both 2D and 3D
     test_configs = [
         # (dims, channels, spatial_sizes, batch_size, name)
-        (2, 1, (32, 32), 2, "2D"),        # 2D: (C,H,W,N) = (1,32,32,2)
-        (3, 1, (16, 16, 16), 2, "3D")     # 3D: (C,D,H,W,N) = (1,16,16,16,2)
+        (2, 1, (32, 32), 2, "2D"),        # 2D: (N,C,H,W) = (2,1,32,32)
+        (3, 1, (16, 16, 16), 2, "3D")     # 3D: (N,C,D,H,W) = (2,1,16,16,16)
     ]
     
     for (n_dims, n_channels, spatial_sizes, batch_size, name) in test_configs
         @testset "Loss Functions - $name" begin
-            # Generate data
+            # Create test data directly on GPU
             if n_dims == 2
-                # 2D: (C,H,W,N)
-                target = rand(Float32, n_channels, spatial_sizes..., batch_size)
-                input = randn(Float32, n_channels, spatial_sizes..., batch_size)
+                input = CUDA.rand(Float32, batch_size, n_channels, spatial_sizes...)
+                target = Float32.(CUDA.rand(batch_size, n_channels, spatial_sizes...) .> 0.5)
                 
-                # Convert to MONAI format (N,C,H,W)
-                target_monai = permutedims(target, (4, 1, 2, 3))
-                input_monai = permutedims(input, (4, 1, 2, 3))
+                # Create PyTorch tensors on GPU
+                input_torch = torch.tensor(Array(input), requires_grad=true, device="cuda")
+                target_torch = torch.tensor(Array(target), device="cuda")
             else
-                # 3D: (C,D,H,W,N)
-                target = rand(Float32, n_channels, spatial_sizes..., batch_size)
-                input = randn(Float32, n_channels, spatial_sizes..., batch_size)
+                input = CUDA.rand(Float32, batch_size, n_channels, spatial_sizes...)
+                target = Float32.(CUDA.rand(batch_size, n_channels, spatial_sizes...) .> 0.5)
                 
-                # Convert to MONAI format (N,C,D,H,W)
-                target_monai = permutedims(target, (5, 1, 2, 3, 4))
-                input_monai = permutedims(input, (5, 1, 2, 3, 4))
+                # Create PyTorch tensors on GPU
+                input_torch = torch.tensor(Array(input), requires_grad=true, device="cuda")
+                target_torch = torch.tensor(Array(target), device="cuda")
             end
-            
-            # Convert to PyTorch tensors
-            target_torch = torch.tensor(target_monai, dtype=torch.float32)
-            input_torch = torch.tensor(input_monai, dtype=torch.float32)
             
             @testset "Dice Loss" begin
-                julia_loss = dice_loss(input, target, epsilon=1e-5, sigmoid=true)
+                # Create MONAI loss function on GPU
                 monai_loss = monai.DiceLoss(
                     sigmoid=true,
                     include_background=true
-                )(input_torch, target_torch).item()
+                ).cuda()
                 
-                println("$name Dice Test:")
-                println("  Julia data shape: $(size(target))")
-                println("  MONAI data shape: $(size(target_monai))")
-                println("  Loss values: Julia=$julia_loss, MONAI=$monai_loss")
+                # Compute losses
+                julia_loss = dice_loss(input, target, sigmoid=true)
+                monai_loss_val = monai_loss(input_torch, target_torch).item()
                 
-                @test isapprox(julia_loss, monai_loss, rtol=1e-3, atol=1e-3)
+                @test isapprox(julia_loss, monai_loss_val, rtol=1e-3)
             end
-            
             @testset "Jaccard Loss" begin
-                julia_loss = jaccard_loss(input, target, epsilon=1e-5, sigmoid=true)
+              # Create MONAI loss function on GPU
                 monai_loss = monai.DiceLoss(
-                    jaccard=true,
-                    sigmoid=true,
-                    include_background=true
-                )(input_torch, target_torch).item()
+                  sigmoid=true,
+                  include_background=true,
+                  jaccard=true
+                ).cuda()
                 
-                println("$name Jaccard Test:")
-                println("  Julia data shape: $(size(target))")
-                println("  MONAI data shape: $(size(target_monai))")
-                println("  Loss values: Julia=$julia_loss, MONAI=$monai_loss")
-                
-                @test isapprox(julia_loss, monai_loss, rtol=1e-3, atol=1e-3)
+                # Compute losses
+                julia_loss = jaccard_loss(input, target, sigmoid=true)
+                monai_loss_val = monai_loss(input_torch, target_torch).item()
+
+                @test isapprox(julia_loss, monai_loss_val, rtol=1e-3)
             end
-            
+
             @testset "Cross Entropy Loss" begin
-                julia_loss = cross_entropy_loss(input, target, epsilon=1e-5, sigmoid=true)
+                # Create MONAI loss function on GPU
                 monai_loss = monai.DiceCELoss(
                     sigmoid=true,
                     include_background=true,
                     lambda_dice=0.0,
                     lambda_ce=1.0
-                )(input_torch, target_torch).item()
+                ).cuda()
                 
-                println("$name Cross Entropy Test:")
-                println("  Julia data shape: $(size(target))")
-                println("  MONAI data shape: $(size(target_monai))")
-                println("  Loss values: Julia=$julia_loss, MONAI=$monai_loss")
+                # Compute losses
+                julia_loss = cross_entropy_loss(input, target, sigmoid=true)
+                monai_loss_val = monai_loss(input_torch, target_torch).item()
                 
-                @test isapprox(julia_loss, monai_loss, rtol=1e-3, atol=1e-3)
+                @test isapprox(julia_loss, monai_loss_val, rtol=1e-3)
             end
+            
+            # Clean up GPU memory
+            CUDA.reclaim()
         end
     end
 end
