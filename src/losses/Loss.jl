@@ -267,3 +267,107 @@ function cross_entropy_loss(input::CuArray{Float32}, target::CuArray{Float32}; e
     total_ce = CUDA.@allowscalar ce_sum[1]
     return total_ce / Float32(total_elements)
 end
+
+# Hausdorff Loss
+
+function distance_field(mask::CuArray{Bool})
+    mask_cpu = Array(mask)
+    nd = ndims(mask_cpu)
+    N, C = size(mask_cpu)[1:2]
+    out_cpu = zeros(Float32, size(mask_cpu))
+    for n in 1:N, c in 1:C
+        m = nd == 4 ? mask_cpu[n, c, :, :] : mask_cpu[n, c, :, :, :]
+        if any(m) && !all(m)
+            fg = Float32.(sp.distance_transform_edt(m))
+            bg = Float32.(sp.distance_transform_edt(.!m))
+
+            if nd == 4
+                out_cpu[n, c, :, :] = fg + bg
+            else
+                out_cpu[n, c, :, :, :] = fg + bg
+            end
+        end
+    end
+    return CuArray(out_cpu)
+end
+
+@kernel function hausdorffdt_loss_kernel(pred, target, pred_dt, target_dt, loss, α, dims::NTuple)
+    idxs = @index(Global, NTuple)
+    if length(dims) == 4
+        N, C, H, W = dims
+        n, c, h, w = idxs
+        if n <= N && c <= C && h <= H && w <= W
+            err = (pred[n, c, h, w] - target[n, c, h, w])^2
+            dist = pred_dt[n, c, h, w]^α + target_dt[n, c, h, w]^α
+            loss[n, c, h, w] = err * dist
+        end
+    elseif length(dims) == 5
+        N, C, D, H, W = dims
+        n, c, d, h, w = idxs
+        if n <= N && c <= C && d <= D && h <= H && w <= W
+            err = (pred[n, c, d, h, w] - target[n, c, d, h, w])^2
+            dist = pred_dt[n, c, d, h, w]^α + target_dt[n, c, d, h, w]^α
+            loss[n, c, d, h, w] = err * dist
+        end
+    end
+end
+
+function hausdorffdt_loss(input::CuArray{Float32}, target::CuArray{Float32};
+                              α::Float64=2.0,
+                              sigmoid::Bool=false,
+                              include_background::Bool=false,
+                              reduction::Symbol=:mean,
+                              batch::Bool=false)
+
+    @assert size(input) == size(target)
+    backend = CUDABackend()
+    dims = size(input)
+
+    input = permute_data_format(input)
+    target = permute_data_format(target)
+
+    if sigmoid
+        input .= 1.0f0 ./ (1.0f0 .+ exp.(-input))
+    end
+
+    if !include_background && dims[2] > 1
+        input = input[:, 2:end, :, :, :]
+        target = target[:, 2:end, :, :, :]
+        dims = size(input)
+    end
+
+    pred_mask = input .> 0.5f0
+    target_mask = target .> 0.5f0
+
+    pred_dt = distance_field(pred_mask)
+    target_dt = distance_field(target_mask)
+
+    loss = similar(input)
+    kernel = hausdorffdt_loss_kernel(backend, 256)
+    kernel(input, target, pred_dt, target_dt, loss, α, dims; ndrange=tuple(dims...))
+    
+
+    # Determine reduction axes
+    nd = ndims(input)
+    reduce_axes = collect(3:nd)  # dims (3, 4, 5) for spatial
+    if batch
+        pushfirst!(reduce_axes, 1)  # add batch dimension
+    end
+
+    # Reduce over selected dims
+    mean_f = mean(loss, dims=reduce_axes)
+    all_f = mean_f  # no need to cat across channel dim yet
+
+    # Final reduction across channel or batch
+    if reduction == :mean
+        return mean(all_f)
+    elseif reduction == :sum
+        return sum(all_f)
+    elseif reduction == :none
+        # Keep shape broadcastable
+        spatial_dims = ntuple(i -> 1, nd - 2)
+        return reshape(all_f, size(all_f, 1), size(all_f, 2), spatial_dims...)
+    else
+        error("Unsupported reduction mode: $reduction")
+    end
+end
