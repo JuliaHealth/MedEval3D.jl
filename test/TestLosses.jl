@@ -82,6 +82,32 @@ Random.seed!(42)
                 
                 @test isapprox(julia_loss, monai_loss_val, rtol=1e-3)
             end
+            @testset "HausdorffDT Loss - $name" begin
+                for reduction in [:mean, :sum, :none]
+                  monai_reduction = reduction == :mean ? "mean" : reduction == :sum ? "sum" : "none"
+                  monai_loss = monai.HausdorffDTLoss(
+                      include_background=true,
+                      sigmoid=true,
+                      reduction=monai_reduction,
+                      alpha=2.0
+                  ).cuda()
+  
+                  julia_loss = hausdorffdt_loss(input, target;
+                      α=2.0, sigmoid=true, reduction=reduction)
+  
+                  monai_loss_val = monai_loss(input_torch, target_torch)
+                  if reduction == :none
+                      jl = Array(julia_loss)
+                      ml = Array(monai_loss_val.detach().cpu().numpy())
+                      
+                      @assert all(isapprox.(jl, ml; rtol=1e-3))
+                  else
+                      monai_loss_val = monai_loss_val.item()
+  
+                      @test isapprox(julia_loss, monai_loss_val, rtol=1e-3)
+                  end
+                end
+            end
             
             # Clean up GPU memory
             CUDA.reclaim()
